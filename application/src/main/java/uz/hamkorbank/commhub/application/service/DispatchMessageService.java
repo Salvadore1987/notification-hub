@@ -30,6 +30,7 @@ import uz.hamkorbank.commhub.domain.model.StatusChange;
 import uz.hamkorbank.commhub.domain.model.type.AttemptResult;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.RejectionReason;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.support.Guard;
@@ -105,6 +106,7 @@ public class DispatchMessageService implements DispatchMessage {
         DeliveryAttempt attempt = message.startAttempt(providerMessageId, now);
         ProviderAck ack = gateway.submit(message, provider, providerMessageId, null);
         recordAttempt(attempt, ack);
+        suppressIfAddressRejected(message, provider, ack);
         if (ack.isAccepted()) {
             return sent(message, provider, ack);
         }
@@ -118,6 +120,26 @@ public class DispatchMessageService implements DispatchMessage {
             case REJECTED -> attempt.reject(ack.responseCode(), ack.errorDescription(), ack.respondedAt());
             case TIMEOUT -> attempt.timeout(ack.respondedAt());
             default -> attempt.fail(ack.responseCode(), ack.errorClass(), ack.errorDescription(), ack.respondedAt());
+        }
+    }
+
+    /**
+     * The provider declared the address itself unusable — blacklisted number (§18.2 code 20), unregistered
+     * push token (PU-04, PU-08) — so it goes on the suppression list (FR-5.1).
+     *
+     * <p>Recorded before the message's own outcome is decided, and deliberately not conditional on it: the
+     * statement is about the address, not about this message, and the next batch would otherwise send to it
+     * again. Failing over to another provider is still allowed for this message — a blacklist is usually
+     * one provider's, and the ack's error class decides that on its own.
+     */
+    private void suppressIfAddressRejected(Message message, ProviderRef provider, ProviderAck ack) {
+        if (ack.invalidRecipient()) {
+            pipeline.suppress(
+                    message,
+                    provider.channel(),
+                    SuppressionReason.PROVIDER_BLACKLIST,
+                    Actor.provider(provider.code().value()),
+                    ack.respondedAt());
         }
     }
 

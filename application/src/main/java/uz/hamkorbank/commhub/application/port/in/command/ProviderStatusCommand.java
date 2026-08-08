@@ -3,6 +3,7 @@ package uz.hamkorbank.commhub.application.port.in.command;
 import java.time.Instant;
 import java.util.Optional;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
@@ -18,6 +19,10 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * @param messageId set when the callback carries the Hub identifier; otherwise the message is found
  *     by {@code (providerCode, providerMessageId)}
  * @param providerStatus raw provider status, kept in the history and forwarded to the source (§6.4)
+ * @param suppressAs set when the report also says the address itself must not be used again — SMS Gate
+ *     {@code InBlackList} (§18.2 code 7) or an email hard bounce (EM-02). It is a separate field on
+ *     purpose: the canonical status describes what happened to <em>this</em> message, the suppression
+ *     describes what happens to every next one, and §18.2 code 7 needs both at once
  */
 public record ProviderStatusCommand(
         ProviderCode providerCode,
@@ -26,6 +31,7 @@ public record ProviderStatusCommand(
         MessageStatus status,
         String providerStatus,
         String detail,
+        SuppressionReason suppressAs,
         Instant occurredAt) {
 
     public ProviderStatusCommand {
@@ -44,7 +50,13 @@ public record ProviderStatusCommand(
             String providerStatus,
             Instant occurredAt) {
         return new ProviderStatusCommand(
-                providerCode, providerMessageId, null, status, providerStatus, null, occurredAt);
+                providerCode, providerMessageId, null, status, providerStatus, null, null, occurredAt);
+    }
+
+    /** The same report, with the address it names put on the suppression list (FR-5.1, EM-02, §18.2). */
+    public ProviderStatusCommand suppressing(SuppressionReason reason) {
+        return new ProviderStatusCommand(
+                providerCode, providerMessageId, messageId, status, providerStatus, detail, reason, occurredAt);
     }
 
     public Optional<MessageId> messageIdOptional() {
@@ -53,5 +65,9 @@ public record ProviderStatusCommand(
 
     public Optional<ProviderMessageId> providerMessageIdOptional() {
         return Optional.ofNullable(providerMessageId);
+    }
+
+    public Optional<SuppressionReason> suppressAsOptional() {
+        return Optional.ofNullable(suppressAs);
     }
 }

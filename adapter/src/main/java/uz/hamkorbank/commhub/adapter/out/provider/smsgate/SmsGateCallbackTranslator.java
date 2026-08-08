@@ -13,6 +13,7 @@ import uz.hamkorbank.commhub.adapter.in.contract.InboundContractException;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.support.Guard;
@@ -68,14 +69,20 @@ public class SmsGateCallbackTranslator implements ProviderCallbackTranslator {
                     id);
             return List.of();
         }
-        return List.of(new ProviderStatusCommand(
+        ProviderStatusCommand report = new ProviderStatusCommand(
                 providerCode(),
                 ProviderMessageId.of(id),
                 null,
                 canonical.get(),
                 SmsGateStatusCatalog.describe(code),
                 field.read("description").orElse(null),
-                clock.now()));
+                null,
+                clock.now());
+        // Код 7 (InBlackList) — это и статус сообщения, и приговор адресу (§18.2, FR-5.1).
+        return List.of(
+                SmsGateStatusCatalog.invalidatesRecipient(code)
+                        ? report.suppressing(SuppressionReason.PROVIDER_BLACKLIST)
+                        : report);
     }
 
     /**

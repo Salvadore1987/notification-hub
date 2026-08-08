@@ -12,6 +12,7 @@ import uz.hamkorbank.commhub.application.port.in.ImportTemplates;
 import uz.hamkorbank.commhub.application.port.in.command.ImportTemplatesCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.TemplateRepository;
+import uz.hamkorbank.commhub.application.service.pipeline.PanDetector;
 import uz.hamkorbank.commhub.application.service.support.ConfigAuditor;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.Template;
@@ -44,11 +45,14 @@ public class TemplateImportService implements ImportTemplates {
     private final TemplateRepository templates;
     private final ClockPort clock;
     private final ConfigAuditor auditor;
+    private final PanDetector panDetector;
 
-    public TemplateImportService(TemplateRepository templates, ClockPort clock, ConfigAuditor auditor) {
+    public TemplateImportService(
+            TemplateRepository templates, ClockPort clock, ConfigAuditor auditor, PanDetector panDetector) {
         this.templates = Guard.notNull(templates, "templates");
         this.clock = Guard.notNull(clock, "clock");
         this.auditor = Guard.notNull(auditor, "auditor");
+        this.panDetector = Guard.notNull(panDetector, "panDetector");
     }
 
     @Override
@@ -113,6 +117,10 @@ public class TemplateImportService implements ImportTemplates {
     private void importVersion(
             ImportTemplatesCommand command, Template template, ImportTemplatesCommand.Row row, Counters counters) {
         TemplateVersion.Body body = new TemplateVersion.Body(row.subject(), row.text());
+        // SEC-05: строка с номером карты в тексте попадает в отчёт как плохая, файл заходит дальше.
+        Guard.isTrue(
+                !panDetector.containsPan(row.text()) && !panDetector.containsPan(row.subject()),
+                "the text contains a card number; a PAN must not be stored in a template (SEC-05)");
         if (alreadyPublished(template, row, body)) {
             counters.skipped++;
             return;

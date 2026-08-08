@@ -6,6 +6,7 @@ import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.QuotaVerdict;
 import uz.hamkorbank.commhub.domain.model.type.RejectionReason;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
@@ -38,6 +39,17 @@ public interface MetricsPort {
 
     /** The frequency cap of a recipient was exceeded (FR-5.4). */
     void frequencyCapExceeded(Channel channel, long observed, long limit);
+
+    /**
+     * Content carrying a full card number was found (SEC-05).
+     *
+     * @param blocked whether the message was rejected; {@code false} in the alert-only mode of SEC-05,
+     *     and an alert that fires without blocking is exactly the one operations has to act on
+     */
+    void panDetected(Channel channel, boolean blocked);
+
+    /** An address was added to the suppression list without an operator asking (FR-5.1, EM-02). */
+    void recipientSuppressed(Channel channel, SuppressionReason reason);
 
     /** Duration of a pipeline stage: accept, template, route, dispatch (OBS-01, TC-01). */
     void stageLatency(String stage, TrafficClass trafficClass, Duration duration);

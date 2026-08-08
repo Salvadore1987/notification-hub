@@ -11,6 +11,7 @@ import uz.hamkorbank.commhub.adapter.in.contract.InboundContractException;
 import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 
 /** SMS Gate FEEDBACK reports become canonical status commands (SG-02, §18.2). */
 class SmsGateCallbackTranslatorTest {
@@ -70,6 +71,18 @@ class SmsGateCallbackTranslatorTest {
         // Assert
         assertThat(report.status()).isEqualTo(MessageStatus.UNDELIVERED);
         assertThat(report.providerStatus()).isEqualTo("InBlackList");
+        assertThat(report.suppressAsOptional()).contains(SuppressionReason.PROVIDER_BLACKLIST);
+    }
+
+    @Test
+    @DisplayName("FR-5.1: an ordinary report carries no suppression consequence")
+    void ordinaryReportSuppressesNothing() {
+        // Act
+        ProviderStatusCommand report =
+                translator.translate("{\"id\":\"1\",\"code\":\"4\"}", Map.of()).getFirst();
+
+        // Assert
+        assertThat(report.suppressAsOptional()).isEmpty();
     }
 
     @Test

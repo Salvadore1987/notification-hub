@@ -234,6 +234,9 @@ commhub:
     # Отцепление секций включается вместе с процедурой архивации — иначе данные уйдут в никуда.
     detach-old-partitions: ${DB_DETACH_OLD_PARTITIONS:false}
     maintenance-cron: ${DB_MAINTENANCE_CRON:0 30 2 * * *}
+    # Свип таблиц окна (dedup-реестр FR-1.5, счётчики частоты FR-5.4): они не секционированы,
+    # поэтому размер держит удаление, а не отцепление секций. Каждый час, пакетами.
+    retention-sweep-cron: ${DB_RETENTION_SWEEP_CRON:0 20 * * * *}
     read-replica:
       # Пусто — весь трафик идёт на основной узел; задать URL, чтобы включить реплику (DB-06).
       url: ${DB_REPLICA_URL:}
@@ -249,6 +252,21 @@ commhub:
       active-key-id: ${CONTENT_ENCRYPTION_KEY_ID:k1}
       keys:
         k1: ${CONTENT_ENCRYPTION_KEY:}
+
+  # Фильтрация и compliance (FR-5.4, SEC-05). Часы тишины сюда не входят: они настраиваются
+  # на потоке и на канале в БД и применяются без рестарта (FR-5.3, AD-07).
+  compliance:
+    frequency-cap:
+      max-messages: ${FREQUENCY_CAP_MAX:10}
+      window: ${FREQUENCY_CAP_WINDOW:24h}
+      # MVP по FR-5.4 — только счётчики и алерты: кап на реальном трафике сначала измеряют,
+      # а потом включают, иначе первым, что он отрежет, окажется штатная рассылка.
+      blocking: ${FREQUENCY_CAP_BLOCKING:false}
+    # SEC-05: PAN в контенте отклоняется. false — режим наблюдения (алерт вместо отказа),
+    # но SMS отклоняется всегда: в SMS полный номер карты запрещён без оговорок.
+    pan-blocking: ${PAN_BLOCKING:true}
+    # Хранение счётчиков частоты: должно покрывать окно капа, больше — не нужно (DB-03).
+    counter-retention: ${FREQUENCY_COUNTER_RETENTION:7d}
 
 server:
   port: ${SERVER_PORT:8080}

@@ -32,6 +32,7 @@ import uz.hamkorbank.commhub.application.mapper.MessageMapper;
 import uz.hamkorbank.commhub.application.mapper.MessageMapperImpl;
 import uz.hamkorbank.commhub.application.policy.DeduplicationPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
+import uz.hamkorbank.commhub.application.policy.PanPolicy;
 import uz.hamkorbank.commhub.application.port.in.command.SubmitMessageCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.CustomerPreferencePort;
@@ -58,6 +59,7 @@ import uz.hamkorbank.commhub.application.service.pipeline.TemplateApplier;
 import uz.hamkorbank.commhub.application.service.support.MessageRouting;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.application.service.support.RoutingRotation;
+import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.QuietHours;
 import uz.hamkorbank.commhub.domain.model.QuotaConfig;
@@ -142,7 +144,7 @@ class SubmitMessageServiceTest {
         MessagePipeline pipeline = new MessagePipeline(
                 new DeduplicationService(dedupRegistry, DeduplicationPolicy.defaults()),
                 new TemplateApplier(templates),
-                new MessageValidator(new PanDetector()),
+                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), metrics),
                 new DeliveryFilters(
                         suppressions, preferences, frequencyCounters, FrequencyCapPolicy.defaults(), metrics),
                 new QuotaGuard(quotaCounters, metrics),
@@ -150,7 +152,8 @@ class SubmitMessageServiceTest {
                         new Router(new FallbackChain()),
                         new SegmentCalculator(),
                         providerConfig,
-                        new RoutingRotation()));
+                        new RoutingRotation()),
+                new SuppressionRegistrar(suppressions, metrics));
         service = new SubmitMessageService(
                 clock,
                 streams,

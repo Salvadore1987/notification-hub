@@ -1,6 +1,8 @@
 package uz.hamkorbank.commhub.application.service.pipeline;
 
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.application.policy.PanPolicy;
+import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.content.EmailContent;
 import uz.hamkorbank.commhub.domain.model.content.MessageContent;
@@ -19,14 +21,21 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * limits, and no content may carry a full card number.
  *
  * <p>Runs after templating, so the checks see the text that will actually be sent (FR-4.3).
+ *
+ * <p>A card number is always counted; whether it also rejects the message is {@link PanPolicy}'s decision, and
+ * for SMS the answer is always yes (SEC-05).
  */
 @Component
 public class MessageValidator {
 
     private final PanDetector panDetector;
+    private final PanPolicy panPolicy;
+    private final MetricsPort metrics;
 
-    public MessageValidator(PanDetector panDetector) {
+    public MessageValidator(PanDetector panDetector, PanPolicy panPolicy, MetricsPort metrics) {
         this.panDetector = Guard.notNull(panDetector, "panDetector");
+        this.panPolicy = Guard.notNull(panPolicy, "panPolicy");
+        this.metrics = Guard.notNull(metrics, "metrics");
     }
 
     /** Validates the final content and addressing of a message (FR-1.4). */
@@ -39,7 +48,7 @@ public class MessageValidator {
                             + message.channelPlan().channels());
         }
         for (Channel channel : message.deliverableChannels()) {
-            PipelineVerdict verdict = validateContent(message.contents().requireForChannel(channel));
+            PipelineVerdict verdict = validateContent(message.contents().requireForChannel(channel), channel);
             if (verdict.isRejected()) {
                 return verdict;
             }
@@ -47,39 +56,46 @@ public class MessageValidator {
         return PipelineVerdict.passed();
     }
 
-    private PipelineVerdict validateContent(MessageContent content) {
+    private PipelineVerdict validateContent(MessageContent content, Channel channel) {
         return switch (content) {
-            case SmsContent sms -> validateText(sms.text(), Channel.SMS);
-            case PushContent push -> validatePush(push);
-            case EmailContent email -> validateEmail(email);
+            case SmsContent sms -> validateText(sms.text(), channel);
+            case PushContent push -> validatePush(push, channel);
+            case EmailContent email -> validateEmail(email, channel);
         };
     }
 
-    private PipelineVerdict validatePush(PushContent push) {
+    private PipelineVerdict validatePush(PushContent push, Channel channel) {
         if (push.exceedsPayloadLimit()) {
             return PipelineVerdict.rejected(
                     RejectionReason.VALIDATION_FAILED,
                     "push payload of %d bytes exceeds the %d byte platform limit (PU-11)"
                             .formatted(push.payloadSizeBytes(), PushContent.MAX_PAYLOAD_BYTES));
         }
-        return validateText(push.title() + " " + push.body(), Channel.PUSH);
+        return validateText(push.title() + " " + push.body(), channel);
     }
 
-    private PipelineVerdict validateEmail(EmailContent email) {
-        PipelineVerdict subject = validateText(email.subject(), Channel.EMAIL);
+    private PipelineVerdict validateEmail(EmailContent email, Channel channel) {
+        PipelineVerdict subject = validateText(email.subject(), channel);
         if (subject.isRejected()) {
             return subject;
         }
-        PipelineVerdict text = validateText(email.textBody(), Channel.EMAIL);
-        return text.isRejected() ? text : validateText(email.htmlBody(), Channel.EMAIL);
+        PipelineVerdict text = validateText(email.textBody(), channel);
+        return text.isRejected() ? text : validateText(email.htmlBody(), channel);
     }
 
     /** PCI DSS: a card number must never leave the Hub in message content (SEC-05). */
     private PipelineVerdict validateText(String text, Channel channel) {
-        if (panDetector.containsPan(text)) {
-            return PipelineVerdict.rejected(
-                    RejectionReason.PAN_DETECTED, "content for channel %s contains a card number".formatted(channel));
+        if (!panDetector.containsPan(text)) {
+            return PipelineVerdict.passed();
         }
-        return PipelineVerdict.passed();
+        boolean blocked = panPolicy.blocksOn(channel);
+        // Всегда метрика, никогда лог: строка с номером карты в логе — это тот же PAN, только в другом
+        // хранилище (SEC-05, OBS-03). Алерт по OBS-04 строится на этой метрике.
+        metrics.panDetected(channel, blocked);
+        if (!blocked) {
+            return PipelineVerdict.passed();
+        }
+        return PipelineVerdict.rejected(
+                RejectionReason.PAN_DETECTED, "content for channel %s contains a card number".formatted(channel));
     }
 }
