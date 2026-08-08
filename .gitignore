@@ -22,7 +22,11 @@ replay_pid*
 .settings/
 .project
 .classpath
-out/
+# Каталоги сборки IntelliJ: только корень проекта и корни модулей.
+# Без якорей шаблон `out/` матчил любой каталог `out` на любой глубине,
+# в том числе пакет `application/.../port/out` (output-порты гексагона).
+/out/
+*/out/
 
 # --- OS ---
 .DS_Store
