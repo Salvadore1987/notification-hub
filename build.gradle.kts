@@ -17,6 +17,7 @@ allprojects {
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "checkstyle")
+    apply(plugin = "jacoco")
     apply(plugin = "com.diffplug.spotless")
 
     val sourceSets = extensions.getByType<SourceSetContainer>()
@@ -74,6 +75,19 @@ subprojects {
         }
     }
 
+    // Покрытие (QA-01): отчёт по юнит-тестам; порог для domain задан ниже.
+    tasks.named<Test>("test") {
+        finalizedBy(tasks.named("jacocoTestReport"))
+    }
+
+    tasks.named<JacocoReport>("jacocoTestReport") {
+        dependsOn(tasks.named("test"))
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+        }
+    }
+
     extensions.configure<CheckstyleExtension> {
         toolVersion = version("checkstyle")
         configFile = rootProject.file("config/checkstyle/checkstyle.xml")
@@ -94,5 +108,25 @@ subprojects {
             trimTrailingWhitespace()
             endWithNewline()
         }
+    }
+}
+
+// QA-01: доменная логика — не менее 80% покрытия строк юнит-тестами.
+project(":domain") {
+    tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+        dependsOn(tasks.named("test"))
+        violationRules {
+            rule {
+                limit {
+                    counter = "LINE"
+                    value = "COVEREDRATIO"
+                    minimum = "0.80".toBigDecimal()
+                }
+            }
+        }
+    }
+
+    tasks.named("check") {
+        dependsOn(tasks.named("jacocoTestCoverageVerification"))
     }
 }
