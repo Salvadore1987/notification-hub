@@ -12,9 +12,12 @@ dependencies {
     // in/kafka, out/kafka
     implementation(libs.spring.kafka)
 
-    // out/persistence (+ Flyway-миграции лежат в этом модуле: src/main/resources/db/migration)
+    // out/persistence (+ Flyway-миграции лежат в этом модуле: src/main/resources/db/migration).
+    // Стартер, а не только flyway-core: в Boot 4 автоконфигурация Flyway живёт в отдельном модуле,
+    // и без него ключи spring.flyway.* — просто текст в yaml, а приложение поднимается на базе
+    // без схемы (DB-01). Тесты, гоняющие Flyway вручную, продолжают работать с flyway-core.
     implementation(libs.spring.boot.starter.data.jdbc)
-    implementation(libs.flyway.core)
+    implementation(libs.spring.boot.starter.flyway)
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
 

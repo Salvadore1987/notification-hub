@@ -14,12 +14,14 @@ import org.springframework.stereotype.Component;
  * queries DB-06 wants off the primary. They are also the ones an operator runs during an incident,
  * which is when the primary is least able to spare the buffers for them.
  *
- * <p>Deliberately <em>not</em> a second {@link JdbcClient} bean: adding one would make the injection
- * point of every other repository in this module ambiguous. It is a holder, resolved once at startup,
- * and it falls back to the primary when no replica is configured — a developer machine and the smaller
- * contours run one database. Choosing explicitly is the point of DB-06's design: routing by transaction
- * attribute would send a report to the replica silently and make replication lag look like data that had
- * gone missing.
+ * <p>Deliberately <em>not</em> a second {@link JdbcClient} bean: a second one of those would make the
+ * injection point of every other repository in this module ambiguous, and — the reason this is not a
+ * matter of taste — Spring Boot configures the primary {@code JdbcClient} only while the context has
+ * none, so a replica declared in that type replaces "reports read from the replica" with "the
+ * application does not start". It is a holder, resolved once at startup, and it falls back to the
+ * primary when no replica is configured — a developer machine and the smaller contours run one database.
+ * Choosing explicitly is the point of DB-06's design: routing by transaction attribute would send a
+ * report to the replica silently and make replication lag look like data that had gone missing.
  *
  * <p>Only queries that tolerate lag may use it. A report reading state a second old is a report; a
  * routing decision reading state a second old is a message sent over a provider that was just disabled.
@@ -31,11 +33,9 @@ public class AnalyticsJdbcClient {
 
     private final JdbcClient delegate;
 
-    public AnalyticsJdbcClient(
-            @Qualifier("jdbcClient") JdbcClient primary,
-            @Qualifier("readReplicaJdbcClient") ObjectProvider<JdbcClient> replica) {
-        JdbcClient configured = replica.getIfAvailable();
-        this.delegate = configured == null ? primary : configured;
+    public AnalyticsJdbcClient(@Qualifier("jdbcClient") JdbcClient primary, ObjectProvider<ReadReplicaClient> replica) {
+        ReadReplicaClient configured = replica.getIfAvailable();
+        this.delegate = configured == null ? primary : configured.client();
         if (configured == null) {
             LOG.info("No read replica configured (commhub.persistence.read-replica.url); "
                     + "admin reports read from the primary (DB-06).");

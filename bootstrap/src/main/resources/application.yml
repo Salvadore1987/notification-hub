@@ -160,10 +160,28 @@ commhub:
       #   ibank-retail:
       #     permits-per-second: 500
       #     burst: 1000
-      streams: {}
+      #
+      # Ключа streams здесь нет намеренно: пустая карта в YAML (`streams: {}`) приходит в биндер
+      # скаляром, и Map её не принимает — контекст не поднимается вовсе. Отсутствующий ключ даёт
+      # ровно то же значение (компактный конструктор записи подставляет пустую карту).
       # Как долго переиспользуется лимит, прочитанный из реестра: лимитер работает на каждом
       # принятом запросе, поэтому поход в БД на запрос недопустим (NF-07 ограничивает 30с).
       registry-cache-ttl: ${REST_RATE_LIMIT_REGISTRY_TTL:10s}
+
+  # FR-1.5: окно идемпотентности приёма. Это же окно держит размер dedup_registry (DB-03):
+  # расширение окна расширяет таблицу, в которую пишется каждое принятое сообщение.
+  dedup:
+    window: ${DEDUP_WINDOW:24h}
+
+  # PR-01, FR-2.2, FR-3.3: внешний бюджет саги отправки — сколько попыток у сообщения всего и
+  # сколько из них на одном провайдере до перехода на резервного. Внутренний ретрай одного вызова
+  # живёт в commhub.provider.<code>.resilience и измеряется сотнями миллисекунд.
+  sending:
+    max-attempts-per-provider: ${SENDING_ATTEMPTS_PER_PROVIDER:2}
+    max-total-attempts: ${SENDING_MAX_ATTEMPTS:5}
+    initial-backoff: ${SENDING_INITIAL_BACKOFF:2s}
+    backoff-multiplier: ${SENDING_BACKOFF_MULTIPLIER:2.0}
+    max-backoff: ${SENDING_MAX_BACKOFF:30s}
 
   # Конфигурация маршрутизации в БД (AD-07, NF-07). Снапшот каналов/провайдеров/политик держится
   # в памяти и перечитывается по расписанию: маршрутизируется каждое сообщение, а конфигурация
@@ -216,7 +234,9 @@ commhub:
     directory: ${SECRETS_DIR:}
     # Кэш ссылки: ротация применяется без рестарта в пределах этого окна (SEC-04, AD-07 просит ≤30с).
     cache-ttl: ${SECRETS_CACHE_TTL:30s}
-    values: {}
+    # values здесь не объявляется по той же причине, что и rate-limit.streams выше: пустая карта
+    # в YAML приходит биндеру скаляром. Литералы для локального стенда задаются точечно, например
+    #   commhub.secrets.values.playmobile/password: ...
 
   # Адаптеры провайдеров (§9, PR-01). Значения ниже — умолчания деплоя: лимиты берутся из
   # provider.rate_limit_config, а настройки отправки (originator/sender, приоритеты, веса, TTL) —
@@ -230,6 +250,15 @@ commhub:
       enabled: ${PROVIDER_HEALTH_ENABLED:true}
       interval: ${PROVIDER_HEALTH_INTERVAL:30s}
       initial-delay: ${PROVIDER_HEALTH_INITIAL_DELAY:60s}
+      # Пороги оценки. DOWN снимает провайдера с выбора, поэтому failover не требует отдельного кода
+      # (FR-2.2). recovery-after — испытательный срок: провайдер без трафика никогда не наберёт
+      # статистику, которая его оправдает, поэтому после этого молчания он возвращается в UNKNOWN.
+      window: ${PROVIDER_HEALTH_WINDOW:5m}
+      minimum-attempts: ${PROVIDER_HEALTH_MIN_ATTEMPTS:20}
+      degraded-error-rate: ${PROVIDER_HEALTH_DEGRADED_RATE:0.2}
+      down-error-rate: ${PROVIDER_HEALTH_DOWN_RATE:0.5}
+      down-timeout-rate: ${PROVIDER_HEALTH_TIMEOUT_RATE:0.3}
+      recovery-after: ${PROVIDER_HEALTH_RECOVERY_AFTER:2m}
 
     # Playmobile SMS-Broker — основной провайдер SMS (§9.1, §18.1).
     playmobile:
