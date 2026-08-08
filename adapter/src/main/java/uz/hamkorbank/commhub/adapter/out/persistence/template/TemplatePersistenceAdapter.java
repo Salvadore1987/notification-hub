@@ -16,6 +16,7 @@ import uz.hamkorbank.commhub.domain.model.Template;
 import uz.hamkorbank.commhub.domain.model.TemplateVersion;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
+import uz.hamkorbank.commhub.domain.model.type.TemplateCatalogStatus;
 import uz.hamkorbank.commhub.domain.model.type.TemplateStatus;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
@@ -30,9 +31,9 @@ import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
  * path is exactly what the stored columns describe and it keeps the maker/checker rule live: a row whose
  * reviewer equals its author is rejected on load instead of quietly becoming sendable (FR-4.2).
  *
- * <p>{@code template.status} is the state of the catalogue card and has no counterpart in the aggregate,
- * which tracks status per version; archived cards are therefore written but never read back into a
- * {@link Template}.
+ * <p>{@code template.status} is the state of the catalogue card — {@code ACTIVE} or {@code ARCHIVED} — and
+ * is separate from the status a version carries; it is replayed onto the aggregate after the versions are
+ * attached, for the same reason the version workflow is replayed rather than assigned.
  */
 @Repository
 public class TemplatePersistenceAdapter implements TemplateRepository {
@@ -40,13 +41,14 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
     private static final String SELECT_TEMPLATE = "SELECT id, code, channel, direction, owner, status FROM template";
 
     private static final String UPSERT_TEMPLATE = """
-            INSERT INTO template (id, code, channel, direction, owner)
-            VALUES (:id, :code, :channel, :direction, :owner)
+            INSERT INTO template (id, code, channel, direction, owner, status)
+            VALUES (:id, :code, :channel, :direction, :owner, :status)
             ON CONFLICT (id) DO UPDATE SET
                 code = EXCLUDED.code,
                 channel = EXCLUDED.channel,
                 direction = EXCLUDED.direction,
                 owner = EXCLUDED.owner,
+                status = EXCLUDED.status,
                 updated_at = now()
             """;
 
@@ -78,6 +80,11 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
             WHERE template_id = :templateId
             """;
 
+    private static final String DELETE_MAPPINGS =
+            "DELETE FROM template_provider_mapping WHERE template_id = :templateId";
+
+    private static final String DELETE_DROPPED_MAPPINGS = DELETE_MAPPINGS + " AND provider_code NOT IN (:keep)";
+
     private static final String UPSERT_MAPPING = """
             INSERT INTO template_provider_mapping (template_id, provider_code, provider_template_id, approved)
             VALUES (:templateId, :providerCode, :providerTemplateId, :approved)
@@ -105,9 +112,10 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                 .param("channel", template.channel().name())
                 .param("direction", template.direction().orElse(null))
                 .param("owner", template.owner().orElse(null))
+                .param("status", template.catalogStatus().name())
                 .update();
         template.versions().forEach(version -> saveVersion(template.id(), version));
-        template.providerMappings().values().forEach(mapping -> saveMapping(template.id(), mapping));
+        syncMappings(template);
         return template;
     }
 
@@ -129,6 +137,37 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
         return findByCode(code).filter(template -> template.channel() == channel);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Template> findAll(
+            Channel channel, String direction, TemplateCatalogStatus catalogStatus, int limit, int offset) {
+        StringBuilder sql = new StringBuilder(SELECT_TEMPLATE).append(" WHERE 1 = 1");
+        if (channel != null) {
+            sql.append(" AND channel = :channel");
+        }
+        if (direction != null) {
+            sql.append(" AND direction = :direction");
+        }
+        if (catalogStatus != null) {
+            sql.append(" AND status = :status");
+        }
+        sql.append(" ORDER BY code LIMIT :limit OFFSET :offset");
+        JdbcClient.StatementSpec statement =
+                jdbcClient.sql(sql.toString()).param("limit", limit).param("offset", offset);
+        if (channel != null) {
+            statement = statement.param("channel", channel.name());
+        }
+        if (direction != null) {
+            statement = statement.param("direction", direction);
+        }
+        if (catalogStatus != null) {
+            statement = statement.param("status", catalogStatus.name());
+        }
+        return statement.query(templateRowMapper()).list().stream()
+                .map(this::withVersionsAndMappings)
+                .toList();
+    }
+
     private Optional<Template> load(String sql, Object value) {
         return jdbcClient
                 .sql(sql)
@@ -138,7 +177,14 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                 .map(this::withVersionsAndMappings);
     }
 
-    private Template withVersionsAndMappings(Template template) {
+    /**
+     * Attaches the stored versions and mappings, then applies the catalogue status (FR-4.1, FR-4.5).
+     *
+     * <p>Status last: an archived card refuses to publish a version, so archiving it before its stored
+     * history is replayed would reject the very rows that produced it.
+     */
+    private Template withVersionsAndMappings(Card card) {
+        Template template = card.template();
         jdbcClient
                 .sql(SELECT_VERSIONS)
                 .param("templateId", template.id().value())
@@ -154,17 +200,25 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                         rs.getBoolean("approved")))
                 .list()
                 .forEach(template::mapToProviderTemplate);
+        if (card.status() == TemplateCatalogStatus.ARCHIVED) {
+            template.archive();
+        }
         return template;
     }
 
-    private RowMapper<Template> templateRowMapper() {
-        return (rs, rowNum) -> Template.create(
-                TemplateId.of(SqlValues.uuid(rs, "id")),
-                TemplateCode.of(rs.getString("code")),
-                SqlValues.enumValue(rs, "channel", Channel.class),
-                rs.getString("direction"),
-                rs.getString("owner"));
+    private RowMapper<Card> templateRowMapper() {
+        return (rs, rowNum) -> new Card(
+                Template.create(
+                        TemplateId.of(SqlValues.uuid(rs, "id")),
+                        TemplateCode.of(rs.getString("code")),
+                        SqlValues.enumValue(rs, "channel", Channel.class),
+                        rs.getString("direction"),
+                        rs.getString("owner")),
+                SqlValues.enumValue(rs, "status", TemplateCatalogStatus.class));
     }
+
+    /** A {@code template} row before its versions are attached; the status is applied last. */
+    private record Card(Template template, TemplateCatalogStatus status) {}
 
     private RowMapper<TemplateVersion> versionRowMapper() {
         return (rs, rowNum) -> {
@@ -213,6 +267,31 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                 .update();
     }
 
+    /**
+     * Makes the stored mappings match the aggregate, removals included (FR-4.5).
+     *
+     * <p>Versions are only ever added, so upserting them is enough; a mapping can be dropped, and an upsert
+     * alone would leave the provider still bound to a template nobody thinks it is bound to.
+     */
+    private void syncMappings(Template template) {
+        List<String> codes = template.providerMappings().keySet().stream()
+                .map(ProviderCode::value)
+                .toList();
+        if (codes.isEmpty()) {
+            jdbcClient
+                    .sql(DELETE_MAPPINGS)
+                    .param("templateId", template.id().value())
+                    .update();
+            return;
+        }
+        jdbcClient
+                .sql(DELETE_DROPPED_MAPPINGS)
+                .param("templateId", template.id().value())
+                .param("keep", codes)
+                .update();
+        template.providerMappings().values().forEach(mapping -> saveMapping(template.id(), mapping));
+    }
+
     private void saveMapping(TemplateId templateId, Template.ProviderMapping mapping) {
         jdbcClient
                 .sql(UPSERT_MAPPING)
@@ -220,15 +299,6 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                 .param("providerCode", mapping.providerCode().value())
                 .param("providerTemplateId", mapping.providerTemplateId())
                 .param("approved", mapping.approved())
-                .update();
-    }
-
-    /** Kept for the admin panel: the catalogue card may be archived without touching its versions. */
-    @Transactional
-    public void archive(TemplateId templateId) {
-        jdbcClient
-                .sql("UPDATE template SET status = 'ARCHIVED', updated_at = now() WHERE id = :id")
-                .param("id", templateId.value())
                 .update();
     }
 }

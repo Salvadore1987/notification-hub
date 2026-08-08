@@ -58,6 +58,11 @@ public class TemplateApplier {
                     RejectionReason.VALIDATION_FAILED,
                     "unknown template " + ref.code().value());
         }
+        if (!template.get().isSendable()) {
+            return TemplateOutcome.rejected(
+                    RejectionReason.TEMPLATE_NOT_PUBLISHED,
+                    "template %s is archived".formatted(ref.code().value()));
+        }
         ContentLocale locale = ref.localeOptional().orElse(streamLocale == null ? DEFAULT_LOCALE : streamLocale);
         Optional<TemplateVersion> version = publishedVersion(template.get(), locale);
         if (version.isEmpty()) {

@@ -1,6 +1,7 @@
 package uz.hamkorbank.commhub.domain.model;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -33,9 +34,9 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
     private final TemplateId templateId;
     private final int version;
     private final ContentLocale locale;
-    private final Body body;
     private final String createdBy;
 
+    private Body body;
     private TemplateStatus status;
     private String reviewedBy;
     private Instant publishedAt;
@@ -61,6 +62,18 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
     public static TemplateVersion draft(
             TemplateVersionId id, TemplateId templateId, int version, ContentLocale locale, Body body, String author) {
         return new TemplateVersion(id, templateId, version, locale, body, author);
+    }
+
+    /**
+     * Rewrites the text of a draft (FR-4.1).
+     *
+     * <p>Only a {@code DRAFT} may be edited: a version under review is what a reviewer is looking at, and
+     * a published one is what messages were rendered from — changing either in place would make the audit
+     * trail of a sent message point at a text that never went out (FR-7.3). Later texts are new versions.
+     */
+    public void updateBody(Body newBody) {
+        Guard.isTrue(status == TemplateStatus.DRAFT, "only a DRAFT version may be edited (FR-4.1)");
+        this.body = Guard.notNull(newBody, "body");
     }
 
     public void submitForReview() {
@@ -102,6 +115,33 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
         Map<String, String> values = Guard.copyOf(variables);
         String subject = body.subject() == null ? null : substitute(body.subject(), values, strict);
         return new Rendered(subject, substitute(body.text(), values, strict));
+    }
+
+    /**
+     * Renders the version for the administration preview (FR-4.4).
+     *
+     * <p>Two departures from {@link #render(Map, boolean)}, both because a preview is not a send: the
+     * status is not checked — the point of a preview is to look at a draft before it is published — and a
+     * missing variable leaves the merge field visible as {@code {NAME}} instead of failing, so that the
+     * operator sees which values the source system will have to supply. What is missing is reported by
+     * {@link #missingVariables(Map)}, not hidden in an empty string.
+     */
+    public Rendered renderPreview(Map<String, String> variables) {
+        Map<String, String> values = Guard.copyOf(variables);
+        String subject = body.subject() == null ? null : preview(body.subject(), values);
+        return new Rendered(subject, preview(body.text(), values));
+    }
+
+    /** Merge fields of the body the supplied variables have no value for (FR-4.3, FR-4.4). */
+    public Set<String> missingVariables(Map<String, String> variables) {
+        Map<String, String> values = Guard.copyOf(variables);
+        Set<String> missing = new LinkedHashSet<>();
+        for (String name : declaredVariables()) {
+            if (values.get(name) == null) {
+                missing.add(name);
+            }
+        }
+        return Collections.unmodifiableSet(missing);
     }
 
     public boolean isSendable() {
@@ -147,6 +187,18 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
         this.status = next;
     }
 
+    /** Substitution of the preview: an absent value stays visible as its merge field (FR-4.4). */
+    private static String preview(String source, Map<String, String> values) {
+        Matcher matcher = MERGE_FIELD_PATTERN.matcher(source);
+        StringBuilder rendered = new StringBuilder();
+        while (matcher.find()) {
+            String value = values.get(matcher.group(1));
+            matcher.appendReplacement(rendered, Matcher.quoteReplacement(value == null ? matcher.group() : value));
+        }
+        matcher.appendTail(rendered);
+        return rendered.toString();
+    }
+
     private static String substitute(String source, Map<String, String> values, boolean strict) {
         Matcher matcher = MERGE_FIELD_PATTERN.matcher(source);
         StringBuilder rendered = new StringBuilder();
@@ -188,12 +240,17 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
             return new Body(subject, text);
         }
 
-        /** Merge fields referenced by the subject and the text (FR-4.3). */
+        /**
+         * Merge fields referenced by the subject and the text, in the order they appear (FR-4.3).
+         *
+         * <p>Declaration order is kept deliberately: the admin panel lists the fields an operator has to
+         * fill in, and reading them in the order of the text is how the text is proof-read (FR-4.4).
+         */
         public Set<String> declaredVariables() {
             Set<String> variables = new LinkedHashSet<>();
             collectInto(subject, variables);
             collectInto(text, variables);
-            return Set.copyOf(variables);
+            return Collections.unmodifiableSet(variables);
         }
 
         private static void collectInto(String source, Set<String> target) {

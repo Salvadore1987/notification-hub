@@ -109,6 +109,20 @@ commhub:
       enabled: ${CONFIG_CACHE_ENABLED:true}
       refresh-interval: ${CONFIG_CACHE_REFRESH_INTERVAL:10s}
 
+  # FR-4.6: разовый импорт существующей базы шаблонов Банка (~470 шаблонов) из CSV.
+  # Выключено по умолчанию: это шаг внедрения (запускается отдельным job'ом с примонтированным
+  # файлом), а не то, что должен повторять рестарт пода. Повтор безопасен — уже опубликованная
+  # формулировка пропускается, — но это страховка, а не план. Формат файла — в
+  # adapter/in/importer/package-info.java. approver публикует импортированные версии и обязан
+  # отличаться от author (maker/checker, FR-4.2); без него всё ложится черновиками.
+  import:
+    templates:
+      enabled: ${TEMPLATE_IMPORT_ENABLED:false}
+      file: ${TEMPLATE_IMPORT_FILE:}
+      delimiter: ${TEMPLATE_IMPORT_DELIMITER:;}
+      author: ${TEMPLATE_IMPORT_AUTHOR:legacy-import}
+      approver: ${TEMPLATE_IMPORT_APPROVER:}
+
   # Провайдерские callback'и статусов (PM-02, SEC-07). Ключи — коды провайдеров.
   # Секрет в проме приходит из секрет-хранилища Банка (SG-04) и в логах не появляется.
   callback:

@@ -202,6 +202,42 @@ class TemplateVersionTest {
                 .isThrownBy(() -> new TemplateVersion.Rendered(null, " "));
     }
 
+    @Test
+    @DisplayName("FR-4.1: a draft may be rewritten, a version under review or published may not")
+    void onlyADraftMayBeEdited() {
+        // Arrange
+        TemplateVersion version = draft("Код: {CODE}");
+
+        // Act
+        version.updateBody(TemplateVersion.Body.ofText("Ваш код: {CODE}, срок {TTL}"));
+
+        // Assert
+        assertThat(version.body().text()).isEqualTo("Ваш код: {CODE}, срок {TTL}");
+        assertThat(version.declaredVariables()).containsExactly("CODE", "TTL");
+
+        // Act + Assert
+        version.submitForReview();
+        assertThatExceptionOfType(DomainValidationException.class)
+                .isThrownBy(() -> version.updateBody(TemplateVersion.Body.ofText("другой текст")));
+    }
+
+    @Test
+    @DisplayName("FR-4.4: the preview renders a draft and keeps unfilled merge fields visible")
+    void previewRendersADraftWithoutStrictMode() {
+        // Arrange
+        TemplateVersion version = draft("Здравствуйте, {NAME}! Ваш код {CODE}");
+
+        // Act
+        TemplateVersion.Rendered rendered = version.renderPreview(Map.of("NAME", "ИВАН"));
+
+        // Assert
+        assertThat(version.status()).isEqualTo(TemplateStatus.DRAFT);
+        assertThat(rendered.text()).isEqualTo("Здравствуйте, ИВАН! Ваш код {CODE}");
+        assertThat(version.missingVariables(Map.of("NAME", "ИВАН"))).containsExactly("CODE");
+        assertThat(version.missingVariables(Map.of("NAME", "ИВАН", "CODE", "1234")))
+                .isEmpty();
+    }
+
     private static TemplateVersion draft(String text) {
         return TemplateVersion.draft(
                 TemplateVersionId.newId(),
