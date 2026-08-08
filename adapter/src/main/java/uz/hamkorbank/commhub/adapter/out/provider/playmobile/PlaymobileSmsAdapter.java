@@ -17,6 +17,8 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
@@ -69,25 +71,24 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
     private final ProviderMessageIdFactory providerMessageIds;
     private final SecretResolverPort secrets;
     private final ClockPort clock;
+    private final ProviderRuntimeSettings runtimeSettings;
     private final RestClient client;
 
     public PlaymobileSmsAdapter(
             PlaymobileProperties properties,
             PlaymobileSendCodec codec,
-            ProviderCallExecutor executor,
-            ProviderThrottle throttle,
             ProviderMessageIdFactory providerMessageIds,
-            SecretResolverPort secrets,
-            ClockPort clock,
-            ProviderRestClients clients) {
+            ProviderSupport support) {
         this.properties = Guard.notNull(properties, "properties");
         this.codec = Guard.notNull(codec, "codec");
-        this.executor = Guard.notNull(executor, "executor");
-        this.throttle = Guard.notNull(throttle, "throttle");
         this.providerMessageIds = Guard.notNull(providerMessageIds, "providerMessageIds");
-        this.secrets = Guard.notNull(secrets, "secrets");
-        this.clock = Guard.notNull(clock, "clock");
-        this.client = Guard.notNull(clients, "clients").create(properties.http());
+        Guard.notNull(support, "support");
+        this.executor = support.executor();
+        this.throttle = support.throttle();
+        this.secrets = support.secrets();
+        this.clock = support.clock();
+        this.runtimeSettings = support.runtimeSettings();
+        this.client = support.clients().create(properties.http());
     }
 
     @Override
@@ -122,7 +123,7 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
         if (throttled.isPresent()) {
             return sends.stream().map(ignored -> throttled.get()).toList();
         }
-        String document = codec.encode(sends, properties.sending());
+        String document = codec.encode(sends, sending());
         return executor.executeBatch(properties.providerCode(), properties.resilience(), sends.size(), () -> {
             ProviderAck ack = call(document, sends);
             return sends.stream().map(send -> withProviderMessageId(ack, send)).toList();
@@ -193,9 +194,19 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
                 ack.respondedAt());
     }
 
+    /**
+     * Sending settings with the {@code provider.endpoint_config} of this provider applied (AD-07).
+     *
+     * <p>Resolved per call, like the credentials: an operator changing the alpha-name applies it within
+     * the configuration refresh window rather than at the next restart (NF-07).
+     */
+    private PlaymobileProperties.Sending sending() {
+        return properties.sending().overlay(runtimeSettings.endpointConfigOf(properties.providerCode()));
+    }
+
     /** {@code <prefix><number>}, at most 20 characters, unique per sending system (§9.1). */
     private ProviderMessageId providerMessageIdOf(SmsSubmission submission) {
-        return providerMessageIds.create(properties.sending().organisationPrefix(), submission.messageId());
+        return providerMessageIds.create(sending().organisationPrefix(), submission.messageId());
     }
 
     /** Holds a chunk back when it would breach the provider's agreed rate (FR-2.5). */
@@ -203,7 +214,7 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
         for (PlaymobileSend send : sends) {
             Optional<String> refusal = throttle.acquire(
                     properties.providerCode(),
-                    properties.rateLimit(),
+                    runtimeSettings.rateLimitOf(properties.providerCode(), properties.rateLimit()),
                     send.submission().recipient().value());
             if (refusal.isPresent()) {
                 LOG.info("Playmobile send held back: {}", refusal.get());

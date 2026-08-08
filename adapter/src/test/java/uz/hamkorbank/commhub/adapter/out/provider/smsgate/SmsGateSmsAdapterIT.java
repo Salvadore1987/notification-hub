@@ -28,6 +28,8 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
@@ -70,11 +72,13 @@ class SmsGateSmsAdapterIT {
         adapter = new SmsGateSmsAdapter(
                 properties(RateLimit.unlimited()),
                 new SmsGateSendCodec(new SmsGateJson()),
-                new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
-                throttle,
-                ProviderStubs.secrets("smsgate/login", "hamkor", "smsgate/key", "k3y"),
-                FixedClock.standard(),
-                new ProviderRestClients());
+                new ProviderSupport(
+                        new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
+                        throttle,
+                        ProviderRuntimeSettings.configurationOnly(),
+                        ProviderStubs.secrets("smsgate/login", "hamkor", "smsgate/key", "k3y"),
+                        FixedClock.standard(),
+                        new ProviderRestClients()));
     }
 
     @AfterEach
@@ -191,11 +195,13 @@ class SmsGateSmsAdapterIT {
         adapter = new SmsGateSmsAdapter(
                 properties(new RateLimit(0, 0, 1)),
                 new SmsGateSendCodec(new SmsGateJson()),
-                new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
-                throttle,
-                ProviderStubs.secrets("smsgate/login", "hamkor", "smsgate/key", "k3y"),
-                FixedClock.standard(),
-                new ProviderRestClients());
+                new ProviderSupport(
+                        new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
+                        throttle,
+                        ProviderRuntimeSettings.configurationOnly(),
+                        ProviderStubs.secrets("smsgate/login", "hamkor", "smsgate/key", "k3y"),
+                        FixedClock.standard(),
+                        new ProviderRestClients()));
         provider.stubFor(
                 post(urlEqualTo(SmsGateProperties.SEND_PATH)).willReturn(json("{\"status\":{\"code\":0},\"id\":1}")));
 

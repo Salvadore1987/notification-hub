@@ -19,7 +19,10 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
  *
  * <p>The anti-spam ceiling of 50 SMS per hour per number (§18.2) is the default of
  * {@link #rateLimit()}, set slightly below the provider's own: the limiter counts per instance, so the
- * cluster as a whole must aim under the line rather than at it.
+ * cluster as a whole must aim under the line rather than at it. Since Phase 8 the limit stored on the
+ * {@code provider} row wins over it when there is one, so it can be tightened without a restart
+ * (FR-2.5, AD-07); the sender name and the weights are overlaid from {@code provider.endpoint_config}
+ * the same way.
  */
 @ConfigurationProperties("commhub.provider.smsgate")
 public record SmsGateProperties(
@@ -96,6 +99,38 @@ public record SmsGateProperties(
 
         public static Sending defaults() {
             return new Sending(null, null);
+        }
+
+        /**
+         * These settings with {@code provider.endpoint_config} applied on top (AD-07, §10.1).
+         *
+         * <p>Keys: {@code sender} and {@code weight.<traffic-class>}. A value that is not a number, or
+         * outside 0–10, is ignored rather than clamped silently — an operator who typed 100 meant
+         * something, and the configured weight is the safer guess at what.
+         */
+        public Sending overlay(Map<String, String> endpointConfig) {
+            if (endpointConfig == null || endpointConfig.isEmpty()) {
+                return this;
+            }
+            Map<TrafficClass, Integer> overlaid = new EnumMap<>(weights);
+            for (TrafficClass trafficClass : TrafficClass.values()) {
+                String key =
+                        "weight." + trafficClass.name().toLowerCase(Locale.ROOT).replace('_', '-');
+                weight(endpointConfig.get(key)).ifPresent(value -> overlaid.put(trafficClass, value));
+            }
+            return new Sending(endpointConfig.getOrDefault("sender", sender), overlaid);
+        }
+
+        private static java.util.Optional<Integer> weight(String value) {
+            if (value == null || value.isBlank()) {
+                return java.util.Optional.empty();
+            }
+            try {
+                int parsed = Integer.parseInt(value.trim());
+                return parsed >= 0 && parsed <= MAX_WEIGHT ? java.util.Optional.of(parsed) : java.util.Optional.empty();
+            } catch (NumberFormatException e) {
+                return java.util.Optional.empty();
+            }
         }
 
         public static RateLimit antiSpamDefault() {

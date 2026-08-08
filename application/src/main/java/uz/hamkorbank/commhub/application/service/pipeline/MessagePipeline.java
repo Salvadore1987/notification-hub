@@ -101,13 +101,22 @@ public class MessagePipeline {
 
     // --- Quotas (FR-2.6) --------------------------------------------------------
 
-    public PipelineVerdict checkQuota(Stream stream, Channel channel, long units, Money cost, Instant now) {
-        return quotas.check(stream, channel, units, cost, now);
+    /** Quota subject of a routed message: its stream, channel and chosen provider (FR-2.6). */
+    public QuotaSubject quotaSubjectOf(Stream stream, Channel channel, RoutingOutcome outcome, ProviderRef provider) {
+        return new QuotaSubject(
+                stream,
+                channel,
+                outcome.channelConfig(channel).orElse(null),
+                outcome.configuration().provider(provider.id()).orElse(null));
+    }
+
+    public PipelineVerdict checkQuota(QuotaSubject subject, long units, Money cost, Instant now) {
+        return quotas.check(subject, units, cost, now);
     }
 
     /** Registers an accepted send against the quota and frequency counters (FR-2.6, FR-5.4). */
-    public void registerSend(Message message, Channel channel, Stream stream, long units, Money cost, Instant now) {
-        quotas.register(stream, channel, units, cost, now);
-        filters.registerSend(message.recipient(), channel, now);
+    public void registerSend(Message message, QuotaSubject subject, long units, Money cost, Instant now) {
+        quotas.register(subject, units, cost, now);
+        filters.registerSend(message.recipient(), subject.channel(), now);
     }
 }

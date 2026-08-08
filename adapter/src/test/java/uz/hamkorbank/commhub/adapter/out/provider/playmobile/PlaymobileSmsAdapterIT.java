@@ -29,6 +29,8 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
@@ -82,12 +84,14 @@ class PlaymobileSmsAdapterIT {
         adapter = new PlaymobileSmsAdapter(
                 properties,
                 new PlaymobileSendCodec(json),
-                new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
-                new ProviderThrottle(),
                 new ProviderMessageIdFactory(),
-                ProviderStubs.secrets("playmobile/username", "hamkor", "playmobile/password", "s3cr3t"),
-                FixedClock.standard(),
-                new ProviderRestClients());
+                new ProviderSupport(
+                        new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
+                        new ProviderThrottle(),
+                        ProviderRuntimeSettings.configurationOnly(),
+                        ProviderStubs.secrets("playmobile/username", "hamkor", "playmobile/password", "s3cr3t"),
+                        FixedClock.standard(),
+                        new ProviderRestClients()));
     }
 
     @AfterEach

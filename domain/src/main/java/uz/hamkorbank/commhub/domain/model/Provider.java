@@ -1,5 +1,6 @@
 package uz.hamkorbank.commhub.domain.model;
 
+import java.time.Instant;
 import java.util.Optional;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ProviderHealthStatus;
@@ -29,10 +30,12 @@ public final class Provider extends AggregateRoot<ProviderId> {
     private int weight;
     private Tariff tariff;
     private RateLimit rateLimit;
+    private QuotaConfig quota;
     private String credentialsRef;
     private boolean enabled;
     private boolean maintenance;
     private ProviderHealthStatus health;
+    private Instant healthCheckedAt;
 
     private Provider(ProviderId id, ProviderCode code, Channel channel, AdapterType adapterType, Settings settings) {
         super(id);
@@ -43,6 +46,7 @@ public final class Provider extends AggregateRoot<ProviderId> {
         this.weight = settings.weight();
         this.tariff = settings.tariff();
         this.rateLimit = settings.rateLimit() == null ? RateLimit.unlimited() : settings.rateLimit();
+        this.quota = QuotaConfig.unlimited();
         this.credentialsRef = settings.credentialsRef();
         this.enabled = settings.enabled();
         this.health = ProviderHealthStatus.UNKNOWN;
@@ -78,7 +82,19 @@ public final class Provider extends AggregateRoot<ProviderId> {
 
     /** Health from probes and passive metrics; {@code DOWN} triggers failover (PR-02, FR-6.3). */
     public void markHealth(ProviderHealthStatus newHealth) {
+        markHealth(newHealth, healthCheckedAt);
+    }
+
+    /**
+     * Health together with the moment it was established (PR-02, FR-6.3).
+     *
+     * <p>The instant comes from the caller like everywhere else in the domain, and it is what makes
+     * failback possible: a provider excluded from routing produces no new figures, so the monitor needs
+     * to know how long it has been in that state before giving it traffic again.
+     */
+    public void markHealth(ProviderHealthStatus newHealth, Instant checkedAt) {
         this.health = Guard.notNull(newHealth, "newHealth");
+        this.healthCheckedAt = checkedAt;
     }
 
     public void updateWeight(int newWeight) {
@@ -91,6 +107,11 @@ public final class Provider extends AggregateRoot<ProviderId> {
 
     public void updateRateLimit(RateLimit newRateLimit) {
         this.rateLimit = Guard.notNull(newRateLimit, "newRateLimit");
+    }
+
+    /** Count and cost quota of this provider, counted across all streams using it (FR-2.6). */
+    public void updateQuota(QuotaConfig newQuota) {
+        this.quota = Guard.notNull(newQuota, "newQuota");
     }
 
     public void updateCredentialsRef(String newCredentialsRef) {
@@ -131,6 +152,10 @@ public final class Provider extends AggregateRoot<ProviderId> {
         return rateLimit;
     }
 
+    public QuotaConfig quota() {
+        return quota;
+    }
+
     public Optional<String> credentialsRef() {
         return Optional.ofNullable(credentialsRef);
     }
@@ -145,6 +170,16 @@ public final class Provider extends AggregateRoot<ProviderId> {
 
     public ProviderHealthStatus health() {
         return health;
+    }
+
+    /**
+     * When the current health was established — not when it was last confirmed (PR-02, FR-6.3).
+     *
+     * <p>The distinction is what makes failback possible: the monitor measures the probation of a
+     * {@code DOWN} provider from this instant, so it only moves when the status actually changes.
+     */
+    public Optional<Instant> healthCheckedAt() {
+        return Optional.ofNullable(healthCheckedAt);
     }
 
     private static int validWeight(int weight) {

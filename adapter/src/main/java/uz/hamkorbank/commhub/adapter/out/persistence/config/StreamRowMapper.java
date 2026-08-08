@@ -7,9 +7,11 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.QuietHoursJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.QuotaConfigJson;
+import uz.hamkorbank.commhub.adapter.out.persistence.json.RateLimitJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.JsonCodec;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
 import uz.hamkorbank.commhub.domain.model.Stream;
+import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
@@ -47,6 +49,8 @@ public class StreamRowMapper implements RowMapper<Stream> {
         applyStatus(stream, SqlValues.enumValue(rs, "status", StreamStatus.class));
         stream.updateQuota(
                 QuotaConfigJson.toDomain(jsonCodec.read(rs.getString("quota_config"), QuotaConfigJson.class)));
+        stream.updateRateLimit(
+                RateLimitJson.toDomain(jsonCodec.read(rs.getString("rate_limit_config"), RateLimitJson.class)));
         stream.updateQuietHours(
                 QuietHoursJson.toDomain(jsonCodec.read(rs.getString("quiet_hours"), QuietHoursJson.class)));
         stream.updateCredentialsRef(rs.getString("credentials_ref"));
@@ -61,7 +65,8 @@ public class StreamRowMapper implements RowMapper<Stream> {
                 SqlValues.enumValue(rs, "default_channel", Channel.class),
                 defaultProvider(rs),
                 SqlValues.enumValue(rs, "default_traffic_class", TrafficClass.class),
-                SqlValues.enumValue(rs, "default_priority", Priority.class));
+                SqlValues.enumValue(rs, "default_priority", Priority.class),
+                SqlValues.enumValue(rs, "default_balancing_strategy", BalancingStrategy.class));
     }
 
     private ProviderRef defaultProvider(ResultSet rs) throws SQLException {

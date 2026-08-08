@@ -33,6 +33,7 @@ import uz.hamkorbank.commhub.adapter.in.rest.handlers.SubmissionRejectionHandler
 import uz.hamkorbank.commhub.adapter.in.rest.mapper.RestResponseMapperImpl;
 import uz.hamkorbank.commhub.adapter.in.rest.problem.ProblemFactory;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.RateLimitProperties;
+import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamLimits;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamRateLimiter;
 import uz.hamkorbank.commhub.application.dto.MessageView;
 import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
@@ -80,7 +81,7 @@ class MessageControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = mockMvcWith(new StreamRateLimiter(RateLimitProperties.defaults()));
+        mockMvc = mockMvcWith(limiterOf(RateLimitProperties.defaults()));
     }
 
     @Test
@@ -156,7 +157,7 @@ class MessageControllerTest {
     @DisplayName("IR-02: a stream over its rate gets 429 with Retry-After")
     void appliesTheStreamRateLimit() throws Exception {
         // Arrange
-        mockMvc = mockMvcWith(new StreamRateLimiter(new RateLimitProperties(true, 1.0, 1, Map.of())));
+        mockMvc = mockMvcWith(limiterOf(new RateLimitProperties(true, 1.0, 1, Map.of(), null)));
         when(submitMessage.submit(any())).thenReturn(SubmitMessageResult.accepted(MESSAGE_ID, MessageStatus.QUEUED));
         mockMvc.perform(post(ApiV1.MESSAGES)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -260,5 +261,9 @@ class MessageControllerTest {
                         new MessageView.Transition(MessageStatus.ACCEPTED, null, null, acceptedAt),
                         new MessageView.Transition(
                                 MessageStatus.DELIVERED, null, "DELIVRD", acceptedAt.plusSeconds(4))));
+    }
+
+    private static StreamRateLimiter limiterOf(RateLimitProperties properties) {
+        return new StreamRateLimiter(properties, StreamLimits.configurationOnly(properties));
     }
 }

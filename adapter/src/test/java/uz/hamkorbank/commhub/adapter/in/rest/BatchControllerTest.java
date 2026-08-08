@@ -31,6 +31,7 @@ import uz.hamkorbank.commhub.adapter.in.rest.handlers.StateConflictHandler;
 import uz.hamkorbank.commhub.adapter.in.rest.mapper.RestResponseMapperImpl;
 import uz.hamkorbank.commhub.adapter.in.rest.problem.ProblemFactory;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.RateLimitProperties;
+import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamLimits;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamRateLimiter;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
 import uz.hamkorbank.commhub.application.dto.BatchControlResult;
@@ -89,7 +90,7 @@ class BatchControllerTest {
                 submitBatch,
                 new BatchActions(startBatch, pauseBatch, resumeBatch, stopBatch),
                 getBatch,
-                new StreamRateLimiter(RateLimitProperties.defaults()),
+                limiterOf(RateLimitProperties.defaults()),
                 new RestResponseMapperImpl());
         ProblemFactory problems = new ProblemFactory();
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -218,5 +219,9 @@ class BatchControllerTest {
                 .andExpect(jsonPath("$.progress.delivered").value(350))
                 .andExpect(jsonPath("$.progress.completionPercent").value(40.0))
                 .andExpect(jsonPath("$.costEstimate").doesNotExist());
+    }
+
+    private static StreamRateLimiter limiterOf(RateLimitProperties properties) {
+        return new StreamRateLimiter(properties, StreamLimits.configurationOnly(properties));
     }
 }

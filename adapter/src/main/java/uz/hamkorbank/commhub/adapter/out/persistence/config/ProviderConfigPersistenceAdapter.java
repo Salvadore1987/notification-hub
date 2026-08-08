@@ -2,6 +2,7 @@ package uz.hamkorbank.commhub.adapter.out.persistence.config;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.QuietHoursJson;
+import uz.hamkorbank.commhub.adapter.out.persistence.json.QuotaConfigJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.RateLimitJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.RoutingActionJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.RoutingMatchJson;
@@ -27,9 +29,11 @@ import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ChannelStatus;
+import uz.hamkorbank.commhub.domain.model.type.ProviderHealthStatus;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
+import uz.hamkorbank.commhub.domain.model.vo.RoutingPolicyId;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.service.RoutingConfiguration;
 
@@ -46,16 +50,18 @@ import uz.hamkorbank.commhub.domain.service.RoutingConfiguration;
 public class ProviderConfigPersistenceAdapter implements ProviderConfigRepository {
 
     private static final String SELECT_PROVIDER = """
-            SELECT id, code, channel, adapter_type, weight, tariff, rate_limit_config, credentials_ref,
-                   enabled, maintenance, health_status
+            SELECT id, code, channel, adapter_type, weight, tariff, rate_limit_config, quota_config,
+                   credentials_ref, enabled, maintenance, health_status, health_checked_at
             FROM provider
             """;
 
     private static final String UPSERT_PROVIDER = """
             INSERT INTO provider (id, code, channel, adapter_type, weight, tariff, rate_limit_config,
-                                  credentials_ref, enabled, maintenance, health_status)
+                                  quota_config, credentials_ref, enabled, maintenance, health_status,
+                                  health_checked_at)
             VALUES (:id, :code, :channel, :adapterType, :weight, CAST(:tariff AS jsonb),
-                    CAST(:rateLimit AS jsonb), :credentialsRef, :enabled, :maintenance, :health)
+                    CAST(:rateLimit AS jsonb), CAST(:quota AS jsonb), :credentialsRef, :enabled,
+                    :maintenance, :health, :healthCheckedAt)
             ON CONFLICT (id) DO UPDATE SET
                 code = EXCLUDED.code,
                 channel = EXCLUDED.channel,
@@ -63,24 +69,28 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
                 weight = EXCLUDED.weight,
                 tariff = EXCLUDED.tariff,
                 rate_limit_config = EXCLUDED.rate_limit_config,
+                quota_config = EXCLUDED.quota_config,
                 credentials_ref = EXCLUDED.credentials_ref,
                 enabled = EXCLUDED.enabled,
                 maintenance = EXCLUDED.maintenance,
                 health_status = EXCLUDED.health_status,
+                health_checked_at = EXCLUDED.health_checked_at,
                 updated_at = now()
             """;
 
     private static final String SELECT_CHANNEL =
-            "SELECT code, status, balancing_strategy, fallback_order, quiet_hours FROM channel";
+            "SELECT code, status, balancing_strategy, fallback_order, quiet_hours, quota_config FROM channel";
 
     private static final String UPSERT_CHANNEL = """
-            INSERT INTO channel (code, status, balancing_strategy, fallback_order, quiet_hours)
-            VALUES (:code, :status, :strategy, CAST(:fallbackOrder AS jsonb), CAST(:quietHours AS jsonb))
+            INSERT INTO channel (code, status, balancing_strategy, fallback_order, quiet_hours, quota_config)
+            VALUES (:code, :status, :strategy, CAST(:fallbackOrder AS jsonb), CAST(:quietHours AS jsonb),
+                    CAST(:quota AS jsonb))
             ON CONFLICT (code) DO UPDATE SET
                 status = EXCLUDED.status,
                 balancing_strategy = EXCLUDED.balancing_strategy,
                 fallback_order = EXCLUDED.fallback_order,
                 quiet_hours = EXCLUDED.quiet_hours,
+                quota_config = EXCLUDED.quota_config,
                 updated_at = now()
             """;
 
@@ -171,6 +181,100 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
 
     @Override
     @Transactional(readOnly = true)
+    public List<ChannelConfig> findChannels() {
+        return List.copyOf(channels(allProviders()).values());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Provider> findAllProviders() {
+        return allProviders();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RoutingPolicy> findPolicy(RoutingPolicyId policyId) {
+        return jdbcClient
+                .sql(SELECT_POLICY + " WHERE id = :id")
+                .param("id", policyId.value())
+                .query(policyRowMapper)
+                .optional();
+    }
+
+    /**
+     * Transport settings of the adapter behind a provider (§10.1 {@code provider.endpoint_config}).
+     *
+     * <p>Stored and returned as a flat string map and never interpreted here: what {@code base-url} or
+     * {@code originator} mean is knowledge of the adapter that owns the provider (AR-04).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, String> endpointConfig(ProviderId providerId) {
+        return jdbcClient
+                .sql("SELECT endpoint_config FROM provider WHERE id = :id")
+                .param("id", providerId.value())
+                .query((rs, rowNum) -> jsonCodec.readStringMap(rs.getString("endpoint_config")))
+                .optional()
+                .orElseGet(Map::of);
+    }
+
+    @Override
+    @Transactional
+    public void saveEndpointConfig(ProviderId providerId, Map<String, String> endpointConfig) {
+        jdbcClient
+                .sql("UPDATE provider SET endpoint_config = CAST(:config AS jsonb), updated_at = now() "
+                        + "WHERE id = :id")
+                .param("id", providerId.value())
+                .param("config", endpointConfig == null ? null : jsonCodec.write(endpointConfig))
+                .update();
+    }
+
+    /**
+     * Writes back the verdict of the health monitor (PR-02, FR-6.3).
+     *
+     * <p>A targeted update rather than {@code save(provider)}: the monitor runs while operators edit the
+     * same rows, and a full upsert would carry a snapshot of weight, tariff and limits that were read
+     * before their edit.
+     */
+    @Override
+    @Transactional
+    public void updateHealth(ProviderId providerId, ProviderHealthStatus health, String detail, Instant checkedAt) {
+        jdbcClient
+                .sql("""
+                        UPDATE provider
+                        SET health_status = :health,
+                            health_detail = :detail,
+                            health_checked_at = :checkedAt,
+                            updated_at = now()
+                        WHERE id = :id
+                        """)
+                .param("id", providerId.value())
+                .param("health", health.name())
+                .param("detail", detail)
+                .param("checkedAt", SqlValues.timestamp(checkedAt))
+                .update();
+    }
+
+    @Override
+    @Transactional
+    public void deleteProvider(ProviderId providerId) {
+        jdbcClient
+                .sql("DELETE FROM provider WHERE id = :id")
+                .param("id", providerId.value())
+                .update();
+    }
+
+    @Override
+    @Transactional
+    public void deletePolicy(RoutingPolicyId policyId) {
+        jdbcClient
+                .sql("DELETE FROM routing_policy WHERE id = :id")
+                .param("id", policyId.value())
+                .update();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<RoutingPolicy> findPolicies() {
         return jdbcClient
                 .sql(SELECT_POLICY + " ORDER BY priority DESC, id")
@@ -190,10 +294,14 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
                 .param("weight", provider.weight())
                 .param("tariff", jsonCodec.write(TariffJson.of(provider.tariff().orElse(null))))
                 .param("rateLimit", jsonCodec.write(RateLimitJson.of(provider.rateLimit())))
+                .param("quota", jsonCodec.write(QuotaConfigJson.of(provider.quota())))
                 .param("credentialsRef", provider.credentialsRef().orElse(null))
                 .param("enabled", provider.isEnabled())
                 .param("maintenance", provider.isInMaintenance())
                 .param("health", provider.health().name())
+                .param(
+                        "healthCheckedAt",
+                        SqlValues.timestamp(provider.healthCheckedAt().orElse(null)))
                 .update();
         return provider;
     }
@@ -214,6 +322,7 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
                         "quietHours",
                         jsonCodec.write(
                                 QuietHoursJson.of(channelConfig.quietHours().orElse(null))))
+                .param("quota", jsonCodec.write(QuotaConfigJson.of(channelConfig.quota())))
                 .update();
         return channelConfig;
     }
@@ -276,6 +385,8 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
                 .toList());
         config.updateQuietHours(
                 QuietHoursJson.toDomain(jsonCodec.read(rs.getString("quiet_hours"), QuietHoursJson.class)));
+        config.updateQuota(
+                QuotaConfigJson.toDomain(jsonCodec.read(rs.getString("quota_config"), QuotaConfigJson.class)));
         return config;
     }
 
