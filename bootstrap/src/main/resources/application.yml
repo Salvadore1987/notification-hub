@@ -41,6 +41,9 @@ commhub:
     outbound:
       status-topic: ${KAFKA_STATUS_TOPIC:comm.outbound.status.v1}
       dlq-topic: ${KAFKA_DLQ_TOPIC:comm.outbound.dlq.v1}
+      # PU-04: токены, признанные платформой мёртвыми. Свой топик, а не статус с особой причиной:
+      # его потребитель — владелец реестра устройств, и retention у него свой.
+      push-token-topic: ${KAFKA_PUSH_TOKEN_TOPIC:comm.outbound.push-token.invalidated.v1}
       # Сколько relay ждёт подтверждения брокера; на это время строки outbox остаются заблокированными.
       send-timeout: ${KAFKA_SEND_TIMEOUT:10s}
       # В контуре Банка топики заводит эксплуатация (партиции, retention, ACL) — здесь false.
@@ -227,6 +230,80 @@ commhub:
         max-attempts: ${SMSGATE_RETRY_ATTEMPTS:1}
         open-duration: ${SMSGATE_CB_OPEN:30s}
 
+    # Firebase Cloud Messaging — канал Push, Android (и iOS в режиме PU-05) (§9.4.1).
+    # project-id здесь нет намеренно: он лежит в ключе сервис-аккаунта, и деплой, способный назвать
+    # в yaml один проект, а в ключе другой, упадёт на первой отправке с ошибкой, не называющей ни один.
+    fcm:
+      enabled: ${FCM_ENABLED:false}
+      provider-code: ${FCM_PROVIDER_CODE:FCM}
+      # JSON-ключ сервис-аккаунта целиком, ссылкой в секрет-хранилище (SEC-04). В образ и в yaml
+      # не кладётся никогда: это единственный секрет, дающий право писать клиентам Банка в push.
+      credentials-ref: ${FCM_CREDENTIALS_REF:fcm/service-account.json}
+      sending:
+        # PU-03: HIGH будит устройство. Массовая рассылка на HIGH — это разряженные батареи и
+        # последующий троттлинг со стороны Google для всего трафика, включая OTP.
+        priorities:
+          critical-otp: HIGH
+          transactional: HIGH
+          notification: NORMAL
+        default-ttl: ${FCM_DEFAULT_TTL:1h}
+        # PU-05: FCM как единый провайдер для обеих платформ (приложение Банка на Firebase SDK).
+        # Выключено: это факт об iOS-приложении, а не предпочтение (открытый вопрос 12 §17).
+        # Правится и из provider.endpoint_config (ключ ios-delivery) — без рестарта (AD-07).
+        ios-delivery: ${FCM_IOS_DELIVERY:false}
+        # PU-13: тестовая отправка уходит как validate_only — токен проверяется, уведомление
+        # на телефоне клиента не появляется.
+        validate-test-sends: ${FCM_VALIDATE_TEST_SENDS:true}
+      oauth:
+        token-url: ${FCM_TOKEN_URL:https://oauth2.googleapis.com/token}
+        # Насколько раньше истечения обновляется access token (PU-01): токен, истёкший в полёте,
+        # стоит сообщению его SLA, а живёт он час — запас дешёвый.
+        refresh-skew: ${FCM_TOKEN_REFRESH_SKEW:5m}
+      http:
+        base-url: ${FCM_BASE_URL:https://fcm.googleapis.com}
+        connect-timeout: ${FCM_CONNECT_TIMEOUT:3s}
+        read-timeout: ${FCM_READ_TIMEOUT:10s}
+      resilience:
+        # Ретрай внутри попытки допустим: ретраятся только вызовы без ответа (PR-01), а транзиентные
+        # коды FCM прямо говорят, что сообщение не принято, — дубля уведомления не будет.
+        max-attempts: ${FCM_RETRY_ATTEMPTS:2}
+        open-duration: ${FCM_CB_OPEN:30s}
+
+    # Apple Push Notification service — канал Push, iOS напрямую (§9.4.2).
+    apns:
+      enabled: ${APNS_ENABLED:false}
+      provider-code: ${APNS_PROVIDER_CODE:APNS}
+      credentials:
+        team-id: ${APNS_TEAM_ID:}
+        key-id: ${APNS_KEY_ID:}
+        # .p8-ключ (PKCS#8) в секрет-хранилище (SEC-04); в отличие от сертификата, не истекает.
+        private-key-ref: ${APNS_KEY_REF:apns/key.p8}
+        # PU-06: подпись обновляется не чаще раза в 20 минут и не реже раза в час.
+        # Значение вне этого окна не роняет старт, а приводится к границе: цена отказа —
+        # выключенный канал push, а правильный диапазон известен из спецификации.
+        refresh-interval: ${APNS_JWT_REFRESH:40m}
+      sending:
+        # bundle id приложения Банка; без него не доставляется ничего (apns-topic).
+        # Правится из provider.endpoint_config (ключ topic) без рестарта (AD-07).
+        topic: ${APNS_TOPIC:}
+        push-type: ${APNS_PUSH_TYPE:alert}
+        default-ttl: ${APNS_DEFAULT_TTL:1h}
+      http:
+        base-url: ${APNS_BASE_URL:https://api.push.apple.com}
+        connect-timeout: ${APNS_CONNECT_TIMEOUT:3s}
+        read-timeout: ${APNS_READ_TIMEOUT:10s}
+      # PU-13: токен из dev/TestFlight-сборки существует только в sandbox, и выбор делается
+      # на сообщение по признаку TEST (FR-7.4), а не на деплой.
+      sandbox:
+        base-url: ${APNS_SANDBOX_BASE_URL:https://api.sandbox.push.apple.com}
+        connect-timeout: ${APNS_CONNECT_TIMEOUT:3s}
+        read-timeout: ${APNS_READ_TIMEOUT:10s}
+      resilience:
+        # 1 = без ретрая внутри попытки: apns-id делает повтор идемпотентным, но потерянное
+        # соединение — ровно тот случай, когда неизвестно, поставила ли Apple уведомление в очередь.
+        max-attempts: ${APNS_RETRY_ATTEMPTS:1}
+        open-duration: ${APNS_CB_OPEN:30s}
+
     # Корпоративный SMTP — канал Email (§9.3, EM-01…EM-03).
     # Не переезжает в provider.endpoint_config (в отличие от from/from-name/reply-to): host, port,
     # TLS, таймауты, размер пула и return-path. Первые — топология деплоя, а return-path обязан
@@ -341,6 +418,13 @@ commhub:
       max-attachments: ${EMAIL_MAX_ATTACHMENTS:5}
       max-attachment-size: ${EMAIL_MAX_ATTACHMENT_SIZE:10MB}
       max-total-attachment-size: ${EMAIL_MAX_TOTAL_ATTACHMENT_SIZE:20MB}
+    # PU-11: 4 КБ — предел самих платформ (APNs и FCM), а не предпочтение. Больший размер лишь
+    # переносит отказ из конвейера в APNs — на один вызов на устройство позже.
+    # PU-09: сколько устройств адресует одно сообщение. Это граница fan-out'а, а не правило платформы:
+    # заявка с двумястами токенами — это рассылка, отправленная через единичный endpoint.
+    push:
+      max-payload-size: ${PUSH_MAX_PAYLOAD_SIZE:4KB}
+      max-tokens-per-message: ${PUSH_MAX_TOKENS:10}
 
   # Вложения писем (EM-01): в домене хранится только метаданные и ссылка (contentRef), байты лежат
   # здесь. Каталог, а не объектное хранилище: Банк его ещё не выбрал, а заводить зависимость от S3

@@ -4,6 +4,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
+import uz.hamkorbank.commhub.application.policy.PushPolicy;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.content.EmailContent;
@@ -20,8 +21,8 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * <p>Address formats are already guaranteed by the value objects — {@code Msisdn} enforces
  * {@code 9989xxxxxxxx}, {@code EmailAddress} RFC 5322 — so what is left here are the cross-field
  * rules: the recipient must be reachable on a planned channel, the payload must fit the channel
- * limits (push 4 KiB per PU-11, email attachments per EM-01), and no content may carry a full card
- * number.
+ * limits (push 4 KiB per PU-11, email attachments per EM-01), a push must not address more devices
+ * than the fan-out is allowed to (PU-09), and no content may carry a full card number.
  *
  * <p>Runs after templating, so the checks see the text that will actually be sent (FR-4.3).
  *
@@ -34,13 +35,19 @@ public class MessageValidator {
     private final PanDetector panDetector;
     private final PanPolicy panPolicy;
     private final EmailPolicy emailPolicy;
+    private final PushPolicy pushPolicy;
     private final MetricsPort metrics;
 
     public MessageValidator(
-            PanDetector panDetector, PanPolicy panPolicy, EmailPolicy emailPolicy, MetricsPort metrics) {
+            PanDetector panDetector,
+            PanPolicy panPolicy,
+            EmailPolicy emailPolicy,
+            PushPolicy pushPolicy,
+            MetricsPort metrics) {
         this.panDetector = Guard.notNull(panDetector, "panDetector");
         this.panPolicy = Guard.notNull(panPolicy, "panPolicy");
         this.emailPolicy = Guard.notNull(emailPolicy, "emailPolicy");
+        this.pushPolicy = Guard.notNull(pushPolicy, "pushPolicy");
         this.metrics = Guard.notNull(metrics, "metrics");
     }
 
@@ -52,6 +59,12 @@ public class MessageValidator {
                     RejectionReason.VALIDATION_FAILED,
                     "recipient has no address for the planned channels: "
                             + message.channelPlan().channels());
+        }
+        if (message.deliverableChannels().contains(Channel.PUSH)) {
+            Optional<String> fanOut = pushPolicy.violation(message.recipient());
+            if (fanOut.isPresent()) {
+                return PipelineVerdict.rejected(RejectionReason.VALIDATION_FAILED, fanOut.get());
+            }
         }
         for (Channel channel : message.deliverableChannels()) {
             PipelineVerdict verdict = validateContent(message.contents().requireForChannel(channel), channel);
@@ -71,11 +84,9 @@ public class MessageValidator {
     }
 
     private PipelineVerdict validatePush(PushContent push, Channel channel) {
-        if (push.exceedsPayloadLimit()) {
-            return PipelineVerdict.rejected(
-                    RejectionReason.VALIDATION_FAILED,
-                    "push payload of %d bytes exceeds the %d byte platform limit (PU-11)"
-                            .formatted(push.payloadSizeBytes(), PushContent.MAX_PAYLOAD_BYTES));
+        Optional<String> oversized = pushPolicy.violation(push);
+        if (oversized.isPresent()) {
+            return PipelineVerdict.rejected(RejectionReason.VALIDATION_FAILED, oversized.get());
         }
         return validateText(push.title() + " " + push.body(), channel);
     }

@@ -7,8 +7,12 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.MessageStatusEventJson;
+import uz.hamkorbank.commhub.adapter.out.persistence.json.PushTokenInvalidatedEventJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.JsonCodec;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
+import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
+import uz.hamkorbank.commhub.application.dto.OutboxPayload;
+import uz.hamkorbank.commhub.application.dto.PushTokenInvalidatedEvent;
 import uz.hamkorbank.commhub.application.port.out.OutboxEvent;
 import uz.hamkorbank.commhub.application.port.out.OutboxEventType;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
@@ -81,7 +85,7 @@ public class OutboxPersistenceAdapter implements OutboxPort {
                 .param("aggregateType", event.aggregateType())
                 .param("aggregateId", event.aggregateId())
                 .param("eventType", event.type().name())
-                .param("payload", jsonCodec.write(MessageStatusEventJson.of(event.payload())))
+                .param("payload", writePayload(event.payload()))
                 .update();
     }
 
@@ -103,9 +107,8 @@ public class OutboxPersistenceAdapter implements OutboxPort {
                         SqlValues.enumValue(rs, "event_type", OutboxEventType.class),
                         rs.getString("aggregate_type"),
                         rs.getString("aggregate_id"),
-                        jsonCodec
-                                .read(rs.getString("payload"), MessageStatusEventJson.class)
-                                .toDomain(),
+                        readPayload(
+                                SqlValues.enumValue(rs, "event_type", OutboxEventType.class), rs.getString("payload")),
                         rs.getInt("attempts")))
                 .list();
     }
@@ -130,6 +133,30 @@ public class OutboxPersistenceAdapter implements OutboxPort {
                 .param("createdAt", SqlValues.timestamp(event.createdAt()))
                 .param("error", truncate(error))
                 .update();
+    }
+
+    /**
+     * Serialises the payload in the wire shape of its own contract (§6.4, PU-04).
+     *
+     * <p>Sealed on the application side, so a new outbound contract does not compile until it has a
+     * stored shape here — which is the only place where "we published it but cannot read it back" could
+     * otherwise be discovered by an operator rather than by the build.
+     */
+    private String writePayload(OutboxPayload payload) {
+        return switch (payload) {
+            case MessageStatusEvent status -> jsonCodec.write(MessageStatusEventJson.of(status));
+            case PushTokenInvalidatedEvent token -> jsonCodec.write(PushTokenInvalidatedEventJson.of(token));
+        };
+    }
+
+    /** The row's {@code event_type} decides how its payload is read; the two shapes do not overlap. */
+    private OutboxPayload readPayload(OutboxEventType type, String payload) {
+        return switch (type) {
+            case MESSAGE_STATUS, MESSAGE_DLQ ->
+                jsonCodec.read(payload, MessageStatusEventJson.class).toDomain();
+            case PUSH_TOKEN_INVALIDATED ->
+                jsonCodec.read(payload, PushTokenInvalidatedEventJson.class).toDomain();
+        };
     }
 
     private static String truncate(String error) {

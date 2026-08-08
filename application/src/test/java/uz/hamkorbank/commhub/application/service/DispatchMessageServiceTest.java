@@ -27,6 +27,7 @@ import uz.hamkorbank.commhub.application.policy.DeduplicationPolicy;
 import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
+import uz.hamkorbank.commhub.application.policy.PushPolicy;
 import uz.hamkorbank.commhub.application.policy.SendingPolicy;
 import uz.hamkorbank.commhub.application.port.in.command.DispatchMessageCommand;
 import uz.hamkorbank.commhub.application.port.out.BatchRepository;
@@ -128,7 +129,11 @@ class DispatchMessageServiceTest {
                 new DeduplicationService(mock(DedupRegistryPort.class), DeduplicationPolicy.defaults()),
                 new TemplateApplier(mock(TemplateRepository.class)),
                 new MessageValidator(
-                        new PanDetector(), PanPolicy.rejecting(), EmailPolicy.defaults(), mock(MetricsPort.class)),
+                        new PanDetector(),
+                        PanPolicy.rejecting(),
+                        EmailPolicy.defaults(),
+                        PushPolicy.defaults(),
+                        mock(MetricsPort.class)),
                 new DeliveryFilters(
                         suppressions,
                         mock(CustomerPreferencePort.class),

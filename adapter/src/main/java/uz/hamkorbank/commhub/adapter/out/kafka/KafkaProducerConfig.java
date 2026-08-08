@@ -90,4 +90,14 @@ public class KafkaProducerConfig {
                 .replicas(outbound.replicationFactor())
                 .build();
     }
+
+    /** Invalidated device tokens (PU-04); same partitioning, its own retention in the Bank's contour. */
+    @Bean
+    @ConditionalOnProperty(prefix = "commhub.kafka.outbound", name = "create-topics", havingValue = "true")
+    public NewTopic pushTokenTopic(KafkaOutboundProperties outbound) {
+        return TopicBuilder.name(outbound.pushTokenTopic())
+                .partitions(outbound.partitions())
+                .replicas(outbound.replicationFactor())
+                .build();
+    }
 }

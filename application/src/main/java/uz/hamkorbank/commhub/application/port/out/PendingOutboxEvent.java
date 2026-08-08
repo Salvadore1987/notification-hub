@@ -2,7 +2,7 @@ package uz.hamkorbank.commhub.application.port.out;
 
 import java.time.Instant;
 import java.util.UUID;
-import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
+import uz.hamkorbank.commhub.application.dto.OutboxPayload;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -22,7 +22,7 @@ public record PendingOutboxEvent(
         OutboxEventType type,
         String aggregateType,
         String aggregateId,
-        MessageStatusEvent payload,
+        OutboxPayload payload,
         int attempts) {
 
     public PendingOutboxEvent {

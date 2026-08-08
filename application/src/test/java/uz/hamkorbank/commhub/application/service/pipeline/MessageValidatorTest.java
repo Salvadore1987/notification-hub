@@ -8,25 +8,30 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static uz.hamkorbank.commhub.application.ApplicationFixtures.NOW;
 import static uz.hamkorbank.commhub.application.ApplicationFixtures.STREAM_ID;
+import static uz.hamkorbank.commhub.application.ApplicationFixtures.androidToken;
 import static uz.hamkorbank.commhub.application.ApplicationFixtures.msisdn;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
+import uz.hamkorbank.commhub.application.policy.PushPolicy;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.MessageEnvelope;
 import uz.hamkorbank.commhub.domain.model.content.Attachment;
 import uz.hamkorbank.commhub.domain.model.content.EmailContent;
+import uz.hamkorbank.commhub.domain.model.content.PushContent;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.RejectionReason;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.EmailAddress;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
+import uz.hamkorbank.commhub.domain.model.vo.PushToken;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 
 /** Content validation and the two PAN modes of SEC-05. */
@@ -114,11 +119,53 @@ class MessageValidatorTest {
     }
 
     @Test
+    @DisplayName("PU-11: a payload over the 4 KiB platform limit is refused before any device is called")
+    void rejectsOversizedPushPayload() {
+        // Arrange
+        MessageValidator validator = validator(PanPolicy.rejecting());
+        Message message = pushMessage(
+                new PushContent("Hamkorbank", "x".repeat(PushContent.MAX_PAYLOAD_BYTES), Map.of(), null, null),
+                androidToken("device-a"));
+
+        // Act
+        PipelineVerdict verdict = validator.validate(message);
+
+        // Assert
+        assertThat(verdict.isRejected()).isTrue();
+        assertThat(verdict.reason()).isEqualTo(RejectionReason.VALIDATION_FAILED);
+        assertThat(verdict.detail()).contains("PU-11");
+    }
+
+    @Test
+    @DisplayName("PU-09: a submission addressing more devices than the fan-out allows is a rejection, not 200 calls")
+    void rejectsTooManyDevices() {
+        // Arrange — a source system broadcasting through the single-message endpoint
+        MessageValidator validator = new MessageValidator(
+                new PanDetector(), PanPolicy.rejecting(), EmailPolicy.defaults(), new PushPolicy(4096, 2), metrics);
+        Message message = pushMessage(
+                PushContent.of("Hamkorbank", "Hisobingiz to'ldirildi"),
+                androidToken("a"),
+                androidToken("b"),
+                androidToken("c"));
+
+        // Act
+        PipelineVerdict verdict = validator.validate(message);
+
+        // Assert
+        assertThat(verdict.isRejected()).isTrue();
+        assertThat(verdict.detail()).contains("PU-09");
+    }
+
+    @Test
     @DisplayName("EM-01: an email over the attachment ceiling is refused before it reaches a relay")
     void rejectsOversizedAttachments() {
         // Arrange — the total is what a relay enforces, and the message names which ceiling it broke
-        MessageValidator validator =
-                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), new EmailPolicy(5, 1024, 1536), metrics);
+        MessageValidator validator = new MessageValidator(
+                new PanDetector(),
+                PanPolicy.rejecting(),
+                new EmailPolicy(5, 1024, 1536),
+                PushPolicy.defaults(),
+                metrics);
         Message message = emailWithAttachments(
                 new Attachment("a.pdf", "application/pdf", 1000, "a"),
                 new Attachment("b.pdf", "application/pdf", 1000, "b"));
@@ -137,7 +184,11 @@ class MessageValidatorTest {
     void namesTheOversizedFile() {
         // Arrange
         MessageValidator validator = new MessageValidator(
-                new PanDetector(), PanPolicy.rejecting(), new EmailPolicy(5, 512, 100_000), metrics);
+                new PanDetector(),
+                PanPolicy.rejecting(),
+                new EmailPolicy(5, 512, 100_000),
+                PushPolicy.defaults(),
+                metrics);
 
         // Act
         PipelineVerdict verdict =
@@ -162,8 +213,16 @@ class MessageValidatorTest {
         assertThat(verdict.isRejected()).isFalse();
     }
 
+    private static Message pushMessage(PushContent content, PushToken... tokens) {
+        return Message.acceptSingleChannel(
+                MessageEnvelope.single(STREAM_ID, ExternalMessageId.of("abc0000001"), TrafficClass.NOTIFICATION),
+                new Recipient(null, null, null, List.of(tokens)),
+                content,
+                NOW);
+    }
+
     private MessageValidator validator(PanPolicy policy) {
-        return new MessageValidator(new PanDetector(), policy, EmailPolicy.defaults(), metrics);
+        return new MessageValidator(new PanDetector(), policy, EmailPolicy.defaults(), PushPolicy.defaults(), metrics);
     }
 
     private static Message emailWithAttachments(Attachment... attachments) {

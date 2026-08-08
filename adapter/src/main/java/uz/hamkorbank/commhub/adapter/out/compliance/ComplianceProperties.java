@@ -4,6 +4,8 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import uz.hamkorbank.commhub.application.policy.EmailPolicy;
+import uz.hamkorbank.commhub.application.policy.PushPolicy;
+import uz.hamkorbank.commhub.domain.model.content.PushContent;
 
 /**
  * Deployment settings of the compliance filters (FR-5.4, SEC-05).
@@ -21,10 +23,11 @@ import uz.hamkorbank.commhub.application.policy.EmailPolicy;
  * @param email content limits of the email channel (EM-01); they sit here because the validator reads all of
  *     its ceilings from one place, and an attachment limit is a rule of the Hub about content rather than a
  *     property of whichever relay ends up carrying the message
+ * @param push content and fan-out limits of the push channel (PU-09, PU-11), here for the same reason
  */
 @ConfigurationProperties("commhub.compliance")
 public record ComplianceProperties(
-        FrequencyCap frequencyCap, Boolean panBlocking, Duration counterRetention, Email email) {
+        FrequencyCap frequencyCap, Boolean panBlocking, Duration counterRetention, Email email, Push push) {
 
     public static final Duration DEFAULT_COUNTER_RETENTION = Duration.ofDays(7);
 
@@ -33,6 +36,7 @@ public record ComplianceProperties(
         panBlocking = panBlocking == null || panBlocking;
         counterRetention = counterRetention == null ? DEFAULT_COUNTER_RETENTION : counterRetention;
         email = email == null ? new Email(null, null, null) : email;
+        push = push == null ? new Push(null, null) : push;
         if (counterRetention.compareTo(frequencyCap.window()) < 0) {
             throw new IllegalArgumentException(
                     "commhub.compliance.counter-retention (%s) must cover the cap window (%s), otherwise the sweep "
@@ -95,6 +99,33 @@ public record ComplianceProperties(
 
         public EmailPolicy toPolicy() {
             return new EmailPolicy(maxAttachments, maxAttachmentSize.toBytes(), maxTotalAttachmentSize.toBytes());
+        }
+    }
+
+    /**
+     * Ceilings of the push channel (PU-09, PU-11).
+     *
+     * <p>Configurable but not meant to be raised: {@code maxPayloadSize} is the platforms' own 4 KiB and
+     * a larger value only moves the refusal from the Hub to APNs, one call per device later. The knob
+     * exists because both platforms have historically had larger limits for some push types, and a
+     * ceiling that cannot be corrected without a release is a ceiling that will be wrong.
+     *
+     * @param maxTokensPerMessage devices one submission may address; a fan-out bound, not a platform rule
+     */
+    public record Push(DataSize maxPayloadSize, Integer maxTokensPerMessage) {
+
+        public Push {
+            maxPayloadSize = maxPayloadSize == null ? DataSize.ofBytes(PushContent.MAX_PAYLOAD_BYTES) : maxPayloadSize;
+            maxTokensPerMessage = maxTokensPerMessage == null || maxTokensPerMessage < 1
+                    ? PushPolicy.DEFAULT_MAX_TOKENS_PER_MESSAGE
+                    : maxTokensPerMessage;
+            if (maxPayloadSize.toBytes() <= 0) {
+                throw new IllegalArgumentException("commhub.compliance.push.max-payload-size must be positive");
+            }
+        }
+
+        public PushPolicy toPolicy() {
+            return new PushPolicy(Math.toIntExact(maxPayloadSize.toBytes()), maxTokensPerMessage);
         }
     }
 }

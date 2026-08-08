@@ -12,17 +12,21 @@ import uz.hamkorbank.commhub.domain.model.Provider;
 import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.Tariff;
 import uz.hamkorbank.commhub.domain.model.content.MessageContents;
+import uz.hamkorbank.commhub.domain.model.content.PushContent;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
+import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
+import uz.hamkorbank.commhub.domain.model.vo.ClientId;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderId;
+import uz.hamkorbank.commhub.domain.model.vo.PushToken;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.service.RoutingConfiguration;
@@ -68,6 +72,37 @@ public final class ApplicationFixtures {
                 recipient(),
                 SmsContent.of("Kod: 123456", "HAMKORBANK"),
                 NOW);
+    }
+
+    /** Recipient with the given device tokens and a client id, as a push submission carries them. */
+    public static Recipient pushRecipient(PushToken... tokens) {
+        return new Recipient(ClientId.of("C123"), null, null, List.of(tokens));
+    }
+
+    public static PushToken androidToken(String value) {
+        return PushToken.of(value, PushPlatform.ANDROID);
+    }
+
+    public static PushToken iosToken(String value) {
+        return PushToken.of(value, PushPlatform.IOS);
+    }
+
+    /** Push message in status {@code ACCEPTED}, addressed to every device of the recipient (PU-09). */
+    public static Message pushMessage(Recipient recipient) {
+        return Message.acceptSingleChannel(
+                MessageEnvelope.single(STREAM_ID, EXTERNAL_ID, TrafficClass.NOTIFICATION),
+                recipient,
+                PushContent.of("Hamkorbank", "Sizning hisobingiz to'ldirildi"),
+                NOW);
+    }
+
+    public static Provider pushProvider(String code, String adapterType) {
+        return Provider.register(
+                ProviderId.newId(),
+                ProviderCode.of(code),
+                Channel.PUSH,
+                AdapterType.of(adapterType),
+                Provider.Settings.defaults());
     }
 
     public static Provider smsProvider(String code) {
