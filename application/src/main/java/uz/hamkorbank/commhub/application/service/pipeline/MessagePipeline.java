@@ -6,6 +6,8 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.service.support.MessageRouting;
 import uz.hamkorbank.commhub.application.service.support.RoutingOutcome;
+import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
+import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.ChannelConfig;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.Stream;
@@ -13,6 +15,7 @@ import uz.hamkorbank.commhub.domain.model.TemplateRef;
 import uz.hamkorbank.commhub.domain.model.content.MessageContents;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.DedupKey;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
@@ -39,6 +42,7 @@ public class MessagePipeline {
     private final DeliveryFilters filters;
     private final QuotaGuard quotas;
     private final MessageRouting routing;
+    private final SuppressionRegistrar suppressions;
 
     public MessagePipeline(
             DeduplicationService deduplication,
@@ -46,13 +50,15 @@ public class MessagePipeline {
             MessageValidator validator,
             DeliveryFilters filters,
             QuotaGuard quotas,
-            MessageRouting routing) {
+            MessageRouting routing,
+            SuppressionRegistrar suppressions) {
         this.deduplication = Guard.notNull(deduplication, "deduplication");
         this.templates = Guard.notNull(templates, "templates");
         this.validator = Guard.notNull(validator, "validator");
         this.filters = Guard.notNull(filters, "filters");
         this.quotas = Guard.notNull(quotas, "quotas");
         this.routing = Guard.notNull(routing, "routing");
+        this.suppressions = Guard.notNull(suppressions, "suppressions");
     }
 
     // --- Deduplication (FR-1.5) -------------------------------------------------
@@ -97,6 +103,18 @@ public class MessagePipeline {
 
     public FilterVerdict filter(Message message, Channel channel, Stream stream, ChannelConfig config, Instant now) {
         return filters.apply(message, channel, stream, config, now);
+    }
+
+    /**
+     * Adds the recipient's address to the suppression list because the provider called it unusable
+     * (FR-5.1, EM-02, §18.2, PU-04).
+     *
+     * <p>Here rather than injected into the sending saga directly: the suppression list is the filters' own
+     * data, and the pipeline is the one door the use cases use to reach the filter stages. The next send to
+     * that address is then stopped by {@link #filter} without the saga having to remember anything.
+     */
+    public void suppress(Message message, Channel channel, SuppressionReason reason, Actor actor, Instant now) {
+        suppressions.suppress(message, channel, reason, actor, now);
     }
 
     // --- Quotas (FR-2.6) --------------------------------------------------------

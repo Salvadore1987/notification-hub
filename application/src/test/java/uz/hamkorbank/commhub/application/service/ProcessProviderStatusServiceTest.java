@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static uz.hamkorbank.commhub.application.ApplicationFixtures.NOW;
+import static uz.hamkorbank.commhub.application.ApplicationFixtures.msisdn;
 import static uz.hamkorbank.commhub.application.ApplicationFixtures.smsMessage;
 import static uz.hamkorbank.commhub.application.ApplicationFixtures.smsProvider;
 
@@ -14,18 +15,24 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import uz.hamkorbank.commhub.application.dto.ProcessProviderStatusResult;
 import uz.hamkorbank.commhub.application.mapper.MessageMapperImpl;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
+import uz.hamkorbank.commhub.application.port.out.SuppressionRepository;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
+import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.Provider;
+import uz.hamkorbank.commhub.domain.model.SuppressionEntry;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
+import uz.hamkorbank.commhub.domain.model.vo.AddressHash;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 
 /** Provider delivery reports and their idempotency (AD-06, ST-01, ST-03, PM-02, SG-02). */
@@ -36,6 +43,7 @@ class ProcessProviderStatusServiceTest {
     private MessageRepository messages;
     private OutboxPort outbox;
     private Provider provider;
+    private SuppressionRepository suppressions;
     private ProcessProviderStatusService service;
 
     @BeforeEach
@@ -44,8 +52,12 @@ class ProcessProviderStatusServiceTest {
         outbox = mock(OutboxPort.class);
         provider = smsProvider("PLAYMOBILE");
         when(messages.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        suppressions = mock(SuppressionRepository.class);
+        when(suppressions.saveIfAbsent(any())).thenAnswer(invocation -> invocation.getArgument(0));
         service = new ProcessProviderStatusService(
-                messages, new MessageStatusNotifier(outbox, mock(MetricsPort.class), new MessageMapperImpl()));
+                messages,
+                new MessageStatusNotifier(outbox, mock(MetricsPort.class), new MessageMapperImpl()),
+                new SuppressionRegistrar(suppressions, mock(MetricsPort.class)));
     }
 
     @Test
@@ -121,6 +133,53 @@ class ProcessProviderStatusServiceTest {
         // Assert
         assertThat(result.applied()).isTrue();
         assertThat(message.status()).isEqualTo(MessageStatus.UNDELIVERED);
+    }
+
+    @Test
+    @DisplayName("§18.2 code 7, EM-02: a report that condemns the address also suppresses it")
+    void suppressesAddressReportedAsUnusable() {
+        // Arrange
+        sentMessage();
+
+        // Act
+        ProcessProviderStatusResult result = service.process(
+                command(MessageStatus.UNDELIVERED, "InBlackList").suppressing(SuppressionReason.PROVIDER_BLACKLIST));
+
+        // Assert
+        assertThat(result.applied()).isTrue();
+        ArgumentCaptor<SuppressionEntry> entry = ArgumentCaptor.forClass(SuppressionEntry.class);
+        verify(suppressions).saveIfAbsent(entry.capture());
+        assertThat(entry.getValue().addressHash()).contains(AddressHash.ofMsisdn(msisdn()));
+        assertThat(entry.getValue().reason()).isEqualTo(SuppressionReason.PROVIDER_BLACKLIST);
+    }
+
+    @Test
+    @DisplayName("FR-5.1: the address is suppressed even when the report changes no status")
+    void suppressesAddressEvenWhenStatusIsUnchanged() {
+        // Arrange: сообщение уже DELIVERED, отчёт о чёрном списке приходит после него.
+        Message message = sentMessage();
+        message.markDelivered("DLVRD", Actor.provider("PLAYMOBILE"), NOW);
+
+        // Act
+        ProcessProviderStatusResult result = service.process(
+                command(MessageStatus.UNDELIVERED, "InBlackList").suppressing(SuppressionReason.PROVIDER_BLACKLIST));
+
+        // Assert
+        assertThat(result.applied()).isFalse();
+        verify(suppressions).saveIfAbsent(any());
+    }
+
+    @Test
+    @DisplayName("PM-02: an ordinary report suppresses nothing")
+    void leavesAddressAloneForOrdinaryReports() {
+        // Arrange
+        sentMessage();
+
+        // Act
+        service.process(command(MessageStatus.DELIVERED, "DLVRD"));
+
+        // Assert
+        verify(suppressions, never()).saveIfAbsent(any());
     }
 
     /** Message already handed to the provider and waiting for its delivery report. */

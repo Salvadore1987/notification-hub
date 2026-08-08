@@ -19,11 +19,13 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import uz.hamkorbank.commhub.application.dto.DispatchResult;
 import uz.hamkorbank.commhub.application.dto.DispatchResult.DispatchOutcome;
 import uz.hamkorbank.commhub.application.mapper.MessageMapperImpl;
 import uz.hamkorbank.commhub.application.policy.DeduplicationPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
+import uz.hamkorbank.commhub.application.policy.PanPolicy;
 import uz.hamkorbank.commhub.application.policy.SendingPolicy;
 import uz.hamkorbank.commhub.application.port.in.command.DispatchMessageCommand;
 import uz.hamkorbank.commhub.application.port.out.BatchRepository;
@@ -55,17 +57,20 @@ import uz.hamkorbank.commhub.application.service.support.MessageRouting;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.application.service.support.ProviderGateway;
 import uz.hamkorbank.commhub.application.service.support.RoutingRotation;
+import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Batch;
 import uz.hamkorbank.commhub.domain.model.DlqEntry;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.MessageEnvelope;
 import uz.hamkorbank.commhub.domain.model.Provider;
+import uz.hamkorbank.commhub.domain.model.SuppressionEntry;
 import uz.hamkorbank.commhub.domain.model.Timing;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ErrorClass;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.BatchId;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
@@ -87,6 +92,7 @@ class DispatchMessageServiceTest {
     private StreamRepository streams;
     private ProviderConfigRepository providerConfig;
     private OutboxPort outbox;
+    private SuppressionRepository suppressions;
 
     private Provider playmobile;
     private Provider smsgate;
@@ -115,12 +121,14 @@ class DispatchMessageServiceTest {
                 .thenReturn(routingConfiguration(List.of(playmobile, smsgate)));
         when(gateway.providerMessageIdFor(any())).thenReturn(ProviderMessageId.of("HB0000000001"));
 
+        suppressions = mock(SuppressionRepository.class);
+        when(suppressions.saveIfAbsent(any())).thenAnswer(invocation -> invocation.getArgument(0));
         MessagePipeline pipeline = new MessagePipeline(
                 new DeduplicationService(mock(DedupRegistryPort.class), DeduplicationPolicy.defaults()),
                 new TemplateApplier(mock(TemplateRepository.class)),
-                new MessageValidator(new PanDetector()),
+                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), mock(MetricsPort.class)),
                 new DeliveryFilters(
-                        mock(SuppressionRepository.class),
+                        suppressions,
                         mock(CustomerPreferencePort.class),
                         mock(FrequencyCounterPort.class),
                         FrequencyCapPolicy.defaults(),
@@ -130,7 +138,8 @@ class DispatchMessageServiceTest {
                         new Router(new FallbackChain()),
                         new SegmentCalculator(),
                         providerConfig,
-                        new RoutingRotation()));
+                        new RoutingRotation()),
+                new SuppressionRegistrar(suppressions, mock(MetricsPort.class)));
         service = new DispatchMessageService(
                 clock,
                 messages,
@@ -207,6 +216,40 @@ class DispatchMessageServiceTest {
         assertThat(result.outcome()).isEqualTo(DispatchOutcome.UNDELIVERED);
         assertThat(message.status()).isEqualTo(MessageStatus.UNDELIVERED);
         verify(dlqEntries, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("§18.2 code 20, FR-5.1: an address the provider calls unusable goes on the suppression list")
+    void suppressesAddressRejectedByProvider() {
+        // Arrange — SMS Gate 20: номер в чёрном списке, адрес больше не годится
+        Message message = queuedMessage();
+        when(gateway.submit(any(), any(), any(), any()))
+                .thenReturn(
+                        ProviderAck.rejected("20", "Number in blacklist", NOW).withInvalidRecipient());
+
+        // Act
+        DispatchResult result = service.dispatch(DispatchMessageCommand.of(message.id()));
+
+        // Assert
+        assertThat(result.outcome()).isEqualTo(DispatchOutcome.UNDELIVERED);
+        ArgumentCaptor<SuppressionEntry> entry = ArgumentCaptor.forClass(SuppressionEntry.class);
+        verify(suppressions).saveIfAbsent(entry.capture());
+        assertThat(entry.getValue().reason()).isEqualTo(SuppressionReason.PROVIDER_BLACKLIST);
+        assertThat(entry.getValue().channel()).contains(Channel.SMS);
+    }
+
+    @Test
+    @DisplayName("PR-01: an ordinary failure leaves the address alone")
+    void leavesAddressAloneOnOrdinaryFailure() {
+        // Arrange
+        Message message = queuedMessage();
+        when(gateway.submit(any(), any(), any(), any())).thenReturn(ProviderAck.timedOut(NOW));
+
+        // Act
+        service.dispatch(DispatchMessageCommand.of(message.id()));
+
+        // Assert
+        verify(suppressions, never()).saveIfAbsent(any());
     }
 
     @Test

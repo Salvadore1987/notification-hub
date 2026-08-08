@@ -125,6 +125,9 @@ public class PlaymobileCallbackTranslator implements ProviderCallbackTranslator 
                 canonical.get(),
                 providerStatus,
                 text(node, "description").orElse(null),
+                // §18.1 не описывает статуса, который осуждал бы сам номер: у Playmobile чёрный список свой
+                // (blacklist-id, §9.1) и в DLR не приходит. Suppression по его отчётам не заводится.
+                null,
                 occurredAt(node)));
     }
 

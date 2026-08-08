@@ -41,6 +41,7 @@ import uz.hamkorbank.commhub.application.port.out.AuditPort;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
 import uz.hamkorbank.commhub.application.port.out.TemplateRepository;
+import uz.hamkorbank.commhub.application.service.pipeline.PanDetector;
 import uz.hamkorbank.commhub.application.service.support.ConfigAuditor;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.Actor;
@@ -86,9 +87,9 @@ class TemplateUseCasesTest {
         when(templates.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         ConfigAuditor auditor = new ConfigAuditor(audit, clock);
         TemplateMapperImpl mapper = new TemplateMapperImpl();
-        configService = new TemplateConfigService(templates, providers, clock, mapper, auditor);
+        configService = new TemplateConfigService(templates, providers, clock, mapper, auditor, new PanDetector());
         queryService = new TemplateQueryService(templates, providers, new SegmentCalculator(), mapper);
-        importService = new TemplateImportService(templates, clock, auditor);
+        importService = new TemplateImportService(templates, clock, auditor, new PanDetector());
     }
 
     @Test
@@ -179,6 +180,43 @@ class TemplateUseCasesTest {
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> configService.saveVersion(
                         new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, 1, null, "ещё раз")));
+    }
+
+    @Test
+    @DisplayName("SEC-05: a template body carrying a card number is refused, whatever the sending mode is")
+    void refusesCardNumberInTemplateBody() {
+        // Arrange
+        Template template = template();
+        when(templates.findByCode(CODE)).thenReturn(Optional.of(template));
+
+        // Act + Assert
+        assertThatExceptionOfType(ConfigurationConflictException.class)
+                .isThrownBy(() -> configService.saveVersion(new SaveTemplateVersionCommand(
+                        AUTHOR, CODE, ContentLocale.RU, null, null, "Карта 4111 1111 1111 1111 пополнена")))
+                .withMessageContaining("SEC-05");
+        assertThat(template.versions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SEC-05, FR-4.6: an imported row with a card number is reported, the rest of the file goes in")
+    void importReportsCardNumberRow() {
+        // Arrange
+        when(templates.findByCode(CODE)).thenReturn(Optional.of(template()));
+        when(templates.findByCode(TemplateCode.of("PAYMENT_OK"))).thenReturn(Optional.empty());
+
+        // Act
+        TemplateImportResult result = importService.importTemplates(new ImportTemplatesCommand(
+                REVIEWER,
+                "legacy-import",
+                null,
+                List.of(
+                        row("OTP_LOGIN", ContentLocale.RU, "Карта 4111 1111 1111 1111"),
+                        row("PAYMENT_OK", ContentLocale.RU, "Оплата прошла"))));
+
+        // Assert
+        assertThat(result.failures()).hasSize(1);
+        assertThat(result.failures().getFirst().reason()).contains("SEC-05");
+        assertThat(result.imported()).isEqualTo(1);
     }
 
     @Test

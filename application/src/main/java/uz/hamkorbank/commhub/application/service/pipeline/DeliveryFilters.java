@@ -9,6 +9,7 @@ import uz.hamkorbank.commhub.application.port.out.CustomerPreferences;
 import uz.hamkorbank.commhub.application.port.out.FrequencyCounterPort;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.SuppressionRepository;
+import uz.hamkorbank.commhub.application.service.support.RecipientAddresses;
 import uz.hamkorbank.commhub.domain.model.ChannelConfig;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.QuietHours;
@@ -65,16 +66,18 @@ public class DeliveryFilters {
         Guard.notNull(channel, "channel");
         Guard.notNull(now, "now");
         TrafficClass trafficClass = message.envelope().trafficClass();
+        Optional<CustomerPreferences> preference =
+                message.recipient().clientIdOptional().flatMap(preferences::find);
 
         FilterVerdict suppression = checkSuppression(message.recipient(), channel, now);
         if (!suppression.isPassed()) {
             return suppression;
         }
-        FilterVerdict consent = checkConsent(message.recipient(), trafficClass);
+        FilterVerdict consent = checkConsent(preference, trafficClass);
         if (!consent.isPassed()) {
             return consent;
         }
-        FilterVerdict quietHours = checkQuietHours(trafficClass, stream, channelConfig, now);
+        FilterVerdict quietHours = checkQuietHours(message, preference, stream, channelConfig, now);
         if (!quietHours.isPassed()) {
             return quietHours;
         }
@@ -83,7 +86,7 @@ public class DeliveryFilters {
 
     /** Suppression list by address and by client (FR-5.1). */
     private FilterVerdict checkSuppression(Recipient recipient, Channel channel, Instant now) {
-        Optional<AddressHash> address = addressHash(recipient, channel);
+        Optional<AddressHash> address = RecipientAddresses.of(recipient, channel);
         if (address.isPresent()
                 && suppressions.findActiveByAddress(address.get(), channel, now).isPresent()) {
             return FilterVerdict.rejected(RejectionReason.SUPPRESSED, "address is on the suppression list");
@@ -99,29 +102,44 @@ public class DeliveryFilters {
     /**
      * Client consent for non-transactional traffic (FR-5.2).
      *
-     * <p>The preference store arrives in phase 2 (FR-8.2); until then the stub adapter answers "no
-     * record", which must not block anything.
+     * <p>The master system of consents is still to be chosen (SRS §17, open question 8), so the preference
+     * store is a stub that answers "no record" and blocks nothing. Until it arrives, the opt-outs the Hub does
+     * know about are the ones recorded in its own suppression list with reason {@code OPT_OUT} — the filter
+     * above — and this check is what starts enforcing the master data the day an adapter is put behind the
+     * port, with no change to the pipeline (AR-04).
      */
-    private FilterVerdict checkConsent(Recipient recipient, TrafficClass trafficClass) {
+    private static FilterVerdict checkConsent(Optional<CustomerPreferences> preference, TrafficClass trafficClass) {
         if (trafficClass != TrafficClass.NOTIFICATION) {
             return FilterVerdict.passed();
         }
-        return recipient
-                .clientIdOptional()
-                .flatMap(preferences::find)
-                .filter(preference -> !preference.marketingOptIn())
-                .map(CustomerPreferences::clientId)
-                .map(clientId -> FilterVerdict.rejected(RejectionReason.OPT_OUT, "client opted out of bulk traffic"))
+        return preference
+                .filter(recorded -> !recorded.marketingOptIn())
+                .map(recorded -> FilterVerdict.rejected(RejectionReason.OPT_OUT, "client opted out of bulk traffic"))
                 .orElseGet(FilterVerdict::passed);
     }
 
-    /** Quiet hours of the stream, falling back to the channel window (FR-5.3). */
-    private FilterVerdict checkQuietHours(
-            TrafficClass trafficClass, Stream stream, ChannelConfig channelConfig, Instant now) {
-        if (!trafficClass.respectsQuietHours()) {
+    /**
+     * Quiet hours: the client's own window, else the stream's, else the channel's (FR-5.3, FR-8.2).
+     *
+     * <p>The client's window wins because it is the only one expressed in the recipient's own time zone, which
+     * is what the {@code localTime} flag of the message asks for (§9.1 {@code timing.localtime}). Without such
+     * a record there is nothing to shift the window by: every MSISDN the Hub accepts is {@code 9989xxxxxxxx},
+     * so "the recipient's local time" and {@code Asia/Tashkent} are the same clock — and the flag still travels
+     * to Playmobile, which applies it per number on its side.
+     */
+    private static FilterVerdict checkQuietHours(
+            Message message,
+            Optional<CustomerPreferences> preference,
+            Stream stream,
+            ChannelConfig channelConfig,
+            Instant now) {
+        if (!message.envelope().trafficClass().respectsQuietHours()) {
             return FilterVerdict.passed();
         }
-        Optional<QuietHours> window = stream == null ? Optional.empty() : stream.quietHours();
+        Optional<QuietHours> window = preference.flatMap(CustomerPreferences::quietHoursOptional);
+        if (window.isEmpty() && stream != null) {
+            window = stream.quietHours();
+        }
         if (window.isEmpty() && channelConfig != null) {
             window = channelConfig.quietHours();
         }
@@ -141,7 +159,7 @@ public class DeliveryFilters {
         if (!trafficClass.respectsFrequencyCapping()) {
             return FilterVerdict.passed();
         }
-        Optional<AddressHash> address = addressHash(recipient, channel);
+        Optional<AddressHash> address = RecipientAddresses.of(recipient, channel);
         if (address.isEmpty()) {
             return FilterVerdict.passed();
         }
@@ -161,17 +179,6 @@ public class DeliveryFilters {
 
     /** Registers the send against the frequency counters of the recipient (FR-5.4). */
     public void registerSend(Recipient recipient, Channel channel, Instant now) {
-        addressHash(recipient, channel).ifPresent(hash -> frequencyCounters.register(hash, channel, now));
-    }
-
-    /** Hash of the address the message is delivered to on this channel (DB-04). */
-    public static Optional<AddressHash> addressHash(Recipient recipient, Channel channel) {
-        Guard.notNull(recipient, "recipient");
-        Guard.notNull(channel, "channel");
-        return switch (channel) {
-            case SMS -> Optional.ofNullable(recipient.msisdn()).map(AddressHash::ofMsisdn);
-            case EMAIL -> Optional.ofNullable(recipient.email()).map(AddressHash::ofEmail);
-            case PUSH -> recipient.pushTokens().stream().findFirst().map(AddressHash::ofPushToken);
-        };
+        RecipientAddresses.of(recipient, channel).ifPresent(hash -> frequencyCounters.register(hash, channel, now));
     }
 }

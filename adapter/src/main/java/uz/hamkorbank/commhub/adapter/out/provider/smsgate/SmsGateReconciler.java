@@ -25,6 +25,7 @@ import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.type.AttemptResult;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
@@ -141,6 +142,7 @@ public class SmsGateReconciler {
                 canonical.get(),
                 SmsGateStatusCatalog.describe(code.get()),
                 "recovered by reconciliation (SG-03)",
+                SmsGateStatusCatalog.invalidatesRecipient(code.get()) ? SuppressionReason.PROVIDER_BLACKLIST : null,
                 clock.now()));
         return result.applied();
     }

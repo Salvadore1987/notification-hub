@@ -18,6 +18,7 @@ import uz.hamkorbank.commhub.application.port.in.command.UpdateTemplateCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
 import uz.hamkorbank.commhub.application.port.out.TemplateRepository;
+import uz.hamkorbank.commhub.application.service.pipeline.PanDetector;
 import uz.hamkorbank.commhub.application.service.support.ConfigAuditor;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Provider;
@@ -55,18 +56,21 @@ public class TemplateConfigService implements ManageTemplates {
     private final ClockPort clock;
     private final TemplateMapper mapper;
     private final ConfigAuditor auditor;
+    private final PanDetector panDetector;
 
     public TemplateConfigService(
             TemplateRepository templates,
             ProviderConfigRepository providers,
             ClockPort clock,
             TemplateMapper mapper,
-            ConfigAuditor auditor) {
+            ConfigAuditor auditor,
+            PanDetector panDetector) {
         this.templates = Guard.notNull(templates, "templates");
         this.providers = Guard.notNull(providers, "providers");
         this.clock = Guard.notNull(clock, "clock");
         this.mapper = Guard.notNull(mapper, "mapper");
         this.auditor = Guard.notNull(auditor, "auditor");
+        this.panDetector = Guard.notNull(panDetector, "panDetector");
     }
 
     @Override
@@ -134,6 +138,7 @@ public class TemplateConfigService implements ManageTemplates {
                     .formatted(command.code().value()));
         }
         TemplateVersion.Body body = new TemplateVersion.Body(command.subject(), command.text());
+        rejectCardNumbers(body);
         String before = command.versionOptional()
                 .flatMap(number -> template.version(command.locale(), number))
                 .map(TemplateConfigService::describe)
@@ -256,6 +261,21 @@ public class TemplateConfigService implements ManageTemplates {
                         "template version", versionKey(command.code(), command.locale() + "/" + number)));
         version.updateBody(body);
         return version;
+    }
+
+    /**
+     * A template body may not contain a card number (PCI DSS, SEC-05).
+     *
+     * <p>Unconditional, unlike the sending path, where the mode is configurable ({@code PanPolicy}): the
+     * alert-only mode exists for traffic already in flight from source systems that have to be found and
+     * fixed, whereas a template is written once by a person who is sitting in front of the form. A card
+     * number belongs in a merge field, masked by whoever fills it — never in the wording.
+     */
+    private void rejectCardNumbers(TemplateVersion.Body body) {
+        if (panDetector.containsPan(body.text()) || panDetector.containsPan(body.subject())) {
+            throw new ConfigurationConflictException(
+                    "the template body contains a card number; a PAN must not be stored in a template (SEC-05)");
+        }
     }
 
     private Template require(TemplateCode code) {

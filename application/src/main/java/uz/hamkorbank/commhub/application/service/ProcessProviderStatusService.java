@@ -8,6 +8,7 @@ import uz.hamkorbank.commhub.application.port.in.ProcessProviderStatus;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
+import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.StatusChange;
@@ -28,10 +29,13 @@ public class ProcessProviderStatusService implements ProcessProviderStatus {
 
     private final MessageRepository messages;
     private final MessageStatusNotifier notifier;
+    private final SuppressionRegistrar suppressions;
 
-    public ProcessProviderStatusService(MessageRepository messages, MessageStatusNotifier notifier) {
+    public ProcessProviderStatusService(
+            MessageRepository messages, MessageStatusNotifier notifier, SuppressionRegistrar suppressions) {
         this.messages = Guard.notNull(messages, "messages");
         this.notifier = Guard.notNull(notifier, "notifier");
+        this.suppressions = Guard.notNull(suppressions, "suppressions");
     }
 
     @Override
@@ -44,6 +48,7 @@ public class ProcessProviderStatusService implements ProcessProviderStatus {
                     .formatted(command.providerCode(), command.providerMessageId()));
         }
         Message message = found.get();
+        suppressAddressIfReported(message, command);
         if (message.status() == command.status()) {
             return ProcessProviderStatusResult.ignored(message.id(), message.status(), "status already recorded");
         }
@@ -57,6 +62,20 @@ public class ProcessProviderStatusService implements ProcessProviderStatus {
         messages.save(message);
         notifier.publish(message, change);
         return ProcessProviderStatusResult.applied(message.id(), message.status());
+    }
+
+    /**
+     * A report that also condemns the address puts it on the suppression list (FR-5.1, EM-02, §18.2).
+     *
+     * <p>Done before the status checks and independently of them. "This address is dead" is a statement about
+     * the address, not about this message, so a report that changes no status — a repeat, or one that arrives
+     * after the message is already terminal — must still stop the next send. The registrar is idempotent, so
+     * a provider repeating the same receipt adds nothing (AD-06).
+     */
+    private void suppressAddressIfReported(Message message, ProviderStatusCommand command) {
+        command.suppressAsOptional()
+                .ifPresent(reason -> suppressions.suppress(
+                        message, reason, Actor.provider(command.providerCode().value()), command.occurredAt()));
     }
 
     /** The callback may carry the Hub id; otherwise the provider-side id identifies the message. */
