@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Phase 1–4 done (scaffolding + domain model + application ports/use cases + PostgreSQL persistence), Phase 5 next (transactional outbox relay → Kafka).** `domain/` holds the full model (`model/{vo,type,content}`, aggregates, `service/{SegmentCalculator,Router,FallbackChain}`, `support/{Guard,UuidV7}`) with 268 unit tests at 97% line coverage; `application/` holds `port/in` + `port/in/command`, `port/out` (+`port/out/provider`), `service` (use cases) with `service/{pipeline,support}`, `dto/`, `mapper/`, `policy/`, 59 unit tests at 86%; `adapter/` holds `out/persistence` (`config`, `messaging`, `delivery`, `template`, `audit`, `json`, `support`) and `out/time`; 13 unit tests plus five Testcontainers suites tagged `integration`.
+**Phase 1–4 done (scaffolding + domain model + application ports/use cases + PostgreSQL persistence), Phase 5 next (transactional outbox relay → Kafka).** `domain/` holds the full model (`model/{vo,type,content}`, aggregates, `service/{SegmentCalculator,Router,FallbackChain}`, `support/{Guard,UuidV7}`) with 268 unit tests at 97% line coverage; `application/` holds `port/in` + `port/in/command`, `port/out` (+`port/out/provider`), `service` (use cases) with `service/{pipeline,support}`, `dto/`, `mapper/`, `policy/`, 59 unit tests at 86%; `adapter/` holds `out/persistence` (`config`, `messaging`, `delivery`, `template`, `audit`, `json`, `crypto`, `support`) and `out/time`; 33 unit tests plus five Testcontainers suites tagged `integration`.
 
 Domain naming to keep straight: the `Channel` aggregate of spec §6.1 is the class `ChannelConfig` (the name `Channel` belongs to the channel enum), and a message carries `MessageContents` — content per channel (MP-02) — instead of a single `MessageContent`. Aggregates take instants as parameters; the domain never reads a clock — the application layer gets "now" from `ClockPort`.
 
@@ -35,11 +35,13 @@ docker compose up -d                # PostgreSQL 5432, Kafka 9092, Schema Regist
 docker compose down -v
 ```
 
-Tests tagged `integration` are excluded from `test` and only run via `integrationTest` — tag every Testcontainers/WireMock test with `@Tag("integration")` and name it `*IT`. CI (`.github/workflows/ci.yml`) runs three jobs: `build` (static analysis + unit + ArchUnit), `integration-test`, `security-scan` (CodeQL + dependency review, SEC-09).
+Tests tagged `integration` are excluded from `test` and only run via `integrationTest` — tag every Testcontainers/WireMock test with `@Tag("integration")` and name it `*IT`. There is no CI pipeline in the repo (removed deliberately): run `./gradlew build` and `./gradlew integrationTest` locally; SAST/dependency scanning (SEC-09) belongs to the Bank's own pipeline.
 
 Versions live in `gradle/libs.versions.toml` (Spring Boot 4.1.0, MapStruct, ArchUnit, Resilience4j, Spotless, Checkstyle); everything else is managed by the Spring Boot BOM — do not pin versions in module build files. Checkstyle config: `config/checkstyle/checkstyle.xml` (it mechanically enforces the no-`var` and constructor-injection rules); suppressions in the adjacent `suppressions.xml`.
 
 Flyway migrations: `adapter/src/main/resources/db/migration`, schema `comm_hub`, `V<n>__<snake_case>.sql`. `FlywayMigrationIT` checks the schema still builds from scratch (DB-01).
+
+Message content is encrypted at rest (DB-04): `persistence/crypto` holds `ContentCipher` (AES-256-GCM, app-level rather than pgcrypto) and `ContentCodec`, and `message.contents` / `message.template_variables` go through it — stored as the JSON scalar `"CH1.<keyId>.<base64url>"`, with cleartext still readable. `recipient` deliberately stays in clear (GIN index, DB-05). Encryption is on by default and a missing `commhub.persistence.encryption.keys.<activeKeyId>` fails startup — never "fix" that by disabling it.
 
 Persistence conventions (Phase 4): adapters are `…PersistenceAdapter` over `JdbcClient` with hand-written row mappers — the domain carries no persistence annotations (AR-02) and is rebuilt through its factories or `rehydrate` builders, which no entity mapper can drive (rationale in `adapter/out/persistence/package-info.java`). `jsonb` columns go through the module's own `JsonCodec` (Jackson 3, `tools.jackson.*` since Boot 4) and explicit `…Json` records, never the shared REST `ObjectMapper`. `message`, `message_status_history`, `delivery_attempt` and `outbox_event` are monthly range partitions maintained by `comm_hub.ensure_partitions` / `detach_partitions_before` and `PartitionMaintenanceJob`; every one has a DEFAULT partition as a safety net, and a non-empty one means the scheduler failed. Instants are bound as `OffsetDateTime` at UTC — the driver has no mapping for `Instant`.
 
@@ -51,7 +53,7 @@ Persistence conventions (Phase 4): adapters are `…PersistenceAdapter` over `Jd
 
 These are hard requirements, not preferences. Verify against the spec section before deviating.
 
-- **Hexagonal architecture (Ports & Adapters)** enforced by ArchUnit in CI (AR-01…AR-06). Dependencies point inward only: `adapter → application → domain`.
+- **Hexagonal architecture (Ports & Adapters)** enforced by ArchUnit in `./gradlew build` (AR-01…AR-06). Dependencies point inward only: `adapter → application → domain`.
 - **`domain/` has zero compile deps on Spring, JPA, Kafka, Jackson** (AR-02). Only JDK, `java.time`, and own value objects.
 - **Multichannel via the Message pattern** (spec §5): one canonical `Message` (channel-independent envelope) + a `sealed MessageContent` hierarchy (`SmsContent`, `EmailContent`, `PushContent`). The pipeline (validate → dedup → route → filter → template → send → status) is single and channel-agnostic.
 - **Adding a provider = new adapter only** — no changes to `domain/` or `application/` (AR-04). Each provider implements a channel output port: `SmsProviderPort`, `EmailProviderPort`, `PushProviderPort` (MP-05, AR-04).

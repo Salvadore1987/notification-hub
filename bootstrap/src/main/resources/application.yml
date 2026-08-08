@@ -47,6 +47,16 @@ commhub:
       url: ${DB_REPLICA_URL:}
       username: ${DB_REPLICA_USER:${DB_USER:commhub}}
       password: ${DB_REPLICA_PASSWORD:${DB_PASSWORD:commhub}}
+    # DB-04: контент сообщений шифруется приложением (AES-256-GCM) перед записью.
+    # Ключ — base64 32 байт (`openssl rand -base64 32`), в проме приходит из секрет-хранилища
+    # платформы; без него контекст не поднимется — тихого отката на открытый текст нет.
+    # Ротация: добавить новый ключ в keys, перевести на него active-key-id, старый держать,
+    # пока живы секции со строками, записанными под ним (DB-03).
+    encryption:
+      enabled: ${CONTENT_ENCRYPTION_ENABLED:true}
+      active-key-id: ${CONTENT_ENCRYPTION_KEY_ID:k1}
+      keys:
+        k1: ${CONTENT_ENCRYPTION_KEY:}
 
 server:
   port: ${SERVER_PORT:8080}

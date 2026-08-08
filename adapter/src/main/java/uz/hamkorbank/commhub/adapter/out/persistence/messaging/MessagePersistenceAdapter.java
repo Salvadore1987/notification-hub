@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import uz.hamkorbank.commhub.adapter.out.persistence.crypto.ContentCodec;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.ChannelPlanJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.MessageContentsJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.RecipientJson;
@@ -42,6 +43,10 @@ import uz.hamkorbank.commhub.domain.model.vo.StreamId;
  *
  * <p>Queries that return several messages load the history and the attempts of the whole page in one
  * statement each; a per-row lookup would turn a batch of 500 into 1001 round trips.
+ *
+ * <p>{@code contents} and {@code template_variables} go through {@link ContentCodec} — they are stored
+ * encrypted (DB-04). Everything the SQL here filters or orders by stays in clear, so the indexes of
+ * DB-05 keep working.
  */
 @Repository
 public class MessagePersistenceAdapter implements MessageRepository {
@@ -136,6 +141,7 @@ public class MessagePersistenceAdapter implements MessageRepository {
 
     private final JdbcClient jdbcClient;
     private final JsonCodec jsonCodec;
+    private final ContentCodec contentCodec;
     private final MessageRowMapper messageRowMapper;
     private final StatusChangeRowMapper statusChangeRowMapper;
     private final DeliveryAttemptRowMapper attemptRowMapper;
@@ -143,11 +149,13 @@ public class MessagePersistenceAdapter implements MessageRepository {
     public MessagePersistenceAdapter(
             JdbcClient jdbcClient,
             JsonCodec jsonCodec,
+            ContentCodec contentCodec,
             MessageRowMapper messageRowMapper,
             StatusChangeRowMapper statusChangeRowMapper,
             DeliveryAttemptRowMapper attemptRowMapper) {
         this.jdbcClient = jdbcClient;
         this.jsonCodec = jsonCodec;
+        this.contentCodec = contentCodec;
         this.messageRowMapper = messageRowMapper;
         this.statusChangeRowMapper = statusChangeRowMapper;
         this.attemptRowMapper = attemptRowMapper;
@@ -315,10 +323,10 @@ public class MessagePersistenceAdapter implements MessageRepository {
                 .param("correlationId", message.envelope().correlationId().value())
                 .param("recipient", jsonCodec.write(RecipientJson.of(message.recipient())))
                 .param("channelPlan", jsonCodec.write(ChannelPlanJson.of(message.channelPlan())))
-                .param("contents", jsonCodec.write(MessageContentsJson.of(message.contents())))
+                .param("contents", contentCodec.write(MessageContentsJson.of(message.contents())))
                 .param("templateCode", template == null ? null : template.code().value())
                 .param("templateLocale", template == null ? null : SqlValues.nameOf(template.locale()))
-                .param("templateVariables", template == null ? null : jsonCodec.write(template.variables()))
+                .param("templateVariables", template == null ? null : contentCodec.write(template.variables()))
                 .param("timing", jsonCodec.write(TimingJson.of(message.timing())))
                 .param("status", message.status().name())
                 .param("statusReason", SqlValues.nameOf(message.statusReason().orElse(null)))

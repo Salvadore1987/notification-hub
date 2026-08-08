@@ -217,6 +217,55 @@ class MessagePersistenceIT extends AbstractPersistenceIT {
     }
 
     @Test
+    @DisplayName("content and merge variables are stored encrypted, the routing columns are not (DB-04, DB-05)")
+    void storesContentEncrypted() {
+        // Arrange
+        Message message = accepted("abc0000006");
+
+        // Act
+        messages.save(message);
+
+        // Assert
+        Map<String, Object> row = jdbc().sql("SELECT contents::text AS contents,"
+                        + " template_variables::text AS variables,"
+                        + " jsonb_typeof(contents) AS contents_type,"
+                        + " recipient ->> 'msisdn' AS msisdn"
+                        + " FROM message WHERE id = :id")
+                .param("id", message.id().value())
+                .query()
+                .singleRow();
+        assertThat((String) row.get("contents_type")).isEqualTo("string");
+        assertThat((String) row.get("contents"))
+                .startsWith("\"CH1." + TEST_KEY_ID + ".")
+                .doesNotContain("1234");
+        assertThat((String) row.get("variables")).startsWith("\"CH1.").doesNotContain("1234");
+        assertThat((String) row.get("msisdn")).isEqualTo("998901234567");
+        assertThat(messages.findById(message.id()).orElseThrow().contents().requireForChannel(Channel.SMS))
+                .isEqualTo(message.contents().requireForChannel(Channel.SMS));
+    }
+
+    @Test
+    @DisplayName("a row written in clear before DB-04 was switched on still reads")
+    void readsRowsWrittenBeforeEncryption() {
+        // Arrange
+        Message message = messages.save(accepted("abc0000007"));
+        jdbc().sql("UPDATE message SET contents = CAST(:contents AS jsonb),"
+                        + " template_variables = CAST(:variables AS jsonb) WHERE id = :id")
+                .param("contents", "{\"sms\": {\"text\": \"Код 4321\", \"originator\": \"HAMKORBANK\"}}")
+                .param("variables", "{\"CODE\": \"4321\"}")
+                .param("id", message.id().value())
+                .update();
+
+        // Act
+        Message restored = messages.findById(message.id()).orElseThrow();
+
+        // Assert
+        assertThat(((SmsContent) restored.contents().requireForChannel(Channel.SMS)).text())
+                .isEqualTo("Код 4321");
+        assertThat(restored.template().orElseThrow().variables()).containsEntry("CODE", "4321");
+    }
+
+    @Test
     @DisplayName("the batch progress counts only messages that reached a terminal status (FR-3.1)")
     void countsTerminalMessagesOfBatch() {
         // Arrange

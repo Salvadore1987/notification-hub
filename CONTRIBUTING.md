@@ -37,6 +37,17 @@ docker compose down -v    # останов с удалением данных
 Приложение читает настройки из `bootstrap/src/main/resources/application.yml`; значения по умолчанию
 совпадают с `docker-compose.yml` и переопределяются переменными окружения (`DB_URL`, `KAFKA_BOOTSTRAP_SERVERS`, …).
 
+Одна переменная обязательна и значения по умолчанию не имеет — ключ шифрования контента (DB-04):
+
+```bash
+export CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)   # AES-256, 32 байта в base64
+```
+
+Без него контекст не поднимется: тихого отката на хранение контента открытым текстом нет.
+В контуре Банка ключ приходит из секрет-хранилища платформы, в репозитории его быть не должно.
+Ротация: добавить новый ключ в `commhub.persistence.encryption.keys`, перевести на него
+`active-key-id`, старый держать, пока живы секции со строками под ним (DB-03).
+
 ## Структура модулей (AR-01)
 
 ```
@@ -57,7 +68,7 @@ bootstrap/    — Spring Boot приложение, конфигурация, wi
 - `@RestControllerAdvice` — в отдельном пакете `handlers/`, по одному классу на предмет.
 - Документация проекта — на русском; код, идентификаторы, логи и контракты API — на английском.
 - Форматирование обеспечивает Spotless, смысловые правила — Checkstyle (`config/checkstyle/checkstyle.xml`),
-  в том числе запрет `var` и field injection. Оба выполняются в `./gradlew build` и в CI.
+  в том числе запрет `var` и field injection. Оба выполняются в `./gradlew build`.
 
 ## Ветвление и PR
 
@@ -72,16 +83,15 @@ Trunk-based с короткоживущими ветками от `main`:
 
 - Коммиты — в стиле Conventional Commits: `feat(domain): add SegmentCalculator (MP-06)`.
   В теле или заголовке указывается ID требования SRS.
-- Прямой push в `main` запрещён: только PR с зелёным CI и минимум одним апрувом.
+- Прямой push в `main` запрещён: только PR с локально зелёной сборкой и минимум одним апрувом.
   Изменения в шаблонах, маршрутизации и безопасности — по правилу maker/checker (FR-4.2, SEC-03).
 - Перед PR: `./gradlew build` локально, обновить `docs/IMPLEMENTATION-PLAN.md` (отметить ✅).
 - Merge — squash; история `main` линейная.
 
-## CI
+## Проверки перед PR
 
-`.github/workflows/ci.yml`:
+Пайплайна в репозитории нет — сборка и проверки запускаются локально, а в контуре Банка
+подключаются к корпоративному конвейеру (Jenkins/GitLab CI, SonarQube, Nexus IQ, SEC-09):
 
-1. `build` — компиляция, Spotless, Checkstyle, unit-тесты, ArchUnit (AR-02/AR-03, QA-01, QA-02);
-2. `integration-test` — Testcontainers (PostgreSQL, Kafka), WireMock-стабы (QA-03, DB-01);
-3. `security-scan` — CodeQL (SAST) и dependency review (SEC-09); в контуре Банка сюда подключаются
-   корпоративные сканеры (SonarQube / Nexus IQ).
+1. `./gradlew build` — компиляция, Spotless, Checkstyle, unit-тесты, ArchUnit (AR-02/AR-03, QA-01, QA-02);
+2. `./gradlew integrationTest` — Testcontainers (PostgreSQL, Kafka), WireMock-стабы (QA-03, DB-01).

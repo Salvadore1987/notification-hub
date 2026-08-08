@@ -16,6 +16,7 @@
  * <p>Packages: {@code config} — streams, channels, providers, routing policies; {@code template} —
  * templates and their versions; {@code messaging} — batches, messages, status history, attempts;
  * {@code delivery} — outbox, DLQ, dedup registry, suppression list, quotas; {@code audit} — the audit
- * log; {@code support} — JSON codec and shared SQL helpers.
+ * log; {@code crypto} — at-rest encryption of message content (DB-04); {@code support} — JSON codec and
+ * shared SQL helpers.
  */
 package uz.hamkorbank.commhub.adapter.out.persistence;

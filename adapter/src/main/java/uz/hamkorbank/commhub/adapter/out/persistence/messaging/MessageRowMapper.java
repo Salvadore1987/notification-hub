@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.adapter.out.persistence.crypto.ContentCodec;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.ChannelPlanJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.MessageContentsJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.RecipientJson;
@@ -45,14 +46,19 @@ import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
  * <p>The history and the attempts are not read here — they come from their own tables and are passed in
  * by {@link MessagePersistenceAdapter}, which loads them for a whole page of messages at once instead of
  * one query per row.
+ *
+ * <p>The content columns are read through {@link ContentCodec}, which decrypts what DB-04 stored
+ * encrypted and passes a row written before that through unchanged.
  */
 @Component
 public class MessageRowMapper {
 
     private final JsonCodec jsonCodec;
+    private final ContentCodec contentCodec;
 
-    public MessageRowMapper(JsonCodec jsonCodec) {
+    public MessageRowMapper(JsonCodec jsonCodec, ContentCodec contentCodec) {
         this.jsonCodec = jsonCodec;
+        this.contentCodec = contentCodec;
     }
 
     /** Maps the {@code message} row alone; history and attempts are attached afterwards. */
@@ -67,7 +73,7 @@ public class MessageRowMapper {
                 jsonCodec
                         .read(rs.getString("channel_plan"), ChannelPlanJson.class)
                         .toDomain(),
-                jsonCodec
+                contentCodec
                         .read(rs.getString("contents"), MessageContentsJson.class)
                         .toDomain(),
                 templateRef(rs),
@@ -109,7 +115,7 @@ public class MessageRowMapper {
         return TemplateRef.of(
                 TemplateCode.of(code),
                 SqlValues.enumValue(rs, "template_locale", ContentLocale.class),
-                jsonCodec.readStringMap(rs.getString("template_variables")));
+                contentCodec.readStringMap(rs.getString("template_variables")));
     }
 
     private ProviderRef selectedProvider(ResultSet rs) throws SQLException {
