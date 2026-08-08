@@ -48,6 +48,28 @@ commhub:
       partitions: ${KAFKA_OUTBOUND_PARTITIONS:12}
       replication-factor: ${KAFKA_OUTBOUND_REPLICATION_FACTOR:1}
 
+    # Входящие топики (§8.1 IK-01). Класс трафика определяется топиком, а не полем в документе:
+    # изоляция OTP (TC-01) построена на топиках, и payload не должен уметь себя переклассифицировать.
+    inbound:
+      enabled: ${KAFKA_INBOUND_ENABLED:true}
+      # Суффикс класса добавляется к group-id: группы (а значит и лаг) у классов раздельные.
+      group-id: ${KAFKA_INBOUND_GROUP_ID:notification-hub}
+      topics:
+        critical: ${KAFKA_TOPIC_CRITICAL:comm.inbound.critical.v1}
+        transactional: ${KAFKA_TOPIC_TRANSACTIONAL:comm.inbound.transactional.v1}
+        notification: ${KAFKA_TOPIC_NOTIFICATION:comm.inbound.notification.v1}
+        batch-control: ${KAFKA_TOPIC_BATCH_CONTROL:comm.inbound.batch-control.v1}
+        parse-error: ${KAFKA_TOPIC_PARSE_ERROR:comm.inbound.parse-error.v1}
+      # Раздельные пулы потоков на класс (TC-01): массовая рассылка не занимает потоки OTP.
+      # Значение не имеет смысла поднимать выше числа партиций топика.
+      concurrency:
+        critical: ${KAFKA_CONCURRENCY_CRITICAL:2}
+        transactional: ${KAFKA_CONCURRENCY_TRANSACTIONAL:4}
+        notification: ${KAFKA_CONCURRENCY_NOTIFICATION:8}
+        batch-control: ${KAFKA_CONCURRENCY_BATCH_CONTROL:1}
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:100}
+      poll-timeout: ${KAFKA_POLL_TIMEOUT:5s}
+
   # Transactional Outbox → Kafka (AD-03). Relay работает на каждом инстансе: строки берутся
   # FOR UPDATE SKIP LOCKED, поэтому инстансы делят очередь, а не дублируют её.
   outbox:
@@ -56,6 +78,34 @@ commhub:
       poll-interval-ms: ${OUTBOX_RELAY_POLL_INTERVAL_MS:500}
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
       max-passes-per-tick: ${OUTBOX_RELAY_MAX_PASSES:10}
+
+  # Синхронный API систем-источников (§8.2).
+  rest:
+    # IR-02: лимит скорости на поток, ответ 429 + Retry-After. Считаются запросы, а не сообщения:
+    # чанк батча — это один запрос, его размер ограничен отдельно (10 000 элементов).
+    # Лимит на инстанс: общий предел кластера делится на число реплик за балансировщиком.
+    rate-limit:
+      enabled: ${REST_RATE_LIMIT_ENABLED:true}
+      default-permits-per-second: ${REST_RATE_LIMIT_RPS:200}
+      default-burst: ${REST_RATE_LIMIT_BURST:400}
+      # Переопределения на поток появятся в реестре потоков (Phase 8, AD-07); пример:
+      # streams:
+      #   ibank-retail:
+      #     permits-per-second: 500
+      #     burst: 1000
+      streams: {}
+
+  # Провайдерские callback'и статусов (PM-02, SEC-07). Ключи — коды провайдеров; адаптеры
+  # провайдеров с трансляторами появляются в Phase 7, до этого endpoint отвечает 404.
+  # Секрет в проме приходит из секрет-хранилища Банка (SG-04) и в логах не появляется.
+  callback:
+    base: ${CALLBACK_BASE_PATH:/api/callbacks}
+    providers: {}
+    #  PLAYMOBILE:
+    #    enabled: true
+    #    allowed-ips: [ "10.0.0.1" ]
+    #    secret-header: X-Commhub-Callback-Secret
+    #    secret: ${PLAYMOBILE_CALLBACK_SECRET:}
 
   # Хранилище: секции и retention (DB-02, DB-03), реплика для аналитики (DB-06).
   persistence:
