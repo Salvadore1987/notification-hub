@@ -111,22 +111,24 @@ subprojects {
     }
 }
 
-// QA-01: доменная логика — не менее 80% покрытия строк юнит-тестами.
-project(":domain") {
-    tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-        dependsOn(tasks.named("test"))
-        violationRules {
-            rule {
-                limit {
-                    counter = "LINE"
-                    value = "COVEREDRATIO"
-                    minimum = "0.80".toBigDecimal()
+// QA-01: доменная логика и use cases — не менее 80% покрытия строк юнит-тестами.
+listOf(":domain", ":application").forEach { module ->
+    project(module) {
+        tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+            dependsOn(tasks.named("test"))
+            violationRules {
+                rule {
+                    limit {
+                        counter = "LINE"
+                        value = "COVEREDRATIO"
+                        minimum = "0.80".toBigDecimal()
+                    }
                 }
             }
         }
-    }
 
-    tasks.named("check") {
-        dependsOn(tasks.named("jacocoTestCoverageVerification"))
+        tasks.named("check") {
+            dependsOn(tasks.named("jacocoTestCoverageVerification"))
+        }
     }
 }

@@ -73,23 +73,44 @@
   — 268 тестов, покрытие домена 97.1% строк; критическая логика: `MessageStatus` 100%, `SegmentCalculator` 100%, `FallbackChain` 100%, `Router` 95.5%, `Message` 93.5%.
   Порог проверяется в сборке: JaCoCo `jacocoTestCoverageVerification` (LINE ≥ 0.80) подключён к `:domain:check`
 
-### Phase 3. Порты приложения (`application/port`) и use cases
+### Phase 3. Порты приложения (`application/port`) и use cases ✅
 
-- [ ] Input-порты (интерфейсы use case) с Command/Query records (AR-06): `SubmitMessage`, `SubmitBatch`, `PauseBatch`/`ResumeBatch`/`StopBatch`, `ResendDlq`, `ProcessProviderStatus`, `KillSwitch`
-- [ ] Output-порты: `MessageRepository`, `BatchRepository`, `StreamRepository`, `ProviderConfigRepository`, `TemplateRepository`, `SuppressionRepository`, `DedupRegistryPort`, `OutboxPort`, `StatusPublisherPort`, `SmsProviderPort`, `EmailProviderPort`, `PushProviderPort`, `ClockPort`, `MetricsPort`, `AuditPort`, `SecretResolverPort`
-- [ ] Задел-порт `AudienceResolverPort` без реализации (FR-8.11)
-- [ ] Задел-порт `CustomerPreferencePort` — заглушка (FR-8.2)
-- [ ] Use case `SubmitMessage`: валидация → дедуп → выбор класса трафика → шаблон → сегментация → маршрут → сохранение+outbox (FR-1.1, FR-1.4, FR-1.5)
-- [ ] Use case `SubmitBatch` + загрузка элементов чанками, прогресс (FR-1.6)
-- [ ] Оркестрация отправки (saga): resolve адаптера по `ProviderRef`, submit, обработка ack, retry/fallback (AD-04)
-- [ ] Идемпотентность по `(streamId, externalMessageId)`/`dedupKey`, окно по умолчанию 24ч → статус `DUPLICATE` (FR-1.5)
-- [ ] Фильтры доставки: Suppression, Quiet hours, frequency capping (FR-5.1…FR-5.4)
-- [ ] Применение шаблона: merge-поля, строгий режим, только `PUBLISHED` (FR-4.1, FR-4.3)
-- [ ] `ProcessProviderStatus`: маппинг провайдерских статусов → канонические, запись истории (AD-06, ST-01)
-- [ ] TTL/`EXPIRED` авто-отмена (FR-3.4)
-- [ ] Управление рассылками: пауза/возобновление/стоп батча/потока/kill switch (FR-3.2), не затрагивает `CRITICAL_OTP`
-- [ ] DTO (records) в `dto/` + MapStruct-мапперы в `mapper/` для конвертаций (правило проекта)
-- [ ] Unit-тесты use cases (моки портов), тесты идемпотентности и статусной машины
+- ✅ Input-порты (интерфейсы use case) с Command/Query records (AR-06): `SubmitMessage`, `SubmitBatch`, `PauseBatch`/`ResumeBatch`/`StopBatch`, `ResendDlq`, `ProcessProviderStatus`, `KillSwitch`
+  — плюс `SuspendStream`/`ResumeStream` (FR-3.2 на уровне потока), `DispatchMessage` (saga отправки, AD-04) и `ExpireMessages` (TTL-свип, FR-3.4);
+  команды — records в `port/in/command`, результаты — records в `dto/`
+- ✅ Output-порты: `MessageRepository`, `BatchRepository`, `StreamRepository`, `ProviderConfigRepository`, `TemplateRepository`, `SuppressionRepository`, `DedupRegistryPort`, `OutboxPort`, `StatusPublisherPort`, `SmsProviderPort`, `EmailProviderPort`, `PushProviderPort`, `ClockPort`, `MetricsPort`, `AuditPort`, `SecretResolverPort`
+  — дополнительно `DlqRepository`, `QuotaCounterPort` (+`QuotaScope`/`QuotaWindow`), `FrequencyCounterPort`, `KillSwitchPort` (+`KillSwitchState`);
+  канальные порты в `port/out/provider` с контрактами `SmsSubmission`/`EmailSubmission`/`PushSubmission` → `ProviderAck` (классификация ошибок адаптером, PR-01)
+- ✅ Задел-порт `AudienceResolverPort` без реализации (FR-8.11)
+- ✅ Задел-порт `CustomerPreferencePort` — заглушка (FR-8.2)
+  — фильтры трактуют «нет записи» как «нет ограничения», так что заглушка ничего не блокирует
+- ✅ Use case `SubmitMessage`: валидация → дедуп → выбор класса трафика → шаблон → сегментация → маршрут → сохранение+outbox (FR-1.1, FR-1.4, FR-1.5)
+  — `SubmitMessageService`; отклонения — не исключения, а результат с канонической причиной (IR-01)
+- ✅ Use case `SubmitBatch` + загрузка элементов чанками, прогресс (FR-1.6)
+  — каждый элемент разворачивается в обычную команду `SubmitMessage`, ошибки элементов возвращаются поэлементно и не роняют чанк
+- ✅ Оркестрация отправки (saga): resolve адаптера по `ProviderRef`, submit, обработка ack, retry/fallback (AD-04)
+  — `DispatchMessageService` + `ProviderGateway` (резолв адаптера по `adapterType`), `SendingPolicy` (бюджет попыток и backoff);
+  blocking-ошибка (Playmobile 102) → немедленный failover, исчерпание бюджета → `FAILED` + `DlqEntry` + событие в `comm.outbound.dlq.v1`
+- ✅ Идемпотентность по `(streamId, externalMessageId)`/`dedupKey`, окно по умолчанию 24ч → статус `DUPLICATE` (FR-1.5)
+  — быстрый предпроверочный поиск + атомарный claim ключа (гонка at-least-once консьюмеров разрешается в пользу первого)
+- ✅ Фильтры доставки: Suppression, Quiet hours, frequency capping (FR-5.1…FR-5.4)
+  — `DeliveryFilters`; quiet hours с поведением `DEFER` оставляют сообщение в `ROUTED`, диспетчер перепроверяет окно на каждом ходе;
+  frequency capping в MVP только считает и алертит (`FrequencyCapPolicy.blocking = false`)
+- ✅ Применение шаблона: merge-поля, строгий режим, только `PUBLISHED` (FR-4.1, FR-4.3)
+  — `TemplateApplier`; допускается сообщение без контента (контент строится из тела шаблона, FR-1.2), fallback локали на RU
+- ✅ `ProcessProviderStatus`: маппинг провайдерских статусов → канонические, запись истории (AD-06, ST-01)
+  — идемпотентно: повтор колбэка и запрещённый переход возвращают `applied = false`, адаптер всё равно отвечает 200 (PM-02)
+- ✅ TTL/`EXPIRED` авто-отмена (FR-3.4)
+  — `ExpireMessagesService` (пакетный свип) + проверка дедлайна перед каждым вызовом провайдера
+- ✅ Управление рассылками: пауза/возобновление/стоп батча/потока/kill switch (FR-3.2), не затрагивает `CRITICAL_OTP`
+  — операции O(1): меняется состояние батча/потока/переключателя, сообщения отменяются или откладываются сагой при разборе очереди
+- ✅ DTO (records) в `dto/` + MapStruct-мапперы в `mapper/` для конвертаций (правило проекта)
+  — `MessageMapper` (в т.ч. формат статуса §6.4), `BatchMapper`, `ProviderSubmissionMapper`
+- ✅ Unit-тесты use cases (моки портов), тесты идемпотентности и статусной машины
+  — 59 тестов, покрытие `application` 86% строк (use case–сервисы 96%); порог JaCoCo LINE ≥ 0.80 подключён к `:application:check`
+
+> Реализации use case помечены `@Service`/`@Transactional`, но бинов output-портов ещё нет — контекст Spring поднимется
+> после Phase 4 (персистентность) и явного wiring в `bootstrap`. Компиляция, unit-тесты и ArchUnit от этого не зависят.
 
 ### Phase 4. Персистентность (`adapter/out/persistence`) — PostgreSQL
 
