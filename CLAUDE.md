@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Phase 1 done (scaffolding), Phase 2 next (domain model).** The build exists and is green; there is no business code yet — `domain/`, `application/`, `adapter/` currently hold only `package-info.java`.
+**Phase 1–2 done (scaffolding + domain model), Phase 3 next (application ports & use cases).** `domain/` holds the full model (`model/{vo,type,content}`, aggregates, `service/{SegmentCalculator,Router,FallbackChain}`, `support/{Guard,UuidV7}`) with 268 unit tests at 97% line coverage; `application/` and `adapter/` still hold only `package-info.java`.
+
+Domain naming to keep straight: the `Channel` aggregate of spec §6.1 is the class `ChannelConfig` (the name `Channel` belongs to the channel enum), and a message carries `MessageContents` — content per channel (MP-02) — instead of a single `MessageContent`. Aggregates take instants as parameters; the domain never reads a clock (`ClockPort` arrives in Phase 3).
 
 - `docs/sms-notification-hub-spec.md` — the SRS (v1.0, RU). **Authoritative.** Read the relevant section before scaffolding anything; requirement IDs (`FR-*`, `AR-*`, `AD-*`, `PM-*`, `PU-*`, `SG-*`, `QA-*`…) are referenced throughout this file and in the plan.
 - `docs/IMPLEMENTATION-PLAN.md` — the working checklist (RU), backend-first (Phase 1…15) then frontend (Phase 16…18), each item tagged with its SRS requirement ID. **This is the task board** — when asked "what's next", read it. Mark completed items with ✅ (never `[x]`), per the rule below.

@@ -34,19 +34,44 @@
 
 > Каркас ArchUnit-теста (`HexagonalArchitectureTest`: AR-02/AR-03) заведён уже сейчас; полный набор правил — Phase 15.
 
-### Phase 2. Домен (`domain/`) — чистая Java, без Spring/JPA/Kafka/Jackson (AR-02)
+### Phase 2. Домен (`domain/`) — чистая Java, без Spring/JPA/Kafka/Jackson (AR-02) ✅
 
-- [ ] Value objects и идентификаторы: `MessageId` (UUIDv7), `ExternalMessageId`, `StreamId`, `BatchId`, `DedupKey`, `CorrelationId`, `Recipient`, `EmailAddress`, `Msisdn`
-- [ ] Enum'ы: `TrafficClass`, `Priority`, `Channel`, `MessageStatus` (§6.3), `TemplateStatus`, `BatchStatus`
-- [ ] Sealed `MessageContent`: `SmsContent`, `EmailContent`, `PushContent` (§5.2, MP-02)
-- [ ] Агрегат `Message` (envelope + content + channelPlan + status) — §5.2, §6.1
-- [ ] `ChannelPlan` с режимами: явный канал / выбор Модулем / fallback-цепочка (MP-03)
-- [ ] Агрегаты: `Batch`, `Stream`, `Channel`, `Provider`, `RoutingPolicy`, `Template`+`TemplateVersion`, `SuppressionEntry`, `DeliveryAttempt`, `DlqEntry` (§6.1)
-- [ ] Статусная машина `Message` с валидацией переходов и терминальными статусами (ST-01…ST-03)
-- [ ] Доменный сервис `SegmentCalculator` (GSM-7 160/153, UCS-2 70/67, escape-символы) — MP-06, §18.3
-- [ ] Доменный сервис `Router` (выбор канала/провайдера, балансировка round-robin/вес/least-cost) — MP-05, FR-2.3
-- [ ] Доменный сервис `FallbackChain` (порядок резерва) — FR-2.2
-- [ ] Unit-тесты домена ≥80% строк, ≥90% критической логики (QA-01, AAA-паттерн)
+- ✅ Value objects и идентификаторы: `MessageId` (UUIDv7), `ExternalMessageId`, `StreamId`, `BatchId`, `DedupKey`, `CorrelationId`, `Recipient`, `EmailAddress`, `Msisdn`
+  — пакет `model/vo`; плюс `ClientId`, `PushToken`, `AddressHash` (SHA-256 для suppression, DB-04), `ProviderId`/`ProviderCode`/`AdapterType`/`ProviderRef`/`ProviderMessageId`,
+  `TemplateId`/`TemplateVersionId`/`TemplateCode`, `AttemptId`, `SuppressionEntryId`, `RoutingPolicyId`, `Money`.
+  Все — records с проверкой инвариантов в каноническом конструкторе (`DomainValidationException`), у PII — `masked()` (`99890***4567`).
+  Генератор UUIDv7 (RFC 9562, монотонный внутри миллисекунды) — `support/UuidV7`; хелперы инвариантов — `support/Guard`
+- ✅ Enum'ы: `TrafficClass`, `Priority`, `Channel`, `MessageStatus` (§6.3), `TemplateStatus`, `BatchStatus`
+  — пакет `model/type`; дополнительно `ChannelSelectionMode`, `BalancingStrategy`, `ChannelStatus`, `StreamStatus`, `ConnectionStatus`, `IntegrationType`,
+  `ProviderHealthStatus`, `SuppressionReason`, `RejectionReason` (коды причин для IR-01), `SmsEncoding`, `PushPlatform`, `ContentLocale`, `ActorType`,
+  `ErrorClass` (retryable/non-retryable/blocking, §18.1), `AttemptResult`, `QuietHoursBehavior`, `QuotaExhaustionBehavior`, `QuotaVerdict`
+- ✅ Sealed `MessageContent`: `SmsContent`, `EmailContent`, `PushContent` (§5.2, MP-02)
+  — пакет `model/content`; плюс `Attachment` (метаданные вложения, EM-01) и `MessageContents` — контент по каналам:
+  MP-02 разрешает одно уведомление для нескольких каналов, без этого fallback-цепочка Push→SMS нерабочая (одиночный случай — `MessageContents.of(content)`)
+- ✅ Агрегат `Message` (envelope + content + channelPlan + status) — §5.2, §6.1
+  — `MessageEnvelope` (канало-независимый конверт, MP-01) + `MessageContents` + `ChannelPlan` + статус с полной историей (`StatusChange`, `Actor`) + попытки доставки;
+  `Timing` (TTL/окно отправки/localtime/send-evenly), `TemplateRef`; сегменты, стоимость, признак TEST (FR-7.4), ссылка на оригинал при `DUPLICATE`
+- ✅ `ChannelPlan` с режимами: явный канал / выбор Модулем / fallback-цепочка (MP-03)
+  — `EXPLICIT` / `MODULE_CHOICE` (со списком кандидатов или без) / `FALLBACK_CHAIN` (≥2 канала, `nextAfter`)
+- ✅ Агрегаты: `Batch`, `Stream`, `Channel`, `Provider`, `RoutingPolicy`, `Template`+`TemplateVersion`, `SuppressionEntry`, `DeliveryAttempt`, `DlqEntry` (§6.1)
+  — база `AggregateRoot<ID>` (равенство по идентификатору). Агрегат `Channel` из §6.1 назван `ChannelConfig`, чтобы имя `Channel` осталось за enum'ом канала (§6.4);
+  вспомогательные value objects: `Batch.Progress`, `Stream.Defaults`, `QuietHours` (Asia/Tashkent, окно через полночь), `QuotaConfig`+`Usage`, `Tariff`, `RateLimit`,
+  `Provider.Settings`, `RoutingPolicy.Match`/`Action`, `TemplateVersion.Body`/`Rendered`, `Template.ProviderMapping` (Playmobile `template-id`, FR-4.5).
+  Реализованы: maker/checker публикации шаблона (FR-4.2), подстановка merge-полей `{NAME}` со строгим режимом (FR-4.3), состояние батча (FR-3.2),
+  connection status потока по последней активности (FR-1.3), квоты/бюджеты (FR-2.6), single-retry DLQ (FR-3.3)
+- ✅ Статусная машина `Message` с валидацией переходов и терминальными статусами (ST-01…ST-03)
+  — таблица переходов в `MessageStatus` (+`BatchStatus`, `TemplateStatus`), нарушение → `InvalidStatusTransitionException`;
+  каждая смена статуса пишется в историю с актором и деталями провайдера (ST-01); терминальные статусы по ST-02, `FAILED → QUEUED` только ручным повтором из DLQ
+- ✅ Доменный сервис `SegmentCalculator` (GSM-7 160/153, UCS-2 70/67, escape-символы) — MP-06, §18.3
+  — алфавит GSM 03.38 + таблица расширения (`^ { } \ [ ~ ] | €` = 2 символа), один не-GSM символ переводит всё сообщение в UCS-2; результат — `SmsSegmentation`
+- ✅ Доменный сервис `Router` (выбор канала/провайдера, балансировка round-robin/вес/least-cost) — MP-05, FR-2.3
+  — вход `RoutingRequest` (+ `rotation` для round-robin/веса, исключённые провайдеры для failover) и снапшот `RoutingConfiguration` (каналы/провайдеры/политики/дефолты потока, AD-07),
+  выход — sealed `RoutingResult` (`Routed` с порядком попыток / `NoRoute` с причиной). Порядок выбора канала: политика → план сообщения → дефолт потока → доступный адрес
+- ✅ Доменный сервис `FallbackChain` (порядок резерва) — FR-2.2
+  — цепочка провайдеров канала (без выключенных / в обслуживании / `DOWN`), следующий провайдер после отказа, следующий непробованный, следующий канал цепочки (MP-03)
+- ✅ Unit-тесты домена ≥80% строк, ≥90% критической логики (QA-01, AAA-паттерн)
+  — 268 тестов, покрытие домена 97.1% строк; критическая логика: `MessageStatus` 100%, `SegmentCalculator` 100%, `FallbackChain` 100%, `Router` 95.5%, `Message` 93.5%.
+  Порог проверяется в сборке: JaCoCo `jacocoTestCoverageVerification` (LINE ≥ 0.80) подключён к `:domain:check`
 
 ### Phase 3. Порты приложения (`application/port`) и use cases
 
