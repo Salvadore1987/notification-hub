@@ -113,8 +113,8 @@
 > Реализации use case помечены `@Service`/`@Transactional`, но бинов output-портов ещё нет — контекст Spring поднимется
 > после Phase 4 (персистентность) и явного wiring в `bootstrap`. Компиляция, unit-тесты и ArchUnit от этого не зависят.
 >
-> После Phase 4 закрыты порты персистентности и `ClockPort`, после Phase 5 — `StatusPublisherPort`; контекст всё ещё
-> не стартует целиком — ждут своих фаз `SecretResolverPort` (Phase 7), `FrequencyCounterPort` (Phase 10),
+> После Phase 4 закрыты порты персистентности и `ClockPort`, после Phase 5 — `StatusPublisherPort`, после Phase 7 —
+> `SecretResolverPort`; контекст всё ещё не стартует целиком — ждут своих фаз `FrequencyCounterPort` (Phase 10),
 > `MetricsPort` (Phase 13), `KillSwitchPort` (Phase 14), `CustomerPreferencePort` (фаза 2 по SRS).
 
 ### Phase 4. Персистентность (`adapter/out/persistence`) — PostgreSQL
@@ -191,8 +191,8 @@
   `CallbackGuard` (IP allowlist + общий секрет, сравнение секрета в постоянном времени, конфигурация на
   провайдера), ответ на отказ — голый 403 без причины. Идемпотентность обеспечивает `ProcessProviderStatus`
   (AD-06): отчёт, ничего не изменивший, тоже отвечает 200, иначе провайдер будет ретраить бесконечно.
-  ⚠️ Сами трансляторы payload'ов (`ProviderCallbackTranslator`) приходят с адаптерами провайдеров в Phase 7 —
-  до этого настроенный провайдер без транслятора получает 404
+  Сами трансляторы payload'ов (`ProviderCallbackTranslator`) живут в пакетах адаптеров провайдеров (Phase 7);
+  настроенный провайдер без транслятора получает 404
 - ✅ Трансляция транспортных DTO → Command (AR-06), обработчики ошибок в `handlers/` — `adapter/in/contract`
   (общий для REST и Kafka: §8.2 говорит «тело = IK-03», поэтому парсер один) + MapStruct-мапперы
   `InboundPayloadMapper` и `RestResponseMapper`
@@ -209,16 +209,52 @@
 
 ### Phase 7. Адаптеры провайдеров — SMS (этап MVP, §16 этап 2)
 
-- [ ] Общий каркас адаптеров: таймауты, retry+backoff+jitter, circuit breaker (Resilience4j), Virtual Threads (PR-01, AR-07)
-- [ ] Секреты только из `SecretResolverPort` (Vault/K8s), маскирование в логах (SEC-04, SG-04, PR-03)
-- [ ] **Playmobile** адаптер `SmsProviderPort`: маппинг `Message`→`/send` (одиночный/батч), классификация ошибок 100–411 (PM-01, §18.1)
-- [ ] Playmobile приоритеты `realtime/high/normal/low` по классу трафика (PM-03)
-- [ ] Playmobile callback DLR → канонические статусы (§18.1, PM-02)
-- [ ] **SMS Gate** адаптер `SmsProviderPort`: `/api/v2/send`, `/send_msgs`, `weight`, коды 0–27 (SG-01, §18.2)
-- [ ] SMS Gate FEEDBACK DLR → канонические (§18.2, SG-02); реконсиляция `/api/v2/search` (SG-03)
-- [ ] Троттлинг с учётом лимитов (SMS Gate 50 SMS/час/номер) (FR-2.5, §18.2)
+- ✅ Общий каркас адаптеров: таймауты, retry+backoff+jitter, circuit breaker (Resilience4j), Virtual Threads (PR-01, AR-07)
+  — `adapter/out/provider/support`: `ProviderRestClients` (JDK-клиент на виртуальных потоках, connect/read таймауты
+  обязательны), `ProviderCallExecutor` (Retry + CircuitBreaker на провайдера, реестры Resilience4j заводятся явным
+  `@Configuration`, без AOP), `ProviderThrottle`, `Masking`. Контракт каркаса: вызов **возвращает** `ProviderAck` на
+  любой ответ провайдера и **бросает** `ProviderCallException` только когда ответа не было — ретрай и breaker видят
+  исключение, поэтому поток отказов по контенту никогда не открывает breaker
+- ✅ Секреты только из `SecretResolverPort` (Vault/K8s), маскирование в логах (SEC-04, SG-04, PR-03)
+  — `adapter/out/secret`: схемы `env:`/`file:`/`prop:`, без схемы — файл в смонтированном каталоге секретов
+  (проверка выхода за каталог), кэш с TTL ⇒ ротация без рестарта. В Vault Hub не ходит сам: токен Vault — ещё один
+  секрет, а реестр на пути каждой отправки — ещё одна точка отказа; секреты рендерит Vault-agent в том пода.
+  Заодно закрыт долг Phase 6: секрет callback'а (`commhub.callback.providers.<code>.secret-ref`) тоже идёт через
+  резолвер, а нерезолвящаяся ссылка отклоняет вызов, а не отключает проверку молча
+- ✅ **Playmobile** адаптер `SmsProviderPort`: маппинг `Message`→`/send` (одиночный/батч), классификация ошибок 100–411 (PM-01, §18.1)
+  — `PlaymobileSendCodec` (документ §9.1 по полям, включая `timing` и `template-id`/`variables` FR-4.5),
+  `PlaymobileErrorCatalog` (100 → retryable, 102 → blocking + breaker, остальное → non-retryable; неизвестный код
+  тоже non-retryable — HTTP 400 уже сказал, что запрос отвергнут). Ретрай внутри попытки разрешён: `message-id`
+  генерирует Hub, повтор дедуплицируется провайдером
+- ✅ Playmobile приоритеты `realtime/high/normal/low` по классу трафика (PM-03)
+  — класс трафика задаёт нижнюю границу, сообщение может её поднять, но не в классе `NOTIFICATION`: полоса OTP
+  принадлежит классу (он приходит из топика), а не документу (TC-01)
+- ✅ Playmobile callback DLR → канонические статусы (§18.1, PM-02)
+  — `PlaymobileCallbackTranslator` + `PlaymobileStatusCatalog`. Отчёт без `message-id`/`status` — нарушение
+  контракта (отказ с указанием поля); отчёт с незнакомым словом статуса **отбрасывается с WARN и отвечается 200**:
+  §18.1 сам говорит, что точный перечень фиксируется на интеграции, а отказ заставит провайдера ретраить вечно
+- ✅ **SMS Gate** адаптер `SmsProviderPort`: `/api/v2/send`, `/send_msgs`, `weight`, коды 0–27 (SG-01, §18.2)
+  — `SmsGateSendCodec` + `SmsGateResponseCatalog`: 10–13 → blocking, 27 → retryable, 1 (спам-лимит) → retryable
+  **без** записи в счётчик отказов провайдера, 20 → non-retryable + инвалидация адреса. Ретрая внутри попытки нет:
+  `/api/v2/send` не принимает клиентский id, повтор после потерянного ответа — второе SMS клиенту
+- ✅ SMS Gate FEEDBACK DLR → канонические (§18.2, SG-02); реконсиляция `/api/v2/search` (SG-03)
+  — `SmsGateCallbackTranslator` (тело JSON или form-поля), `SmsGateStatusCatalog`, `SmsGateReconciler` (планировщик,
+  выключен по умолчанию) + новый generic-метод порта `MessageRepository.findAwaitingDeliveryReport`.
+  Два осознанных отступления от таблицы §18.2: код 6 (Unknown) не применяется вовсе — «неизвестно» не исход, его
+  разбирает реконсиляция; код 7 (InBlackList) даёт `UNDELIVERED`, а не `REJECTED` — из `SENT_TO_PROVIDER` перехода
+  в `REJECTED` нет (ST-01), кандидатура в suppression несётся отдельным признаком
+- ✅ Троттлинг с учётом лимитов (SMS Gate 50 SMS/час/номер) (FR-2.5, §18.2)
+  — `ProviderThrottle`: TPS, лимит в минуту и почасовой потолок на номер; in-memory на инстанс (как лимитер IR-02),
+  поэтому по умолчанию целимся в 45/час, а не в 50. Задержанное сообщение получает retryable-ack и уходит к
+  резервному провайдеру, а не в DLQ
 - [ ] (Опция) SMPP-адаптер — за флагом конфигурации, в MVP выключен (PM-04)
-- [ ] Contract-тесты на WireMock-стабах из документации провайдеров (QA-04, PR-04)
+  — **сознательно не реализован.** §9.1 фиксирует MVP на HTTP, PM-04 помечает SMPP как опцию. Это второй транспорт
+  (bind/enquire_link, оконность, своя склейка сегментов), а не вариация текущего: пустышка за флагом хуже отсутствия.
+  Обоснование продублировано в `adapter/out/provider/package-info.java`
+- ✅ Contract-тесты на WireMock-стабах из документации провайдеров (QA-04, PR-04)
+  — `PlaymobileSmsAdapterIT` (6) и `SmsGateSmsAdapterIT` (7) на WireMock: форма запроса, Basic auth / login+key,
+  классификация кодов, открытие breaker'а, read timeout, поэлементные ответы батча, троттлинг.
+  Плюс 99 unit-тестов на кодеки, таблицы §18.1/§18.2, каркас и секрет-резолвер
 
 ### Phase 8. Маршрутизация, каналы, провайдеры, квоты (конфигурация в БД)
 

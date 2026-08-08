@@ -13,9 +13,9 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
  * The translators this build knows, indexed by provider code (AR-04).
  *
  * <p>Populated by injection, so a provider adapter joins the callback endpoint by existing as a bean —
- * the registry itself never learns about any particular provider. Empty until Phase 7 brings the SMS
- * adapters, which is why the endpoint answers 404 rather than pretending to accept reports it cannot
- * interpret.
+ * the registry itself never learns about any particular provider. A provider that is configured but
+ * whose adapter is switched off contributes no translator, and the endpoint answers 404 rather than
+ * pretending to accept reports it cannot interpret.
  */
 @Component
 public class ProviderCallbackRegistry {

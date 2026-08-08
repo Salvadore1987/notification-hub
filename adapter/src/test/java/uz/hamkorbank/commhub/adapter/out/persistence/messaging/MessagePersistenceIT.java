@@ -182,6 +182,25 @@ class MessagePersistenceIT extends AbstractPersistenceIT {
     }
 
     @Test
+    @DisplayName("messages a provider accepted and never reported on are found for reconciliation (SG-03)")
+    void findsMessagesAwaitingADeliveryReport() {
+        // Arrange
+        Message overdue = sentToProvider("abc0000010", ProviderMessageId.of("pm-0010"), ACCEPTED_AT.plusSeconds(5));
+        Message justSent = sentToProvider("abc0000011", ProviderMessageId.of("pm-0011"), ACCEPTED_AT.plusSeconds(30));
+        Message delivered = sentToProvider("abc0000012", ProviderMessageId.of("pm-0012"), ACCEPTED_AT.plusSeconds(5));
+        delivered.markDelivered("delivered", Actor.provider("PLAYMOBILE"), ACCEPTED_AT.plusSeconds(60));
+        messages.save(delivered);
+
+        // Act: everything accepted more than a minute after acceptance is still too fresh to chase.
+        List<Message> awaiting =
+                messages.findAwaitingDeliveryReport(ProviderCode.of("PLAYMOBILE"), ACCEPTED_AT.plusSeconds(10), 50);
+
+        // Assert
+        assertThat(awaiting).extracting(Message::id).containsExactly(overdue.id());
+        assertThat(awaiting).extracting(Message::id).doesNotContain(justSent.id(), delivered.id());
+    }
+
+    @Test
     @DisplayName("dispatchable messages are limited to the traffic class and to what may be sent now (TC-01)")
     void findsDispatchableOfTrafficClass() {
         // Arrange
@@ -289,6 +308,19 @@ class MessagePersistenceIT extends AbstractPersistenceIT {
 
     private Message accepted(String externalId) {
         return accepted(externalId, TrafficClass.TRANSACTIONAL, Timing.immediate());
+    }
+
+    /** A message the provider accepted at {@code respondedAt} and has not reported on since (SG-03). */
+    private Message sentToProvider(String externalId, ProviderMessageId providerMessageId, Instant respondedAt) {
+        Message message = accepted(externalId);
+        message.markValidated(Actor.system(), ACCEPTED_AT.plusSeconds(1));
+        message.markRouted(Channel.SMS, PLAYMOBILE, Actor.system(), ACCEPTED_AT.plusSeconds(2));
+        message.markQueued(Actor.system(), ACCEPTED_AT.plusSeconds(3));
+        message.markSending(Actor.system(), ACCEPTED_AT.plusSeconds(4));
+        message.startAttempt(providerMessageId, ACCEPTED_AT.plusSeconds(4))
+                .succeed("200", providerMessageId, respondedAt);
+        message.markSentToProvider("accepted", Actor.provider("PLAYMOBILE"), respondedAt);
+        return messages.save(message);
     }
 
     private Message accepted(String externalId, TrafficClass trafficClass, Timing timing) {

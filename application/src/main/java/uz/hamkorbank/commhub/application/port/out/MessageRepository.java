@@ -44,6 +44,17 @@ public interface MessageRepository {
     /** In-flight messages whose TTL or send window has elapsed (FR-3.4). */
     List<Message> findExpired(Instant now, int limit);
 
+    /**
+     * Messages a provider accepted but never reported on: still {@code SENT_TO_PROVIDER}, with the
+     * accepting attempt older than {@code acceptedBefore}.
+     *
+     * <p>Feeds the status reconciliation of a provider whose delivery reports can be lost (SG-03), and
+     * later the health view that notices a provider which has stopped reporting at all (PR-02). The
+     * query is provider-generic on purpose — it asks about the canonical model, not about anyone's API,
+     * so a second provider needing reconciliation adds an adapter and nothing here (AR-04).
+     */
+    List<Message> findAwaitingDeliveryReport(ProviderCode providerCode, Instant acceptedBefore, int limit);
+
     /** Number of messages of a batch that already reached a terminal status (FR-3.1). */
     long countTerminalByBatch(BatchId batchId);
 }
