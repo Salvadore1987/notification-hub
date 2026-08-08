@@ -18,6 +18,11 @@
 ```
 
 Тесты с тегом `integration` исключены из задачи `test` и запускаются только через `integrationTest`.
+Полный контекст приложения поднимают `ApplicationContextIT` и `ProviderAdaptersContextIT` (модуль
+`bootstrap`) — если сборка падает на них, сломана не логика, а wiring или конфигурация.
+
+Нагрузочные сценарии (QA-05) живут в `load/k6` и Gradle'ом не запускаются: им нужен контур, а не
+ноутбук. Предусловия и что прикладывать к приёмке — в `load/README.md`.
 
 ## Локальное окружение
 
@@ -112,4 +117,6 @@ Trunk-based с короткоживущими ветками от `main`:
 подключаются к корпоративному конвейеру (Jenkins/GitLab CI, SonarQube, Nexus IQ, SEC-09):
 
 1. `./gradlew build` — компиляция, Spotless, Checkstyle, unit-тесты, ArchUnit (AR-02/AR-03, QA-01, QA-02);
-2. `./gradlew integrationTest` — Testcontainers (PostgreSQL, Kafka), WireMock-стабы (QA-03, DB-01).
+2. `./gradlew integrationTest` — Testcontainers (PostgreSQL, Kafka), WireMock-стабы и GreenMail: полный
+   контекст, приёмочные сценарии QA-08 и chaos QA-06 (`docker pause` настоящих контейнеров) (QA-03, DB-01);
+3. `k6 run load/k6/...` на тестовом контуре — NF-01 и TC-01 (QA-05), отчёт прикладывается к приёмке.

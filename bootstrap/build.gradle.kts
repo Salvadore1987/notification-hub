@@ -27,6 +27,9 @@ dependencies {
     // Ассерты приёмочных сценариев читают таблицы напрямую: проверяется, что записал адаптер,
     // а не что вернул тот же адаптер (QA-03, QA-08).
     testImplementation(libs.spring.boot.starter.data.jdbc)
+    // Приёмочные сценарии ходят в Модуль по HTTP, как система-источник: RestClient, а не MockMvc —
+    // §8.2 обещан по сети, и сериализация с кодами ответов входят в обещание (QA-08).
+    testImplementation(libs.spring.boot.starter.web)
 
     // ArchUnit видит классы всех слоёв через runtime classpath (AR-03, QA-02)
     testImplementation(libs.archunit)
