@@ -112,6 +112,54 @@ public final class Message extends AggregateRoot<MessageId> {
                 acceptedAt);
     }
 
+    private Message(Rehydration source) {
+        super(Guard.notNull(Guard.notNull(source, "source").envelope, "Message.envelope")
+                .id());
+        this.envelope = source.envelope;
+        this.recipient = Guard.notNull(source.recipient, "Message.recipient");
+        this.channelPlan = Guard.notNull(source.channelPlan, "Message.channelPlan");
+        this.contents = Guard.notNull(source.contents, "Message.contents");
+        this.template = source.template;
+        this.timing = Guard.notNull(source.timing, "Message.timing");
+        this.acceptedAt = Guard.notNull(source.acceptedAt, "Message.acceptedAt");
+        requirePlanIsServedByContents(source.channelPlan, source.contents);
+        this.status = Guard.notNull(source.status, "Message.status");
+        this.statusReason = source.statusReason;
+        this.selectedChannel = source.selectedChannel;
+        this.selectedProvider = source.selectedProvider;
+        this.segments = Guard.notNegative(source.segments, "Message.segments");
+        this.cost = source.cost;
+        this.terminalAt = source.terminalAt;
+        this.duplicateOf = source.duplicateOf;
+        this.test = source.test;
+        this.statusHistory.addAll(source.statusHistory);
+        this.attempts.addAll(source.attempts);
+        Guard.isTrue(
+                !source.status.isTerminal() || source.terminalAt != null,
+                "a message in terminal status " + source.status + " must carry terminalAt");
+        Guard.isTrue(!this.statusHistory.isEmpty(), "Message.statusHistory must not be empty");
+    }
+
+    /**
+     * Starts the reconstitution of a message that was read back from storage (§10.1 {@code message}).
+     *
+     * <p>Reconstitution deliberately bypasses the status machine: the stored state is the outcome of
+     * transitions that were already validated when they happened, and replaying them would rewrite the
+     * recorded actors and provider codes of the history (ST-01). Everything else — the channel plan
+     * being served by the contents, the presence of {@code terminalAt} for terminal statuses — is still
+     * checked, so a corrupted row fails fast instead of entering the pipeline.
+     */
+    public static Rehydration rehydrate(
+            MessageEnvelope envelope,
+            Recipient recipient,
+            ChannelPlan channelPlan,
+            MessageContents contents,
+            TemplateRef template,
+            Timing timing,
+            Instant acceptedAt) {
+        return new Rehydration(envelope, recipient, channelPlan, contents, template, timing, acceptedAt);
+    }
+
     // ---------------------------------------------------------------------
     // Status machine (ST-01, ST-02)
     // ---------------------------------------------------------------------
@@ -397,6 +445,102 @@ public final class Message extends AggregateRoot<MessageId> {
                 Guard.isTrue(
                         plan.channels().isEmpty() || plan.channels().stream().anyMatch(contents::supports),
                         "channel plan candidates carry no content: " + plan.channels());
+        }
+    }
+
+    /**
+     * Collects the stored state of a message before handing it back to the pipeline (§10.1).
+     *
+     * <p>A builder rather than a record: the aggregate carries far more state than the eight components
+     * a record header may declare, and the mutable part of it is optional — a message that never left
+     * {@code ACCEPTED} has no route, no cost and no attempts.
+     */
+    public static final class Rehydration {
+
+        private final MessageEnvelope envelope;
+        private final Recipient recipient;
+        private final ChannelPlan channelPlan;
+        private final MessageContents contents;
+        private final TemplateRef template;
+        private final Timing timing;
+        private final Instant acceptedAt;
+        private final List<StatusChange> statusHistory = new ArrayList<>();
+        private final List<DeliveryAttempt> attempts = new ArrayList<>();
+
+        private MessageStatus status = MessageStatus.ACCEPTED;
+        private RejectionReason statusReason;
+        private Channel selectedChannel;
+        private ProviderRef selectedProvider;
+        private int segments;
+        private Money cost;
+        private Instant terminalAt;
+        private MessageId duplicateOf;
+        private boolean test;
+
+        private Rehydration(
+                MessageEnvelope envelope,
+                Recipient recipient,
+                ChannelPlan channelPlan,
+                MessageContents contents,
+                TemplateRef template,
+                Timing timing,
+                Instant acceptedAt) {
+            this.envelope = envelope;
+            this.recipient = recipient;
+            this.channelPlan = channelPlan;
+            this.contents = contents;
+            this.template = template;
+            this.timing = timing;
+            this.acceptedAt = acceptedAt;
+        }
+
+        /** Current canonical status with its reason and, for terminal statuses, the instant reached. */
+        public Rehydration status(MessageStatus currentStatus, RejectionReason reason, Instant reachedTerminalAt) {
+            this.status = currentStatus;
+            this.statusReason = reason;
+            this.terminalAt = reachedTerminalAt;
+            return this;
+        }
+
+        /** Channel and provider chosen by the router; both {@code null} while the message is unrouted. */
+        public Rehydration route(Channel channel, ProviderRef provider) {
+            this.selectedChannel = channel;
+            this.selectedProvider = provider;
+            return this;
+        }
+
+        public Rehydration billing(int segmentCount, Money messageCost) {
+            this.segments = segmentCount;
+            this.cost = messageCost;
+            return this;
+        }
+
+        public Rehydration duplicateOf(MessageId originalMessageId) {
+            this.duplicateOf = originalMessageId;
+            return this;
+        }
+
+        public Rehydration test(boolean testMessage) {
+            this.test = testMessage;
+            return this;
+        }
+
+        /** Full history in chronological order, starting with the {@code ACCEPTED} entry (ST-01). */
+        public Rehydration statusHistory(List<StatusChange> history) {
+            this.statusHistory.clear();
+            this.statusHistory.addAll(Guard.copyOf(history));
+            return this;
+        }
+
+        /** Delivery attempts in attempt-number order (§10.1 {@code delivery_attempt}). */
+        public Rehydration attempts(List<DeliveryAttempt> deliveryAttempts) {
+            this.attempts.clear();
+            this.attempts.addAll(Guard.copyOf(deliveryAttempts));
+            return this;
+        }
+
+        public Message build() {
+            return new Message(this);
         }
     }
 }
