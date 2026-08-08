@@ -428,7 +428,7 @@ class SubmitMessageServiceTest {
         // Assert
         assertThat(stream.lastActivityAt()).contains(NOW);
         verify(streams).save(stream);
-        verify(metrics).messageAccepted(STREAM_ID, TrafficClass.TRANSACTIONAL, Channel.SMS);
+        verify(metrics).messageAccepted(STREAM_ID, TrafficClass.TRANSACTIONAL, Channel.SMS, false);
     }
 
     @Test
@@ -460,7 +460,7 @@ class SubmitMessageServiceTest {
                 contents,
                 null,
                 null,
-                new SubmitMessageCommand.Delivery(trafficClass, null, null, null, null, false));
+                new SubmitMessageCommand.Delivery(trafficClass, null, null, null, null, false, null));
     }
 
     private static SubmitMessageCommand commandWithTemplate(Map<String, String> variables) {

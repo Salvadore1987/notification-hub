@@ -1,5 +1,6 @@
 package uz.hamkorbank.commhub.application.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -20,6 +21,7 @@ import uz.hamkorbank.commhub.application.service.pipeline.PipelineVerdict;
 import uz.hamkorbank.commhub.application.service.pipeline.QuotaSubject;
 import uz.hamkorbank.commhub.application.service.pipeline.TemplateOutcome;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
+import uz.hamkorbank.commhub.application.service.support.PipelineStages;
 import uz.hamkorbank.commhub.application.service.support.RoutingOutcome;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.Actor;
@@ -36,6 +38,7 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.DedupKey;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
+import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.service.RoutingResult;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
@@ -82,6 +85,7 @@ public class SubmitMessageService implements SubmitMessage {
     @Transactional
     public SubmitMessageResult submit(SubmitMessageCommand command) {
         Guard.notNull(command, "command");
+        long startedAt = System.nanoTime();
         Instant now = clock.now();
         Optional<Stream> source = streams.findById(command.streamId());
         if (source.isEmpty()) {
@@ -109,7 +113,7 @@ public class SubmitMessageService implements SubmitMessage {
             return refuse(
                     command, template.verdict().reason(), template.verdict().detail());
         }
-        return accept(command, stream, trafficClass, template.contents(), dedupKey, now);
+        return accept(command, stream, trafficClass, template.contents(), dedupKey, now, startedAt);
     }
 
     /** Builds the aggregate and runs the stages that need it (FR-1.4, MP-05, FR-5.1…FR-5.4, FR-2.6). */
@@ -119,7 +123,8 @@ public class SubmitMessageService implements SubmitMessage {
             TrafficClass trafficClass,
             MessageContents contents,
             DedupKey dedupKey,
-            Instant now) {
+            Instant now,
+            long startedAt) {
         Message message;
         try {
             message = build(command, stream, trafficClass, contents, dedupKey, now);
@@ -137,12 +142,14 @@ public class SubmitMessageService implements SubmitMessage {
         if (owner.isPresent()) {
             return duplicate(command, owner.get());
         }
-        return route(message, stream, now);
+        return route(message, stream, now, startedAt, command.delivery().pinnedProvider());
     }
 
     /** Chooses the route, applies the filters and quotas, and queues the message (FR-2.2, FR-5.3). */
-    private SubmitMessageResult route(Message message, Stream stream, Instant now) {
-        RoutingOutcome outcome = pipeline.route(message, Set.of());
+    private SubmitMessageResult route(
+            Message message, Stream stream, Instant now, long startedAt, ProviderRef pinnedProvider) {
+        RoutingOutcome outcome =
+                pinnedProvider == null ? pipeline.route(message, Set.of()) : pipeline.routeTo(message, pinnedProvider);
         if (!outcome.isRouted()) {
             RoutingResult.NoRoute noRoute = outcome.noRoute().orElseThrow();
             return reject(message, noRoute.reason(), noRoute.detail(), now);
@@ -169,6 +176,12 @@ public class SubmitMessageService implements SubmitMessage {
         messages.save(message);
         notifier.publish(message, change);
         notifier.recordAccepted(message);
+        // Only the accepted path is timed: a rejection's latency is not what NF-01 or TC-01 promise, and
+        // mixing the two would let a burst of refusals flatter the histogram the OTP SLA is read from.
+        notifier.recordStage(
+                PipelineStages.ACCEPT,
+                message.envelope().trafficClass(),
+                Duration.ofNanos(System.nanoTime() - startedAt));
         touch(stream, now);
         return mapper.toSubmitResult(message);
     }

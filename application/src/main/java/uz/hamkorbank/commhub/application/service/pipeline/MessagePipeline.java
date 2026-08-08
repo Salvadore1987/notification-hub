@@ -95,6 +95,11 @@ public class MessagePipeline {
         return routing.route(message, excludedProviders);
     }
 
+    /** Routes onto one named provider — the configuration test send of FR-7.4 and nothing else. */
+    public RoutingOutcome routeTo(Message message, ProviderRef pinnedProvider) {
+        return routing.routeTo(message, pinnedProvider);
+    }
+
     public Optional<Money> costOf(RoutingOutcome outcome, ProviderRef provider, int segments) {
         return routing.costOf(outcome, provider, segments);
     }

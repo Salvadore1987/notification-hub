@@ -37,6 +37,7 @@ import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.OutboxEvent;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
 import uz.hamkorbank.commhub.application.port.out.PendingOutboxEvent;
+import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.StatusPublisherPort;
 import uz.hamkorbank.commhub.application.service.PublishOutboxEventsService;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
@@ -265,6 +266,7 @@ class OutboxRelayIT {
         AbstractPersistenceIT.PersistenceTestConfig.class,
         KafkaProducerConfig.class,
         StatusEventCodec.class,
+        PushTokenEventCodec.class,
         KafkaStatusPublisherAdapter.class
     })
     static class RelayTestConfig {
@@ -274,10 +276,32 @@ class OutboxRelayIT {
             return KafkaConnectionProperties.of(KafkaBroker.bootstrapServers());
         }
 
+        /**
+         * The client-security configurer of SEC-01, configured with nothing.
+         *
+         * <p>The local broker takes no credentials, and a test that authenticated would test the broker's
+         * configuration instead of the Hub's. The configurer still has to exist: production wires it into
+         * both clients, and a test context without it would prove those clients can be built without it.
+         */
+        @Bean
+        KafkaSecurityConfigurer kafkaSecurityConfigurer() {
+            return new KafkaSecurityConfigurer(KafkaSecurityProperties.none(), new SecretResolverPort() {
+                @Override
+                public java.util.Optional<String> resolve(String secretRef) {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public String require(String secretRef) {
+                    throw new IllegalStateException("no secret store in the integration context");
+                }
+            });
+        }
+
         @Bean
         KafkaOutboundProperties kafkaOutboundProperties() {
             return new KafkaOutboundProperties(
-                    STATUS_TOPIC, DLQ_TOPIC, null, Duration.ofSeconds(20), true, 1, (short) 1);
+                    STATUS_TOPIC, DLQ_TOPIC, null, null, Duration.ofSeconds(20), true, 1, (short) 1);
         }
 
         @Bean

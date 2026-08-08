@@ -1,0 +1,98 @@
+{
+  "uid": "commhub-infrastructure",
+  "title": "Notification Hub — инфраструктура",
+  "description": "JVM, пул соединений, клиенты Kafka и очереди Модуля (OBS-05, NF-05). Отвечает на вопрос «дело в Модуле или под ним».",
+  "tags": ["commhub", "infrastructure"],
+  "timezone": "Asia/Tashkent",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "datasource", "type": "datasource", "query": "prometheus", "current": {} },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(jvm_memory_used_bytes{application=\"notification-hub\"}, instance)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Лаг консьюмеров по классам трафика",
+      "description": "TC-01: у каждого класса своя группа и свои потоки, поэтому лаг разделён. Растущий лаг critical при спокойных остальных означает проблему на приёме OTP, обратное — работающую изоляцию.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "max by (client_id) (kafka_consumer_fetch_manager_records_lag_max{instance=~\"$instance\"})",
+          "legendFormat": "{{client_id}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Пул соединений PostgreSQL",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{pool=\"commhub-pool\",instance=~\"$instance\"}",
+          "legendFormat": "active {{instance}}"
+        },
+        {
+          "expr": "hikaricp_connections_pending{pool=\"commhub-pool\",instance=~\"$instance\"}",
+          "legendFormat": "pending {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Память JVM",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "sum by (instance, area) (jvm_memory_used_bytes{application=\"notification-hub\",instance=~\"$instance\"})",
+          "legendFormat": "{{instance}} {{area}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Очереди Модуля: outbox и DLQ",
+      "description": "AD-03 и FR-3.3. Это состояния, а не события: их измеряют, а не считают.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "max(commhub_outbox_pending)", "legendFormat": "outbox pending" },
+        { "expr": "max(commhub_outbox_oldest_age_seconds)", "legendFormat": "outbox oldest age, s" },
+        { "expr": "max(commhub_dlq_depth)", "legendFormat": "dlq depth" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP: приём систем-источников",
+      "description": "IR-02 (429 — сработал лимит потока) и IR-01 (4xx — отказ конвейера как problem+json).",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (uri, status) (rate(http_server_requests_seconds_count{uri=~\"/api/v1.*\",instance=~\"$instance\"}[5m]))",
+          "legendFormat": "{{uri}} {{status}}"
+        }
+      ]
+    }
+  ]
+}

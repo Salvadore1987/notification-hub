@@ -1,0 +1,180 @@
+# Правила алертинга Notification Hub (OBS-04).
+#
+# Пороги — стартовые значения, согласуемые с эксплуатацией Банка после первых недель трафика:
+# алерт, который срабатывает каждый день, перестают читать через неделю.
+#
+# Все бизнес-правила фильтруют test="false" (FR-7.4): тестовая отправка администратора не должна
+# ни поднимать алерт, ни гасить его.
+groups:
+  - name: notification-hub-sla
+    interval: 30s
+    rules:
+      # TC-01: p99 от приёма до передачи провайдеру ≤ 5 с для класса CRITICAL_OTP.
+      # Гистограмма, а не посчитанный перцентиль: считаем по всему деплойменту, а не по инстансу.
+      - alert: CommHubOtpSlaBreached
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              rate(commhub_pipeline_stage_seconds_bucket{stage="accept-to-provider",traffic_class="CRITICAL_OTP"}[5m])
+            )
+          ) > 5
+        for: 5m
+        labels:
+          severity: critical
+          requirement: TC-01
+        annotations:
+          summary: "p99 OTP accept→provider превысил 5 с"
+          description: "SLA OTP нарушен на протяжении 5 минут. Смотреть: очередь провайдера, состояние breaker'ов, лаг топика comm.inbound.critical.v1."
+          runbook: "docs/RUNBOOK.md#нарушение-sla-otp"
+
+      # FR-6.1: доля доставленных. Считается по терминальным статусам, чтобы очередь не выглядела отказом.
+      - alert: CommHubDeliveryRateLow
+        expr: |
+          sum by (channel) (rate(commhub_message_status_total{status="DELIVERED",test="false"}[15m]))
+          /
+          clamp_min(
+            sum by (channel) (
+              rate(commhub_message_status_total{status=~"DELIVERED|UNDELIVERED|FAILED|EXPIRED",test="false"}[15m])
+            ),
+            0.001
+          ) < 0.9
+        for: 15m
+        labels:
+          severity: warning
+          requirement: FR-6.1
+        annotations:
+          summary: "Доставляемость канала {{ $labels.channel }} ниже 90%"
+          runbook: "docs/RUNBOOK.md#падение-доставляемости"
+
+  - name: notification-hub-providers
+    interval: 30s
+    rules:
+      # PR-01: открытый breaker означает, что провайдер не отвечает; failover уже работает,
+      # но эксплуатация должна знать до того, как кончатся резервные.
+      - alert: CommHubCircuitBreakerOpen
+        expr: commhub_provider_circuit_state{state="OPEN"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          requirement: PR-01
+        annotations:
+          summary: "Circuit breaker провайдера {{ $labels.provider }} открыт"
+          runbook: "docs/RUNBOOK.md#провайдер-недоступен"
+
+      - alert: CommHubProviderErrorRateHigh
+        expr: |
+          sum by (provider) (rate(commhub_provider_calls_seconds_count{result!="ACCEPTED"}[10m]))
+          /
+          clamp_min(sum by (provider) (rate(commhub_provider_calls_seconds_count[10m])), 0.001)
+          > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          requirement: FR-6.3
+        annotations:
+          summary: "Более 20% вызовов провайдера {{ $labels.provider }} завершаются ошибкой"
+          runbook: "docs/RUNBOOK.md#деградация-провайдера"
+
+      # Все провайдеры канала недоступны: с этого момента маршрутизация отвечает NO_ROUTE_AVAILABLE.
+      - alert: CommHubChannelWithoutProviders
+        expr: sum by (channel) (rate(commhub_messages_rejected_total{reason="NO_ROUTE_AVAILABLE"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+          requirement: FR-2.2
+        annotations:
+          summary: "Сообщения отклоняются с NO_ROUTE_AVAILABLE"
+          runbook: "docs/RUNBOOK.md#ручной-failover"
+
+  - name: notification-hub-pipeline
+    interval: 30s
+    rules:
+      # AD-03: relay встал. Возраст старейшего неопубликованного события — единственный показатель,
+      # который отличает занятый relay от остановленного.
+      - alert: CommHubOutboxStalled
+        expr: commhub_outbox_oldest_age_seconds > 120
+        for: 5m
+        labels:
+          severity: critical
+          requirement: AD-03
+        annotations:
+          summary: "Outbox не публикуется: старейшему событию {{ $value | humanizeDuration }}"
+          runbook: "docs/RUNBOOK.md#не-публикуются-статусы"
+
+      - alert: CommHubDlqGrowing
+        expr: commhub_dlq_depth > 100 and deriv(commhub_dlq_depth[30m]) > 0
+        for: 30m
+        labels:
+          severity: warning
+          requirement: FR-3.3
+        annotations:
+          summary: "DLQ растёт и содержит {{ $value }} сообщений"
+          runbook: "docs/RUNBOOK.md#разбор-dlq"
+
+      # TC-01: лаг класса CRITICAL_OTP — первый признак того, что изоляция классов не работает.
+      - alert: CommHubCriticalConsumerLag
+        expr: max by (client_id) (kafka_consumer_fetch_manager_records_lag_max{client_id=~".*critical.*"}) > 1000
+        for: 5m
+        labels:
+          severity: critical
+          requirement: TC-01
+        annotations:
+          summary: "Лаг консьюмера критичного класса: {{ $value }} записей"
+          runbook: "docs/RUNBOOK.md#растёт-лаг-консьюмера"
+
+      - alert: CommHubQuotaExhausted
+        expr: sum by (stream, channel) (rate(commhub_quota_breached_total{verdict="BLOCKED"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+          requirement: FR-2.6
+        annotations:
+          summary: "Квота потока {{ $labels.stream }} исчерпана, сообщения отклоняются"
+          runbook: "docs/RUNBOOK.md#исчерпание-квоты"
+
+      # SEC-05: находка PAN всегда считается, даже в режиме наблюдения — именно ненулевое значение
+      # при pan-blocking=false и есть то, на что нужно реагировать.
+      - alert: CommHubPanDetected
+        expr: sum(rate(commhub_pan_detected_total[15m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+          requirement: SEC-05
+        annotations:
+          summary: "В контенте сообщений обнаружен полный номер карты"
+          runbook: "docs/RUNBOOK.md#pan-в-контенте"
+
+  - name: notification-hub-infrastructure
+    interval: 30s
+    rules:
+      - alert: CommHubDown
+        expr: up{job="notification-hub"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          requirement: NF-05
+        annotations:
+          summary: "Инстанс Notification Hub недоступен для скрейпа"
+          runbook: "docs/RUNBOOK.md#инстанс-не-поднимается"
+
+      - alert: CommHubDatabaseUnavailable
+        expr: hikaricp_connections_pending{pool="commhub-pool"} > 5
+        for: 5m
+        labels:
+          severity: critical
+          requirement: NF-05
+        annotations:
+          summary: "Запросы ждут соединения с PostgreSQL"
+          runbook: "docs/RUNBOOK.md#база-данных-недоступна"
+
+      - alert: CommHubKafkaUnavailable
+        expr: |
+          sum(rate(kafka_producer_record_error_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+          requirement: NF-05
+        annotations:
+          summary: "Продюсер Kafka получает ошибки при публикации"
+          runbook: "docs/RUNBOOK.md#kafka-недоступна"

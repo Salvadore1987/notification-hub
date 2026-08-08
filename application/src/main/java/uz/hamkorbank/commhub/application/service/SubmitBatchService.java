@@ -138,6 +138,6 @@ public class SubmitBatchService implements SubmitBatch {
                 item.contents(),
                 item.channelPlanOptional().orElseGet(() -> ChannelPlan.explicitChannel(batch.channel())),
                 item.template(),
-                new SubmitMessageCommand.Delivery(null, null, batch.timing(), null, null, false));
+                new SubmitMessageCommand.Delivery(null, null, batch.timing(), null, null, false, null));
     }
 }

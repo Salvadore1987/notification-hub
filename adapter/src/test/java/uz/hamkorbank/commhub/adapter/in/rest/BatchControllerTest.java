@@ -33,6 +33,9 @@ import uz.hamkorbank.commhub.adapter.in.rest.problem.ProblemFactory;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.RateLimitProperties;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamLimits;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamRateLimiter;
+import uz.hamkorbank.commhub.adapter.in.rest.security.AuthenticatedCaller;
+import uz.hamkorbank.commhub.adapter.in.rest.security.SecurityProperties;
+import uz.hamkorbank.commhub.adapter.in.rest.security.StreamAccessGuard;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
 import uz.hamkorbank.commhub.application.dto.BatchControlResult;
 import uz.hamkorbank.commhub.application.dto.BatchItemsResult;
@@ -85,12 +88,15 @@ class BatchControllerTest {
 
     @BeforeEach
     void setUp() {
+        AuthenticatedCaller caller = new AuthenticatedCaller(SecurityProperties.disabled());
         BatchController controller = new BatchController(
                 new InboundBatchCodec(new InboundJson(), new InboundPayloadMapperImpl()),
                 submitBatch,
                 new BatchActions(startBatch, pauseBatch, resumeBatch, stopBatch),
                 getBatch,
                 limiterOf(RateLimitProperties.defaults()),
+                new StreamAccessGuard(caller),
+                caller,
                 new RestResponseMapperImpl());
         ProblemFactory problems = new ProblemFactory();
         mockMvc = MockMvcBuilders.standaloneSetup(controller)

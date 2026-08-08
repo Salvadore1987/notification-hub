@@ -1,0 +1,147 @@
+{
+  "uid": "commhub-overview",
+  "title": "Notification Hub — обзор",
+  "description": "Приём, доставка и отказы по всему Модулю (OBS-05). Бизнес-панели фильтруют test=\"false\": тестовые отправки администратора (FR-7.4) в показатели не входят.",
+  "tags": ["commhub", "overview"],
+  "timezone": "Asia/Tashkent",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      },
+      {
+        "name": "stream",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(commhub_messages_accepted_total, stream)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Принято, сообщений/с",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(rate(commhub_messages_accepted_total{test=\"false\",stream=~\"$stream\"}[5m]))",
+          "legendFormat": "accepted"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Доставляемость за 1 ч",
+      "description": "DELIVERED / (DELIVERED+UNDELIVERED+FAILED+EXPIRED). Push терминален на SENT_TO_PROVIDER (PU-12) и в этот показатель не входит.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        {
+          "expr": "sum(rate(commhub_message_status_total{status=\"DELIVERED\",test=\"false\"}[1h])) / clamp_min(sum(rate(commhub_message_status_total{status=~\"DELIVERED|UNDELIVERED|FAILED|EXPIRED\",test=\"false\"}[1h])), 0.001)",
+          "legendFormat": "delivery rate"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p99 OTP accept→provider",
+      "description": "SLA TC-01: p99 ≤ 5 с.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(commhub_pipeline_stage_seconds_bucket{stage=\"accept-to-provider\",traffic_class=\"CRITICAL_OTP\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "DLQ",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "max(commhub_dlq_depth)", "legendFormat": "messages" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Приём по классам трафика",
+      "description": "TC-01: массовая рассылка не должна отражаться на кривой CRITICAL_OTP.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (traffic_class) (rate(commhub_messages_accepted_total{test=\"false\",stream=~\"$stream\"}[5m]))",
+          "legendFormat": "{{traffic_class}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Отказы по причинам (IR-01)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(commhub_messages_rejected_total{stream=~\"$stream\"}[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Латентность этапов конвейера",
+      "description": "accept — приём одного сообщения (NF-01); accept-to-provider — сквозное время до провайдера (TC-01).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, stage, traffic_class) (rate(commhub_pipeline_stage_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{stage}} / {{traffic_class}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Outbox: очередь и возраст старейшего события",
+      "description": "AD-03. Растущий возраст — признак остановившегося relay'я, а не занятого.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "max(commhub_outbox_pending)", "legendFormat": "pending" },
+        { "expr": "max(commhub_outbox_oldest_age_seconds)", "legendFormat": "oldest age, s" }
+      ]
+    }
+  ]
+}

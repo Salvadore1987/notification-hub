@@ -26,12 +26,23 @@ dependencies {
     implementation(libs.jakarta.mail.api)
     runtimeOnly(libs.angus.mail)
 
+    // out/metrics — реализация MetricsPort (OBS-01); реестр Prometheus подключается в bootstrap
+    implementation(libs.micrometer.core)
+
+    // in/rest, in/kafka — correlationId в baggage и трассировка приёма (OBS-02)
+    implementation(libs.micrometer.tracing)
+
+    // in/rest/security — аутентификация систем-источников и RBAC админ-API (SEC-01, SEC-03)
+    implementation(libs.spring.boot.starter.security)
+    implementation(libs.spring.boot.starter.oauth2.resource.server)
+
     // Транспортный DTO <-> Command (AR-06) — только через MapStruct-мапперы
     implementation(libs.mapstruct)
     annotationProcessor(libs.mapstruct.processor)
     testAnnotationProcessor(libs.mapstruct.processor)
 
     testImplementation(libs.spring.boot.starter.test)
+    testImplementation(libs.spring.security.test)
 
     // Персистентность проверяется на настоящем PostgreSQL со схемой из Flyway (QA-03, DB-01),
     // outbox-relay — на настоящем брокере (AD-03, QA-06).

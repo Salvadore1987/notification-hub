@@ -1,5 +1,6 @@
 package uz.hamkorbank.commhub.application.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Optional;
@@ -20,6 +21,7 @@ import uz.hamkorbank.commhub.application.service.pipeline.MessagePipeline;
 import uz.hamkorbank.commhub.application.service.support.DispatchGate;
 import uz.hamkorbank.commhub.application.service.support.DispatchGuards;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
+import uz.hamkorbank.commhub.application.service.support.PipelineStages;
 import uz.hamkorbank.commhub.application.service.support.ProviderGateway;
 import uz.hamkorbank.commhub.application.service.support.RoutingOutcome;
 import uz.hamkorbank.commhub.domain.model.Actor;
@@ -146,6 +148,12 @@ public class DispatchMessageService implements DispatchMessage {
     private DispatchResult sent(Message message, ProviderRef provider, ProviderAck ack) {
         StatusChange change = message.markSentToProvider(
                 ack.providerStatus(), Actor.provider(provider.code().value()), ack.respondedAt());
+        // The SLA of TC-01 is stated accept → provider, so it is measured here and not around the call:
+        // what the customer waits for includes the queueing, the retries and any failover before this ack.
+        notifier.recordStage(
+                PipelineStages.ACCEPT_TO_PROVIDER,
+                message.envelope().trafficClass(),
+                Duration.between(message.acceptedAt(), ack.respondedAt()));
         return complete(message, change, DispatchOutcome.SENT, provider);
     }
 

@@ -1,10 +1,12 @@
 package uz.hamkorbank.commhub.application.service.support;
 
+import java.time.Duration;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.mapper.ProviderSubmissionMapper;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
+import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderPort;
@@ -42,6 +44,7 @@ public class ProviderGateway {
     private final PushFanOut pushFanOut;
     private final ProviderSubmissionMapper mapper;
     private final ProviderMessageIdFactory providerMessageIds;
+    private final MetricsPort metrics;
     private final ClockPort clock;
 
     public ProviderGateway(
@@ -50,12 +53,14 @@ public class ProviderGateway {
             PushFanOut pushFanOut,
             ProviderSubmissionMapper mapper,
             ProviderMessageIdFactory providerMessageIds,
+            MetricsPort metrics,
             ClockPort clock) {
         this.smsPorts = Guard.notNull(smsPorts, "smsPorts");
         this.emailPorts = Guard.notNull(emailPorts, "emailPorts");
         this.pushFanOut = Guard.notNull(pushFanOut, "pushFanOut");
         this.mapper = Guard.notNull(mapper, "mapper");
         this.providerMessageIds = Guard.notNull(providerMessageIds, "providerMessageIds");
+        this.metrics = Guard.notNull(metrics, "metrics");
         this.clock = Guard.notNull(clock, "clock");
     }
 
@@ -84,6 +89,21 @@ public class ProviderGateway {
         Guard.notNull(message, "message");
         Guard.notNull(provider, "provider");
         Guard.notNull(attempt, "attempt");
+        long startedAt = System.nanoTime();
+        ProviderAck ack = call(message, provider, attempt, binding);
+        metrics.providerCall(provider, ack.result(), Duration.ofNanos(System.nanoTime() - startedAt));
+        return ack;
+    }
+
+    /**
+     * Timed here and not in the adapters (PR-03, OBS-01).
+     *
+     * <p>What the saga waits for is the answer, including the retries and the throttle wait the framework
+     * of Phase 7 puts around the HTTP call and including the fan-out of a push message to several devices
+     * (PU-09). Measuring inside an adapter would time the last HTTP request instead.
+     */
+    private ProviderAck call(
+            Message message, ProviderRef provider, DeliveryAttempt attempt, ProviderTemplateBinding binding) {
         try {
             return switch (provider.channel()) {
                 case SMS ->

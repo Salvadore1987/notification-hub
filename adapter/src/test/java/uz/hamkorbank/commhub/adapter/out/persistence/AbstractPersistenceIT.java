@@ -14,6 +14,7 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
+import uz.hamkorbank.commhub.adapter.out.persistence.config.ConfigurationCacheProperties;
 import uz.hamkorbank.commhub.adapter.out.persistence.crypto.ContentEncryptionProperties;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.PersistenceProperties;
 import uz.hamkorbank.commhub.adapter.out.time.SystemClockAdapter;
@@ -65,8 +66,16 @@ public abstract class AbstractPersistenceIT {
         }
     }
 
+    /**
+     * {@code proxyTargetClass = true} to match production.
+     *
+     * <p>Spring Boot proxies with CGLIB; a bare {@code @EnableTransactionManagement} proxies with JDK
+     * dynamic proxies instead, and then an adapter that implements a port can only be injected by that
+     * port — which {@code CachingProviderConfigRepository} deliberately does not do, because it wraps the
+     * concrete adapter. Wiring that differs from production is wiring these tests cannot vouch for.
+     */
     @Configuration
-    @EnableTransactionManagement
+    @EnableTransactionManagement(proxyTargetClass = true)
     @ComponentScan("uz.hamkorbank.commhub.adapter.out.persistence")
     public static class PersistenceTestConfig {
 
@@ -89,6 +98,12 @@ public abstract class AbstractPersistenceIT {
         @Bean
         PersistenceProperties persistenceProperties() {
             return new PersistenceProperties(null, null, null, null);
+        }
+
+        /** Defaults of AD-07: the caching repository wraps the adapter, so it needs them even here. */
+        @Bean
+        ConfigurationCacheProperties configurationCacheProperties() {
+            return new ConfigurationCacheProperties(null, null);
         }
 
         /** The tests run with content encryption on, the way production does (DB-04). */

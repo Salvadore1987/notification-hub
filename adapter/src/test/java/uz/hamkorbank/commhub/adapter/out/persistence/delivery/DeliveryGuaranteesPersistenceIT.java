@@ -85,11 +85,13 @@ class DeliveryGuaranteesPersistenceIT extends AbstractPersistenceIT {
 
         // Assert
         assertThat(countOutboxRows()).isEqualTo(1L);
+        // The row is identified by the outbox event id; the payload keeps the id of the status event
+        // it carries, which is what the consumer deduplicates by (§6.4, AD-03).
         assertThat(jdbc().sql("SELECT payload ->> 'eventId' FROM outbox_event WHERE id = :id")
                         .param("id", event.eventId())
                         .query(String.class)
                         .single())
-                .isEqualTo(event.eventId().toString());
+                .isEqualTo(statusEvent().eventId().toString());
     }
 
     @Test

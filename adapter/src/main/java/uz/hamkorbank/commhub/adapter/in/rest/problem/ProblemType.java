@@ -52,6 +52,8 @@ public enum ProblemType {
 
     /** Nothing matches the identifiers in the request. */
     NOT_FOUND(HttpStatus.NOT_FOUND, "Not found"),
+    /** Authenticated, but not entitled to the stream that was named (SEC-01). */
+    FORBIDDEN(HttpStatus.FORBIDDEN, "Forbidden"),
     /** The aggregate is not in a state that allows the requested action (FR-3.2). */
     CONFLICT(HttpStatus.CONFLICT, "Conflicting state"),
     /** The stream sends faster than its configured rate; retry after the given delay (IR-02). */

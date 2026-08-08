@@ -31,6 +31,21 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
+  # NF-05 (продолжение): при остановке планировщик дожидается текущего прохода. Это важно именно
+  # для relay'я outbox — пройденная половина пачки без отметки published означала бы повторную
+  # публикацию, а прерванная запись курсора выгрузки — повторную страницу в витрине (AD-03, FR-6.4).
+  task:
+    scheduling:
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
+
+  # SEC-01/SEC-02: издатель OIDC Банка задаётся переменной окружения и намеренно НЕ объявлен здесь —
+  # spring.security.oauth2.resourceserver.jwt.issuer-uri включает автоконфигурацию самим фактом
+  # присутствия, и пустое значение в yaml подняло бы резолвер токенов без издателя:
+  #   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://sso.hamkorbank.uz/realms/commhub
+  # вместе с commhub.security.oauth2-enabled=true.
+
 commhub:
   # Kafka (§8.1). Namespace свой, а не spring.kafka: в Spring Boot 4 автоконфигурация Kafka вынесена
   # в отдельный модуль, который здесь не подключён — продюсер собирается явно (KafkaProducerConfig),
@@ -38,12 +53,27 @@ commhub:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     client-id: ${KAFKA_CLIENT_ID:notification-hub}
+    # SEC-01, брокерская половина: SASL/SCRAM или mTLS плюс ACL на топики. Пароль — ссылка на секрет
+    # (SEC-04), не литерал в ConfigMap (NF-06). Читается один раз на старте: клиент Kafka собирает
+    # JAAS при создании, поэтому ротация брокерского пароля стоит rolling restart'а, а не рестарта.
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:}
+      mechanism: ${KAFKA_SASL_MECHANISM:}
+      username: ${KAFKA_SASL_USERNAME:}
+      password-ref: ${KAFKA_SASL_PASSWORD_REF:}
+      truststore-location: ${KAFKA_TRUSTSTORE_LOCATION:}
+      truststore-password-ref: ${KAFKA_TRUSTSTORE_PASSWORD_REF:}
+      keystore-location: ${KAFKA_KEYSTORE_LOCATION:}
+      keystore-password-ref: ${KAFKA_KEYSTORE_PASSWORD_REF:}
     outbound:
       status-topic: ${KAFKA_STATUS_TOPIC:comm.outbound.status.v1}
       dlq-topic: ${KAFKA_DLQ_TOPIC:comm.outbound.dlq.v1}
       # PU-04: токены, признанные платформой мёртвыми. Свой топик, а не статус с особой причиной:
       # его потребитель — владелец реестра устройств, и retention у него свой.
       push-token-topic: ${KAFKA_PUSH_TOKEN_TOPIC:comm.outbound.push-token.invalidated.v1}
+      # FR-6.4: завершённые отправки для витрины данных. Отдельный топик, а не фильтр по статусам:
+      # его читает batch-job, и retention у него месяцы, а не дни.
+      analytics-topic: ${KAFKA_ANALYTICS_TOPIC:comm.outbound.events.v1}
       # Сколько relay ждёт подтверждения брокера; на это время строки outbox остаются заблокированными.
       send-timeout: ${KAFKA_SEND_TIMEOUT:10s}
       # В контуре Банка топики заводит эксплуатация (партиции, retention, ACL) — здесь false.
@@ -81,6 +111,38 @@ commhub:
       poll-interval-ms: ${OUTBOX_RELAY_POLL_INTERVAL_MS:500}
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
       max-passes-per-tick: ${OUTBOX_RELAY_MAX_PASSES:10}
+
+  # SEC-01/SEC-03: аутентификация систем-источников и RBAC. Оба механизма выключены по умолчанию —
+  # локально нет ни издателя, ни CA, — и инстанс без единого включённого пишет предупреждение на
+  # старте. В контуре Банка включается то, что предписывает стандарт; можно и оба сразу.
+  security:
+    oauth2-enabled: ${COMMHUB_OAUTH2_ENABLED:false}
+    mtls-enabled: ${COMMHUB_MTLS_ENABLED:false}
+    # Claim со списком потоков, за которые клиент вправе слать и которые вправе читать (SEC-01).
+    # Для mTLS роль этого claim играет CN сертификата: по соглашению CN — это streamId.
+    stream-claim: ${COMMHUB_STREAM_CLAIM:commhub_streams}
+    # Claim с группами SSO; маппится на роли app_role из §10.1 (FR-7.2).
+    roles-claim: ${COMMHUB_ROLES_CLAIM:groups}
+    scope-claim: ${COMMHUB_SCOPE_CLAIM:scope}
+    # Пустой список — принимается любой сертификат, прошедший проверку цепочки на уровне TLS.
+    mtls-allowed-subjects: ${COMMHUB_MTLS_SUBJECTS:}
+    # true — штатное развёртывание, где management-порт доступен только из namespace мониторинга.
+    anonymous-metrics: ${COMMHUB_ANONYMOUS_METRICS:true}
+    management-base-path: ${management.endpoints.web.base-path:/actuator}
+
+  # OBS-01: как часто пересчитываются метрики-состояния (глубина outbox, возраст старейшего
+  # неопубликованного события, глубина DLQ). Скрейп читает готовое значение и не ходит в БД.
+  metrics:
+    backlog-refresh-interval: ${COMMHUB_METRICS_BACKLOG_INTERVAL:15s}
+
+  # FR-6.4: выгрузка завершённых отправок в витрину данных. Выключена по умолчанию — топик и его
+  # схема согласуются с командой данных до первой публикации.
+  export:
+    events:
+      enabled: ${COMMHUB_EVENT_EXPORT_ENABLED:false}
+      interval: ${COMMHUB_EVENT_EXPORT_INTERVAL:1m}
+      page-size: ${COMMHUB_EVENT_EXPORT_PAGE_SIZE:500}
+      max-pages: ${COMMHUB_EVENT_EXPORT_MAX_PAGES:20}
 
   # Синхронный API систем-источников (§8.2).
   rest:
@@ -448,13 +510,66 @@ management:
       probes:
         enabled: true
       show-details: when-authorized
+      # NF-05: три пробы отвечают на три разных вопроса, поэтому составы групп разные.
+      # liveness — «жив ли процесс»: рестарт пода из-за недоступной БД меняет аварию на
+      # crash loop во время неё. readiness — «можно ли слать сюда трафик»: нужна БД, потому
+      # что непринятая транзакция — это непринятое сообщение (AD-03); брокер и провайдеры
+      # намеренно снаружи (для того и существует outbox, а провайдер лежит одинаково на всех подах).
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+        startup:
+          include: db
   health:
     livenessstate:
       enabled: true
     readinessstate:
       enabled: true
+  metrics:
+    tags:
+      # Общие метки всех метрик инстанса (OBS-01): без них графики двух контуров сливаются.
+      application: ${spring.application.name}
+      environment: ${COMMHUB_ENVIRONMENT:local}
+    distribution:
+      # Гистограммы, а не готовые перцентили: p99 OTP по TC-01 считается по всему деплойменту,
+      # а посчитанные на инстансе перцентили не складываются.
+      percentiles-histogram:
+        commhub.pipeline.stage: true
+        commhub.provider.calls: true
+      slo:
+        # SLA OTP: p99 ≤ 5 с от приёма до провайдера (TC-01) — границы вокруг него.
+        commhub.pipeline.stage: 100ms,500ms,1s,5s,30s
+        commhub.provider.calls: 100ms,500ms,1s,5s,10s
+  # OBS-02: трассировка выключена по умолчанию — коллектор есть в контуре Банка, а не локально.
+  # Включается COMMHUB_TRACING_SAMPLING (1.0 на тесте, доли процента под нагрузкой NF-01).
+  tracing:
+    sampling:
+      probability: ${COMMHUB_TRACING_SAMPLING:0.0}
+    baggage:
+      remote-fields: correlationId
+      correlation:
+        fields: correlationId
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
 
 logging:
   level:
     root: INFO
     uz.hamkorbank.commhub: DEBUG
+  # OBS-03: structured logs. ECS — формат, который читает и ELK, и Loki Банка; консоль остаётся
+  # человекочитаемой локально (COMMHUB_LOG_FORMAT пусто) и становится JSON в контуре.
+  structured:
+    format:
+      console: ${COMMHUB_LOG_FORMAT:}
+    json:
+      # Маскирование PII в отрендеренной строке — страховка под правилом «маскируем в месте записи»
+      # (Masking в каркасе провайдеров). Ставится логгером, а не контекстом Spring, поэтому работает
+      # с первой строки и переживает несостоявшийся старт.
+      customizer: uz.hamkorbank.commhub.adapter.observability.PiiMaskingJsonCustomizer
+      context:
+        # MDC целиком уезжает в документ: messageId, streamId, batchId, correlationId (OBS-03).
+        include: true

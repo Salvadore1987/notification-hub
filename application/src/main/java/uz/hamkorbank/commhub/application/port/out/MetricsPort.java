@@ -16,11 +16,15 @@ import uz.hamkorbank.commhub.domain.model.vo.StreamId;
  *
  * <p>Implemented by a Micrometer adapter; the core stays free of any metrics library. Parameters may
  * be {@code null} where the value is not known yet, e.g. the channel before routing.
+ *
+ * <p>Message-level counters carry the {@code test} flag of FR-7.4 rather than dropping test sends: a
+ * configuration check has to stay visible to the operator who ran it, and "excluded from business
+ * statistics" is a dimension the dashboards and the alert rules filter on, not data thrown away.
  */
 public interface MetricsPort {
 
-    /** A submission was accepted for processing (FR-1.1). */
-    void messageAccepted(StreamId streamId, TrafficClass trafficClass, Channel channel);
+    /** A submission was accepted for processing (FR-1.1); {@code test} keeps it out of the business figures. */
+    void messageAccepted(StreamId streamId, TrafficClass trafficClass, Channel channel, boolean test);
 
     /** A submission was rejected; the reason becomes a metric tag (IR-01, OBS-04). */
     void messageRejected(StreamId streamId, RejectionReason reason);
@@ -28,8 +32,8 @@ public interface MetricsPort {
     /** A submission was suppressed by the idempotency check (FR-1.5). */
     void messageDuplicate(StreamId streamId);
 
-    /** A canonical status change of a message (§6.3, OBS-01). */
-    void statusChanged(MessageStatus status, Channel channel, ProviderRef provider);
+    /** A canonical status change of a message (§6.3, OBS-01); {@code test} marks a configuration check. */
+    void statusChanged(MessageStatus status, Channel channel, ProviderRef provider, boolean test);
 
     /** One provider call with its outcome and latency (PR-03, FR-6.3). */
     void providerCall(ProviderRef provider, AttemptResult result, Duration latency);

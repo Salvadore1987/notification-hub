@@ -17,6 +17,9 @@ import uz.hamkorbank.commhub.adapter.in.rest.dto.MessageStatusResponse;
 import uz.hamkorbank.commhub.adapter.in.rest.mapper.RestResponseMapper;
 import uz.hamkorbank.commhub.adapter.in.rest.problem.SubmissionRejectedException;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamRateLimiter;
+import uz.hamkorbank.commhub.adapter.in.rest.security.AuthenticatedCaller;
+import uz.hamkorbank.commhub.adapter.in.rest.security.StreamAccessGuard;
+import uz.hamkorbank.commhub.application.dto.MessageView;
 import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
 import uz.hamkorbank.commhub.application.port.in.GetMessage;
 import uz.hamkorbank.commhub.application.port.in.SubmitMessage;
@@ -52,6 +55,8 @@ public class MessageController {
     private final SubmitMessage submitMessage;
     private final GetMessage getMessage;
     private final StreamRateLimiter rateLimiter;
+    private final StreamAccessGuard streamAccess;
+    private final AuthenticatedCaller caller;
     private final RestResponseMapper mapper;
 
     public MessageController(
@@ -59,11 +64,15 @@ public class MessageController {
             SubmitMessage submitMessage,
             GetMessage getMessage,
             StreamRateLimiter rateLimiter,
+            StreamAccessGuard streamAccess,
+            AuthenticatedCaller caller,
             RestResponseMapper mapper) {
         this.codec = Guard.notNull(codec, "codec");
         this.submitMessage = Guard.notNull(submitMessage, "submitMessage");
         this.getMessage = Guard.notNull(getMessage, "getMessage");
         this.rateLimiter = Guard.notNull(rateLimiter, "rateLimiter");
+        this.streamAccess = Guard.notNull(streamAccess, "streamAccess");
+        this.caller = Guard.notNull(caller, "caller");
         this.mapper = Guard.notNull(mapper, "mapper");
     }
 
@@ -77,6 +86,9 @@ public class MessageController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<MessageAcceptedResponse> submit(@RequestBody String body) {
         SubmitMessageCommand command = codec.read(body);
+        // Entitlement before the rate limit on purpose: a caller must not be able to spend another
+        // stream's bucket by submitting for it (SEC-01, IR-02).
+        streamAccess.check(command.streamId());
         rateLimiter.check(command.streamId().value());
         SubmitMessageResult result = submitMessage.submit(command);
         if (!result.isAccepted()) {
@@ -88,10 +100,18 @@ public class MessageController {
                 .body(response);
     }
 
-    /** {@code GET /api/v1/messages/{messageId}} — status of one message (§8.2). */
+    /**
+     * {@code GET /api/v1/messages/{messageId}} — status of one message (§8.2).
+     *
+     * <p>The entitlement is checked after the lookup and not before it: the path names a message id and
+     * only the message knows which stream it belongs to. A caller asking for someone else's message
+     * therefore costs one read and gets a 403 (SEC-01).
+     */
     @GetMapping(path = "/{messageId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public MessageStatusResponse byId(@PathVariable String messageId) {
-        return mapper.toStatus(getMessage.get(MessageQuery.byId(messageId(messageId))));
+        MessageView view = getMessage.get(MessageQuery.byId(messageId(messageId), caller.actor()));
+        streamAccess.check(view.streamId());
+        return mapper.toStatus(view);
     }
 
     /**
@@ -102,7 +122,9 @@ public class MessageController {
      */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public MessageStatusResponse byExternalId(@RequestParam String streamId, @RequestParam String externalMessageId) {
-        MessageQuery query = MessageQuery.byExternalId(streamId(streamId), externalMessageId(externalMessageId));
+        streamAccess.check(streamId);
+        MessageQuery query =
+                MessageQuery.byExternalId(streamId(streamId), externalMessageId(externalMessageId), caller.actor());
         return mapper.toStatus(getMessage.get(query));
     }
 

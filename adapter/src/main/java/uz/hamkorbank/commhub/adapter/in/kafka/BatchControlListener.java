@@ -11,6 +11,7 @@ import uz.hamkorbank.commhub.adapter.in.contract.InboundBatchCodec;
 import uz.hamkorbank.commhub.adapter.in.contract.InboundContractException;
 import uz.hamkorbank.commhub.adapter.in.contract.InboundJson;
 import uz.hamkorbank.commhub.adapter.in.contract.dto.BatchCommandPayload;
+import uz.hamkorbank.commhub.adapter.observability.LogContext;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
 import uz.hamkorbank.commhub.application.port.in.SubmitBatch;
 import uz.hamkorbank.commhub.application.port.in.command.BatchActionCommand;
@@ -56,6 +57,13 @@ public class BatchControlListener {
             throw InboundContractException.missing("action");
         }
         String action = payload.action().trim().toUpperCase(Locale.ROOT);
+        try (LogContext ignored = LogContext.of(LogContext.BATCH_ID, payload.batchId())) {
+            apply(action, payload);
+            LOG.debug("Applied batch command {} to {}", action, payload.batchId());
+        }
+    }
+
+    private void apply(String action, BatchCommandPayload payload) {
         switch (action) {
             case BatchCommandPayload.ACTION_CREATE -> create(payload);
             case BatchCommandPayload.ACTION_START -> actions.start().start(commandOf(payload));
@@ -66,7 +74,6 @@ public class BatchControlListener {
                 throw InboundContractException.invalid(
                         "action", "unknown action %s, expected CREATE|START|PAUSE|RESUME|STOP".formatted(action));
         }
-        LOG.debug("Applied batch command {} to {}", action, payload.batchId());
     }
 
     private void create(BatchCommandPayload payload) {

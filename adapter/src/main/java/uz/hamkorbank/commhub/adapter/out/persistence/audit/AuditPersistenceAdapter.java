@@ -1,11 +1,16 @@
 package uz.hamkorbank.commhub.adapter.out.persistence.audit;
 
+import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.core.simple.JdbcClient.StatementSpec;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
+import uz.hamkorbank.commhub.application.port.in.query.AuditQuery;
 import uz.hamkorbank.commhub.application.port.out.AuditEntry;
 import uz.hamkorbank.commhub.application.port.out.AuditPort;
+import uz.hamkorbank.commhub.application.port.out.AuditQueryPort;
+import uz.hamkorbank.commhub.domain.support.Guard;
 import uz.hamkorbank.commhub.domain.support.UuidV7;
 
 /**
@@ -23,7 +28,7 @@ import uz.hamkorbank.commhub.domain.support.UuidV7;
  * roll back the very change it was journalling. {@code to_jsonb} is strict, so a null state stays null.
  */
 @Repository
-public class AuditPersistenceAdapter implements AuditPort {
+public class AuditPersistenceAdapter implements AuditPort, AuditQueryPort {
 
     private static final String INSERT = """
             INSERT INTO audit_log (id, user_id, username, action, entity_type, entity_id,
@@ -34,6 +39,34 @@ public class AuditPersistenceAdapter implements AuditPort {
                     to_jsonb(CAST(:before AS text)), to_jsonb(CAST(:after AS text)),
                     CAST(:ip AS inet), :occurredAt)
             """;
+
+    /**
+     * Filters applied as {@code :name IS NULL OR column = :name} so one statement covers every combination.
+     *
+     * <p>Ordered newest first and read through {@code audit_log_occurred_idx}; the entity filter has its own
+     * index, which is the one the "everything that happened to this provider" question uses (FR-7.3).
+     */
+    private static final String WHERE = """
+             WHERE (CAST(:from AS timestamptz) IS NULL OR a.occurred_at >= CAST(:from AS timestamptz))
+               AND (CAST(:to   AS timestamptz) IS NULL OR a.occurred_at <= CAST(:to   AS timestamptz))
+               AND (CAST(:username   AS text) IS NULL OR a.username    = CAST(:username   AS text))
+               AND (CAST(:action     AS text) IS NULL OR a.action      = CAST(:action     AS text))
+               AND (CAST(:entityType AS text) IS NULL OR a.entity_type = CAST(:entityType AS text))
+               AND (CAST(:entityId   AS text) IS NULL OR a.entity_id   = CAST(:entityId   AS text))
+            """;
+
+    private static final String SELECT = """
+            SELECT a.username, a.action, a.entity_type, a.entity_id,
+                   a.before_state #>> '{}' AS before_state,
+                   a.after_state  #>> '{}' AS after_state,
+                   host(a.ip) AS ip, a.occurred_at
+              FROM audit_log a
+            """ + WHERE + """
+             ORDER BY a.occurred_at DESC
+             LIMIT :limit OFFSET :offset
+            """;
+
+    private static final String COUNT = "SELECT count(*) FROM audit_log a" + WHERE;
 
     private final JdbcClient jdbcClient;
 
@@ -62,5 +95,39 @@ public class AuditPersistenceAdapter implements AuditPort {
         return entry.actor().id() == null
                 ? entry.actor().type().name()
                 : entry.actor().id();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditEntry> search(AuditQuery query) {
+        Guard.notNull(query, "query");
+        return bind(jdbcClient.sql(SELECT), query)
+                .param("limit", query.limit())
+                .param("offset", query.offset())
+                .query(new AuditEntryRowMapper())
+                .list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long count(AuditQuery query) {
+        Guard.notNull(query, "query");
+        return bind(jdbcClient.sql(COUNT), query).query(Long.class).optional().orElse(0L);
+    }
+
+    /**
+     * Binds the optional filters of {@link AuditQuery}.
+     *
+     * <p>All six are bound even when null: the SQL applies each with an {@code IS NULL OR} test, so one
+     * statement serves every combination and the planner sees one prepared statement rather than sixty-four.
+     */
+    private static StatementSpec bind(StatementSpec statement, AuditQuery query) {
+        return statement
+                .param("from", SqlValues.timestamp(query.from()))
+                .param("to", SqlValues.timestamp(query.to()))
+                .param("username", query.username())
+                .param("action", query.action())
+                .param("entityType", query.entityType())
+                .param("entityId", query.entityId());
     }
 }

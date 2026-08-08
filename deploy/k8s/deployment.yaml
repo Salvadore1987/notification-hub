@@ -1,0 +1,140 @@
+# Развёртывание Notification Hub в K8s/OpenShift (NF-05).
+#
+# Манифест-образец: имена namespace, образа, секретов и ingress'а в контуре Банка свои. Здесь
+# зафиксировано то, что не должно меняться при переносе — состав проб, порядок остановки и то,
+# откуда берутся секреты.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-hub
+  labels:
+    app.kubernetes.io/name: notification-hub
+spec:
+  # Горизонтальное масштабирование без остановки (§12.1): инстансы stateless, outbox разбирается
+  # через FOR UPDATE SKIP LOCKED, consumer group переразбивает партиции сама.
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-hub
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notification-hub
+    spec:
+      # Должно быть не меньше spring.lifecycle.timeout-per-shutdown-phase (30s) плюс запас на
+      # дообработку in-flight: под убивают по истечении этого срока независимо от того, что он делал.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: notification-hub
+          image: registry.hamkorbank.uz/commhub/notification-hub:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: COMMHUB_ENVIRONMENT
+              value: prod
+            - name: DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: notification-hub
+                  key: db-url
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-db
+                  key: password
+            # DB-04: ключ шифрования контента. Отсутствие ключа — отказ старта, а не тихая работа
+            # без шифрования; так и задумано.
+            - name: CONTENT_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-crypto
+                  key: active-key
+          volumeMounts:
+            # SEC-04: креды провайдеров приходят каталогом секретов. Kubernetes обновляет содержимое
+            # смонтированного Secret'а на месте, а TTL-кэш резолвера подхватывает новое значение —
+            # ротация без рестарта.
+            - name: provider-secrets
+              mountPath: /etc/commhub/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          # NF-05: три пробы, три группы actuator'а. startup даёт время миграциям Flyway (DB-01) и
+          # не позволяет liveness убить под во время них.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/startup
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: provider-secrets
+          secret:
+            secretName: notification-hub-provider-credentials
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-hub
+  labels:
+    app.kubernetes.io/name: notification-hub
+  annotations:
+    # OBS-01: скрейп Prometheus'а идёт в тот же порт; доступ ограничивается сетевой политикой,
+    # поэтому commhub.security.anonymous-metrics остаётся true.
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /actuator/prometheus
+    prometheus.io/port: "8080"
+spec:
+  selector:
+    app.kubernetes.io/name: notification-hub
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# SEC-07: callback-эндпоинты провайдеров публикуются отдельным ingress'ом — у них другой источник
+# трафика (внешние операторы), другой allowlist и другой rate limit, чем у API систем-источников.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-hub
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-hub
