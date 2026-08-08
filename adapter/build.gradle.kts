@@ -22,6 +22,10 @@ dependencies {
     implementation(libs.resilience4j.circuitbreaker)
     implementation(libs.resilience4j.retry)
 
+    // out/provider/smtp — Email-канал: отправка (EM-01), подпись DKIM (EM-03) и разбор NDR по IMAP (EM-02)
+    implementation(libs.jakarta.mail.api)
+    runtimeOnly(libs.angus.mail)
+
     // Транспортный DTO <-> Command (AR-06) — только через MapStruct-мапперы
     implementation(libs.mapstruct)
     annotationProcessor(libs.mapstruct.processor)
@@ -39,4 +43,7 @@ dependencies {
 
     // Адаптеры провайдеров проверяются по стабам из документации Playmobile / SMS Gate (QA-04, PR-04)
     testImplementation(libs.wiremock.standalone)
+
+    // Email проверяется на настоящем SMTP/IMAP-сервере: MIME собирается и разбирается целиком (QA-03)
+    testImplementation(libs.greenmail.junit5)
 }

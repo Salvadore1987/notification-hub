@@ -17,6 +17,7 @@ import uz.hamkorbank.commhub.application.service.support.ConfigAuditor;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.Template;
 import uz.hamkorbank.commhub.domain.model.TemplateVersion;
+import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateId;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
@@ -116,10 +117,16 @@ public class TemplateImportService implements ImportTemplates {
 
     private void importVersion(
             ImportTemplatesCommand command, Template template, ImportTemplatesCommand.Row row, Counters counters) {
-        TemplateVersion.Body body = new TemplateVersion.Body(row.subject(), row.text());
+        // EM-01: HTML переносится только для email — на SMS/Push его некуда положить.
+        Guard.isTrue(
+                row.html() == null || row.html().isBlank() || template.channel() == Channel.EMAIL,
+                "an HTML body is only carried by an email template, the row is on channel " + template.channel());
+        TemplateVersion.Body body = new TemplateVersion.Body(row.subject(), row.text(), row.html());
         // SEC-05: строка с номером карты в тексте попадает в отчёт как плохая, файл заходит дальше.
         Guard.isTrue(
-                !panDetector.containsPan(row.text()) && !panDetector.containsPan(row.subject()),
+                !panDetector.containsPan(row.text())
+                        && !panDetector.containsPan(row.subject())
+                        && !panDetector.containsPan(row.html()),
                 "the text contains a card number; a PAN must not be stored in a template (SEC-05)");
         if (alreadyPublished(template, row, body)) {
             counters.skipped++;

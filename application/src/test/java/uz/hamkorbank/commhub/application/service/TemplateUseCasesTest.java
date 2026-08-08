@@ -66,6 +66,8 @@ import uz.hamkorbank.commhub.domain.service.SegmentCalculator;
 class TemplateUseCasesTest {
 
     private static final TemplateCode CODE = TemplateCode.of("OTP_LOGIN");
+
+    private static final TemplateCode EMAIL_CODE = TemplateCode.of("STATEMENT");
     private static final Actor AUTHOR = Actor.operator("ivanov");
     private static final Actor REVIEWER = Actor.operator("petrov");
 
@@ -146,7 +148,7 @@ class TemplateUseCasesTest {
 
         // Act
         TemplateVersionView view = configService.saveVersion(
-                new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, null, null, "Ваш код: {CODE}"));
+                new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, null, null, "Ваш код: {CODE}", null));
 
         // Assert
         assertThat(view.version()).isEqualTo(2);
@@ -168,7 +170,7 @@ class TemplateUseCasesTest {
 
         // Act
         TemplateVersionView view = configService.saveVersion(
-                new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, 1, null, "Код: {CODE}, до {TTL}"));
+                new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, 1, null, "Код: {CODE}, до {TTL}", null));
 
         // Assert
         assertThat(view.version()).isEqualTo(1);
@@ -179,7 +181,50 @@ class TemplateUseCasesTest {
         draft.submitForReview();
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> configService.saveVersion(
-                        new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, 1, null, "ещё раз")));
+                        new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, 1, null, "ещё раз", null)));
+    }
+
+    @Test
+    @DisplayName("EM-01: an email template carries an HTML alternative, an SMS one may not")
+    void htmlBelongsToEmailTemplatesOnly() {
+        // Arrange
+        Template email = Template.create(TemplateId.newId(), EMAIL_CODE, Channel.EMAIL, null, null);
+        when(templates.findByCode(EMAIL_CODE)).thenReturn(Optional.of(email));
+        Template sms = template();
+        when(templates.findByCode(CODE)).thenReturn(Optional.of(sms));
+
+        // Act
+        TemplateVersionView view = configService.saveVersion(new SaveTemplateVersionCommand(
+                AUTHOR, EMAIL_CODE, ContentLocale.RU, null, "Выписка", "Готова", "<p>Готова, {NAME}</p>"));
+
+        // Assert
+        assertThat(view.htmlOptional()).contains("<p>Готова, {NAME}</p>");
+        assertThat(view.variables()).containsExactly("NAME");
+        assertThatExceptionOfType(ConfigurationConflictException.class)
+                .isThrownBy(() -> configService.saveVersion(new SaveTemplateVersionCommand(
+                        AUTHOR, CODE, ContentLocale.RU, null, null, "Код: {CODE}", "<p>Код</p>")))
+                .withMessageContaining("EM-01");
+    }
+
+    @Test
+    @DisplayName("SEC-05: a card number in the HTML alternative is refused like one in the text")
+    void refusesCardNumberInTheHtmlAlternative() {
+        // Arrange
+        Template email = Template.create(TemplateId.newId(), EMAIL_CODE, Channel.EMAIL, null, null);
+        when(templates.findByCode(EMAIL_CODE)).thenReturn(Optional.of(email));
+
+        // Act + Assert
+        assertThatExceptionOfType(ConfigurationConflictException.class)
+                .isThrownBy(() -> configService.saveVersion(new SaveTemplateVersionCommand(
+                        AUTHOR,
+                        EMAIL_CODE,
+                        ContentLocale.RU,
+                        null,
+                        "Выписка",
+                        "Готова",
+                        "<p>Карта 4111 1111 1111 1111</p>")))
+                .withMessageContaining("SEC-05");
+        assertThat(email.versions()).isEmpty();
     }
 
     @Test
@@ -192,7 +237,7 @@ class TemplateUseCasesTest {
         // Act + Assert
         assertThatExceptionOfType(ConfigurationConflictException.class)
                 .isThrownBy(() -> configService.saveVersion(new SaveTemplateVersionCommand(
-                        AUTHOR, CODE, ContentLocale.RU, null, null, "Карта 4111 1111 1111 1111 пополнена")))
+                        AUTHOR, CODE, ContentLocale.RU, null, null, "Карта 4111 1111 1111 1111 пополнена", null)))
                 .withMessageContaining("SEC-05");
         assertThat(template.versions()).isEmpty();
     }
@@ -256,7 +301,7 @@ class TemplateUseCasesTest {
         // Act + Assert
         assertThatExceptionOfType(ConfigurationConflictException.class)
                 .isThrownBy(() -> configService.saveVersion(new SaveTemplateVersionCommand(
-                        Actor.system(), CODE, ContentLocale.RU, null, null, "Код: {CODE}")));
+                        Actor.system(), CODE, ContentLocale.RU, null, null, "Код: {CODE}", null)));
     }
 
     @Test
@@ -296,8 +341,8 @@ class TemplateUseCasesTest {
         assertThat(view.catalogStatus()).isEqualTo(TemplateCatalogStatus.ARCHIVED);
         assertThat(view.versions()).hasSize(1);
         assertThatExceptionOfType(ConfigurationConflictException.class)
-                .isThrownBy(() -> configService.saveVersion(
-                        new SaveTemplateVersionCommand(AUTHOR, CODE, ContentLocale.RU, null, null, "новый текст")));
+                .isThrownBy(() -> configService.saveVersion(new SaveTemplateVersionCommand(
+                        AUTHOR, CODE, ContentLocale.RU, null, null, "новый текст", null)));
 
         // Act + Assert — and back
         assertThat(configService
@@ -493,7 +538,7 @@ class TemplateUseCasesTest {
                 null,
                 List.of(
                         new ImportTemplatesCommand.Row(
-                                "OTP_LOGIN", Channel.EMAIL, ContentLocale.RU, "Тема", "Текст", null, null),
+                                "OTP_LOGIN", Channel.EMAIL, ContentLocale.RU, "Тема", "Текст", null, null, null),
                         row("PAYMENT_OK", ContentLocale.RU, "Оплата прошла"))));
 
         // Assert
@@ -517,7 +562,7 @@ class TemplateUseCasesTest {
     }
 
     private static ImportTemplatesCommand.Row row(String code, ContentLocale locale, String text) {
-        return new ImportTemplatesCommand.Row(code, Channel.SMS, locale, null, text, "Чакана", "retail-team");
+        return new ImportTemplatesCommand.Row(code, Channel.SMS, locale, null, text, null, "Чакана", "retail-team");
     }
 
     private static Template template() {

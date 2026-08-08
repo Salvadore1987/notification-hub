@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import uz.hamkorbank.commhub.domain.model.vo.EmailAddress;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
 
 /** What may reach a log line from the one layer that handles one-time passwords (PR-03, OBS-03). */
@@ -37,6 +38,18 @@ class MaskingTest {
         // Assert
         assertThat(masked).isEqualTo("[34 chars]");
         assertThat(masked).doesNotContain("4821").doesNotContain("Kod");
+    }
+
+    @Test
+    @DisplayName("EM-01, OBS-03: an email keeps its domain and loses its local part")
+    void emailIsMaskedButStaysDiagnosable() {
+        // Act + Assert
+        assertThat(Masking.email(EmailAddress.of("ivan.petrov@example.com"))).isEqualTo("i***v@example.com");
+        // Домен переживает маскирование намеренно: «всё на этот домен отбивается» — то, ради чего
+        // журнал bounce'ов и читают, и персональных данных в домене нет.
+        assertThat(Masking.email("po@example.com")).isEqualTo("p***@example.com");
+        assertThat(Masking.email("not-an-address")).isEqualTo("***");
+        assertThat(Masking.email((String) null)).isEqualTo("-");
     }
 
     @Test

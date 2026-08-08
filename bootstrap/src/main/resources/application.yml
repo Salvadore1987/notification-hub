@@ -227,6 +227,73 @@ commhub:
         max-attempts: ${SMSGATE_RETRY_ATTEMPTS:1}
         open-duration: ${SMSGATE_CB_OPEN:30s}
 
+    # Корпоративный SMTP — канал Email (§9.3, EM-01…EM-03).
+    # Не переезжает в provider.endpoint_config (в отличие от from/from-name/reply-to): host, port,
+    # TLS, таймауты, размер пула и return-path. Первые — топология деплоя, а return-path обязан
+    # совпадать с ящиком, который читает поллер bounce'ов: сменить одно без другого — молча
+    # выключить обработку hard bounce (EM-02).
+    smtp:
+      enabled: ${SMTP_ENABLED:false}
+      provider-code: ${SMTP_PROVIDER_CODE:SMTP}
+      server:
+        host: ${SMTP_HOST:localhost}
+        port: ${SMTP_PORT:}
+        # NONE | STARTTLS | TLS. STARTTLS требуется, а не «по возможности»: молчаливый откат в
+        # открытый канал — это письмо клиента, ушедшее по сети в открытом виде (SEC-06).
+        security: ${SMTP_SECURITY:STARTTLS}
+        ehlo-name: ${SMTP_EHLO_NAME:}
+        credentials:
+          # Пусто = релей без аутентификации; внутри сети Банка это нормальная конфигурация.
+          username-ref: ${SMTP_USERNAME_REF:}
+          password-ref: ${SMTP_PASSWORD_REF:}
+        connect-timeout: ${SMTP_CONNECT_TIMEOUT:5s}
+        read-timeout: ${SMTP_READ_TIMEOUT:15s}
+        # Бюджет на выталкивание письма — тот, который решает при вложениях (EM-01).
+        write-timeout: ${SMTP_WRITE_TIMEOUT:30s}
+      sending:
+        from: ${SMTP_FROM:no-reply@hamkorbank.uz}
+        from-name: ${SMTP_FROM_NAME:Hamkorbank}
+        reply-to: ${SMTP_REPLY_TO:}
+        # Конверт (MAIL FROM): сюда релей пришлёт отчёт о недоставке, отсюда его читает поллер.
+        return-path: ${SMTP_RETURN_PATH:}
+      pool:
+        # Одновременно открытых соединений; это же — предел параллелизма канала (EM-01).
+        max-connections: ${SMTP_POOL_SIZE:8}
+        max-messages-per-connection: ${SMTP_POOL_MESSAGES:100}
+        idle-timeout: ${SMTP_POOL_IDLE:1m}
+        acquire-timeout: ${SMTP_POOL_ACQUIRE:10s}
+      # EM-01: лимит скорости релея. С Phase 8 значение из provider.rate_limit_config побеждает.
+      rate-limit:
+        tps: ${SMTP_TPS:20}
+        per-minute: ${SMTP_PER_MINUTE:0}
+      # EM-03: подпись писем. Выключена — обычно подписывает сам корпоративный релей; включается
+      # там, где он этого не делает. Ключ — PKCS#8 в секрет-хранилище, инлайн его класть нельзя.
+      dkim:
+        enabled: ${SMTP_DKIM_ENABLED:false}
+        domain: ${SMTP_DKIM_DOMAIN:}
+        selector: ${SMTP_DKIM_SELECTOR:}
+        private-key-ref: ${SMTP_DKIM_KEY_REF:}
+      # EM-02: разбор NDR из выделенного ящика (IMAP). Выключено: ящик заводит почтовая команда
+      # Банка, и поллер, каждую минуту падающий на несуществующем ящике, — плохой способ об этом
+      # узнать. Отчёт применяется через тот же ProcessProviderStatus, что и DLR провайдеров (AD-06).
+      bounce:
+        enabled: ${SMTP_BOUNCE_ENABLED:false}
+        host: ${SMTP_BOUNCE_HOST:}
+        port: ${SMTP_BOUNCE_PORT:}
+        ssl: ${SMTP_BOUNCE_SSL:true}
+        credentials:
+          username-ref: ${SMTP_BOUNCE_USERNAME_REF:}
+          password-ref: ${SMTP_BOUNCE_PASSWORD_REF:}
+        folder: ${SMTP_BOUNCE_FOLDER:INBOX}
+        batch-size: ${SMTP_BOUNCE_BATCH:200}
+        settings:
+          interval: ${SMTP_BOUNCE_INTERVAL:5m}
+          connect-timeout: ${SMTP_BOUNCE_CONNECT_TIMEOUT:5s}
+          read-timeout: ${SMTP_BOUNCE_READ_TIMEOUT:30s}
+          # false = помечать прочитанным, а не удалять: отчёт, который Hub не смог сопоставить
+          # с сообщением, — это улика, и удалить её молча нельзя.
+          delete-processed: ${SMTP_BOUNCE_DELETE:false}
+
   # Хранилище: секции и retention (DB-02, DB-03), реплика для аналитики (DB-06).
   persistence:
     partitions-ahead: ${DB_PARTITIONS_AHEAD:2}
@@ -267,6 +334,21 @@ commhub:
     pan-blocking: ${PAN_BLOCKING:true}
     # Хранение счётчиков частоты: должно покрывать окно капа, больше — не нужно (DB-03).
     counter-retention: ${FREQUENCY_COUNTER_RETENTION:7d}
+    # EM-01: потолки вложений. Проверяются на валидации, до маршрутизации: отказ конвейера несёт
+    # системе-источнику каноническую причину (IR-01), а отказ релея — SMTP-код, который наверху
+    # никто не читает. Размеры — в байтах хранимого файла; base64 добавит на проводе ещё ~треть.
+    email:
+      max-attachments: ${EMAIL_MAX_ATTACHMENTS:5}
+      max-attachment-size: ${EMAIL_MAX_ATTACHMENT_SIZE:10MB}
+      max-total-attachment-size: ${EMAIL_MAX_TOTAL_ATTACHMENT_SIZE:20MB}
+
+  # Вложения писем (EM-01): в домене хранится только метаданные и ссылка (contentRef), байты лежат
+  # здесь. Каталог, а не объектное хранилище: Банк его ещё не выбрал, а заводить зависимость от S3
+  # ради нескольких PDF-выписок — не тот порядок действий. Пусто = Hub вложений не носит.
+  email:
+    attachments:
+      directory: ${EMAIL_ATTACHMENTS_DIR:}
+      max-bytes: ${EMAIL_ATTACHMENT_MAX_BYTES:26214400}
 
 server:
   port: ${SERVER_PORT:8080}

@@ -24,6 +24,7 @@ import uz.hamkorbank.commhub.application.dto.DispatchResult;
 import uz.hamkorbank.commhub.application.dto.DispatchResult.DispatchOutcome;
 import uz.hamkorbank.commhub.application.mapper.MessageMapperImpl;
 import uz.hamkorbank.commhub.application.policy.DeduplicationPolicy;
+import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
 import uz.hamkorbank.commhub.application.policy.SendingPolicy;
@@ -126,7 +127,8 @@ class DispatchMessageServiceTest {
         MessagePipeline pipeline = new MessagePipeline(
                 new DeduplicationService(mock(DedupRegistryPort.class), DeduplicationPolicy.defaults()),
                 new TemplateApplier(mock(TemplateRepository.class)),
-                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), mock(MetricsPort.class)),
+                new MessageValidator(
+                        new PanDetector(), PanPolicy.rejecting(), EmailPolicy.defaults(), mock(MetricsPort.class)),
                 new DeliveryFilters(
                         suppressions,
                         mock(CustomerPreferencePort.class),

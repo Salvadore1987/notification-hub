@@ -1,6 +1,8 @@
 package uz.hamkorbank.commhub.application.service.pipeline;
 
+import java.util.Optional;
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.domain.model.Message;
@@ -18,7 +20,8 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * <p>Address formats are already guaranteed by the value objects — {@code Msisdn} enforces
  * {@code 9989xxxxxxxx}, {@code EmailAddress} RFC 5322 — so what is left here are the cross-field
  * rules: the recipient must be reachable on a planned channel, the payload must fit the channel
- * limits, and no content may carry a full card number.
+ * limits (push 4 KiB per PU-11, email attachments per EM-01), and no content may carry a full card
+ * number.
  *
  * <p>Runs after templating, so the checks see the text that will actually be sent (FR-4.3).
  *
@@ -30,11 +33,14 @@ public class MessageValidator {
 
     private final PanDetector panDetector;
     private final PanPolicy panPolicy;
+    private final EmailPolicy emailPolicy;
     private final MetricsPort metrics;
 
-    public MessageValidator(PanDetector panDetector, PanPolicy panPolicy, MetricsPort metrics) {
+    public MessageValidator(
+            PanDetector panDetector, PanPolicy panPolicy, EmailPolicy emailPolicy, MetricsPort metrics) {
         this.panDetector = Guard.notNull(panDetector, "panDetector");
         this.panPolicy = Guard.notNull(panPolicy, "panPolicy");
+        this.emailPolicy = Guard.notNull(emailPolicy, "emailPolicy");
         this.metrics = Guard.notNull(metrics, "metrics");
     }
 
@@ -75,6 +81,10 @@ public class MessageValidator {
     }
 
     private PipelineVerdict validateEmail(EmailContent email, Channel channel) {
+        Optional<String> oversized = emailPolicy.violation(email);
+        if (oversized.isPresent()) {
+            return PipelineVerdict.rejected(RejectionReason.VALIDATION_FAILED, oversized.get());
+        }
         PipelineVerdict subject = validateText(email.subject(), channel);
         if (subject.isRejected()) {
             return subject;

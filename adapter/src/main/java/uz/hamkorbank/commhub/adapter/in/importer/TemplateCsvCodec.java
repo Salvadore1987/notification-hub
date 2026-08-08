@@ -18,9 +18,10 @@ import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
  *
  * <p>Columns are addressed by the names in the header line, not by position: the file is produced by hand
  * from an Excel sheet, and the one thing such a file reliably does is grow a column in the middle. Required
- * columns are {@code code}, {@code channel}, {@code locale}, {@code text}; {@code subject}, {@code direction}
- * and {@code owner} are optional and unknown columns are ignored, so the Bank's own bookkeeping columns can
- * stay in the sheet.
+ * columns are {@code code}, {@code channel}, {@code locale}, {@code text}; {@code subject}, {@code html},
+ * {@code direction} and {@code owner} are optional and unknown columns are ignored, so the Bank's own
+ * bookkeeping columns can stay in the sheet. {@code html} is the HTML alternative of an email body and is
+ * refused on any other channel (EM-01).
  *
  * <p>Quoting is RFC 4180: a field may be wrapped in {@code "} and then contain the delimiter, line breaks and
  * {@code ""} for a literal quote. SMS texts wrap, so multi-line fields are not an edge case here.
@@ -39,6 +40,7 @@ public class TemplateCsvCodec {
     private static final String LOCALE = "locale";
     private static final String SUBJECT = "subject";
     private static final String TEXT = "text";
+    private static final String HTML = "html";
     private static final String DIRECTION = "direction";
     private static final String OWNER = "owner";
     private static final List<String> REQUIRED = List.of(CODE, CHANNEL, LOCALE, TEXT);
@@ -81,6 +83,7 @@ public class TemplateCsvCodec {
                     enumValue(ContentLocale.class, locale, LOCALE),
                     value(record, columns, SUBJECT),
                     value(record, columns, TEXT),
+                    value(record, columns, HTML),
                     value(record, columns, DIRECTION),
                     value(record, columns, OWNER)));
         } catch (RuntimeException e) {

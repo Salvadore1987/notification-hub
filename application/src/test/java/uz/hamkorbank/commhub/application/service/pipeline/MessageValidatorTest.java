@@ -14,10 +14,12 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.MessageEnvelope;
+import uz.hamkorbank.commhub.domain.model.content.Attachment;
 import uz.hamkorbank.commhub.domain.model.content.EmailContent;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
@@ -111,8 +113,65 @@ class MessageValidatorTest {
         verify(metrics, never()).panDetected(any(), anyBoolean());
     }
 
+    @Test
+    @DisplayName("EM-01: an email over the attachment ceiling is refused before it reaches a relay")
+    void rejectsOversizedAttachments() {
+        // Arrange — the total is what a relay enforces, and the message names which ceiling it broke
+        MessageValidator validator =
+                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), new EmailPolicy(5, 1024, 1536), metrics);
+        Message message = emailWithAttachments(
+                new Attachment("a.pdf", "application/pdf", 1000, "a"),
+                new Attachment("b.pdf", "application/pdf", 1000, "b"));
+
+        // Act
+        PipelineVerdict verdict = validator.validate(message);
+
+        // Assert
+        assertThat(verdict.isRejected()).isTrue();
+        assertThat(verdict.reason()).isEqualTo(RejectionReason.VALIDATION_FAILED);
+        assertThat(verdict.detail()).contains("attachments total").contains("EM-01");
+    }
+
+    @Test
+    @DisplayName("EM-01: one file over the per-file ceiling names the file, so the sender knows what to drop")
+    void namesTheOversizedFile() {
+        // Arrange
+        MessageValidator validator = new MessageValidator(
+                new PanDetector(), PanPolicy.rejecting(), new EmailPolicy(5, 512, 100_000), metrics);
+
+        // Act
+        PipelineVerdict verdict =
+                validator.validate(emailWithAttachments(new Attachment("Выписка.pdf", "application/pdf", 4096, "a")));
+
+        // Assert
+        assertThat(verdict.isRejected()).isTrue();
+        assertThat(verdict.detail()).contains("Выписка.pdf");
+    }
+
+    @Test
+    @DisplayName("EM-01: attachments within the limits pass")
+    void passesAttachmentsWithinTheLimits() {
+        // Arrange
+        MessageValidator validator = validator(PanPolicy.rejecting());
+
+        // Act
+        PipelineVerdict verdict =
+                validator.validate(emailWithAttachments(new Attachment("a.pdf", "application/pdf", 4096, "a")));
+
+        // Assert
+        assertThat(verdict.isRejected()).isFalse();
+    }
+
     private MessageValidator validator(PanPolicy policy) {
-        return new MessageValidator(new PanDetector(), policy, metrics);
+        return new MessageValidator(new PanDetector(), policy, EmailPolicy.defaults(), metrics);
+    }
+
+    private static Message emailWithAttachments(Attachment... attachments) {
+        return Message.acceptSingleChannel(
+                MessageEnvelope.single(STREAM_ID, ExternalMessageId.of("att0000001"), TrafficClass.TRANSACTIONAL),
+                new Recipient(null, null, EmailAddress.of("client@example.uz"), List.of()),
+                new EmailContent("Выписка", null, "Во вложении.", List.of(attachments), null),
+                NOW);
     }
 
     private static Message smsMessage(String text) {

@@ -7,6 +7,7 @@ resilience4j = "2.4.0"
 spotless = "8.9.0"
 checkstyle = "13.9.0"
 wiremock = "3.13.1"
+greenmail = "2.1.12"
 
 [libraries]
 # BOM: версии Spring Boot / Spring Framework / Kafka / Flyway / Testcontainers / JUnit.
@@ -35,6 +36,13 @@ mapstruct-processor = { module = "org.mapstruct:mapstruct-processor", version.re
 resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
 resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }
 
+# Email-канал (§9.3, EM-01…EM-03): SMTP-отправка и IMAP-разбор NDR.
+# Берём jakarta.mail напрямую, а не spring-boot-starter-mail: из стартера использовался бы только
+# JavaMailSender, который открывает соединение на отправку и закрывает его следом, — а EM-01 требует
+# пул соединений, MIME-заголовки и подпись DKIM, то есть работу с Transport/MimeMessage как есть.
+jakarta-mail-api = { module = "jakarta.mail:jakarta.mail-api" }
+angus-mail = { module = "org.eclipse.angus:angus-mail" }
+
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }
@@ -52,6 +60,8 @@ testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka" }
 # Contract-тесты адаптеров провайдеров по стабам из документации (QA-04, PR-04).
 # standalone-артефакт: внутри затенён свой Jetty, поэтому он не конфликтует с Tomcat из Boot.
 wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+# SMTP/IMAP-сервер в тесте для Email-адаптера и разбора NDR (QA-03, EM-01, EM-02).
+greenmail-junit5 = { module = "com.icegreen:greenmail-junit5", version.ref = "greenmail" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }

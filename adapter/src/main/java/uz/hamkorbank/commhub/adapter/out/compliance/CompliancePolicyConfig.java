@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
 
@@ -29,6 +30,18 @@ public class CompliancePolicyConfig {
                 cap.window(),
                 cap.blocking() ? "rejecting over the cap" : "counters and alerts only");
         return new FrequencyCapPolicy(cap.maxMessages(), cap.window(), cap.blocking());
+    }
+
+    /** Attachment ceilings the validator refuses an email by (EM-01). */
+    @Bean
+    public EmailPolicy emailPolicy(ComplianceProperties properties) {
+        ComplianceProperties.Email email = properties.email();
+        LOG.info(
+                "Email content limits (EM-01): up to {} attachments, {} each, {} in total",
+                email.maxAttachments(),
+                email.maxAttachmentSize(),
+                email.maxTotalAttachmentSize());
+        return email.toPolicy();
     }
 
     @Bean

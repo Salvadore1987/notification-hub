@@ -48,6 +48,7 @@ public record ImportTemplatesCommand(Actor actor, String author, String approver
     /**
      * One localised body of the file being imported (FR-4.6).
      *
+     * @param html HTML alternative of an email body; {@code null} everywhere else (EM-01)
      * @param direction business direction the template belongs to (§18.4)
      * @param owner owning unit; {@code null} keeps whatever the existing card has
      */
@@ -57,6 +58,7 @@ public record ImportTemplatesCommand(Actor actor, String author, String approver
             ContentLocale locale,
             String subject,
             String text,
+            String html,
             String direction,
             String owner) {
 

@@ -2,6 +2,8 @@ package uz.hamkorbank.commhub.adapter.out.compliance;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
+import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 
 /**
  * Deployment settings of the compliance filters (FR-5.4, SEC-05).
@@ -16,9 +18,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     (SEC-05)
  * @param counterRetention how long the per-recipient counters are kept; must cover the cap window, and there
  *     is no reason to keep more (DB-03)
+ * @param email content limits of the email channel (EM-01); they sit here because the validator reads all of
+ *     its ceilings from one place, and an attachment limit is a rule of the Hub about content rather than a
+ *     property of whichever relay ends up carrying the message
  */
 @ConfigurationProperties("commhub.compliance")
-public record ComplianceProperties(FrequencyCap frequencyCap, Boolean panBlocking, Duration counterRetention) {
+public record ComplianceProperties(
+        FrequencyCap frequencyCap, Boolean panBlocking, Duration counterRetention, Email email) {
 
     public static final Duration DEFAULT_COUNTER_RETENTION = Duration.ofDays(7);
 
@@ -26,6 +32,7 @@ public record ComplianceProperties(FrequencyCap frequencyCap, Boolean panBlockin
         frequencyCap = frequencyCap == null ? new FrequencyCap(null, null, null) : frequencyCap;
         panBlocking = panBlocking == null || panBlocking;
         counterRetention = counterRetention == null ? DEFAULT_COUNTER_RETENTION : counterRetention;
+        email = email == null ? new Email(null, null, null) : email;
         if (counterRetention.compareTo(frequencyCap.window()) < 0) {
             throw new IllegalArgumentException(
                     "commhub.compliance.counter-retention (%s) must cover the cap window (%s), otherwise the sweep "
@@ -57,6 +64,37 @@ public record ComplianceProperties(FrequencyCap frequencyCap, Boolean panBlockin
             if (window.isZero() || window.isNegative()) {
                 throw new IllegalArgumentException("commhub.compliance.frequency-cap.window must be positive");
             }
+        }
+    }
+
+    /**
+     * Attachment ceilings of the email channel (EM-01).
+     *
+     * <p>They are deliberately expressed in bytes of stored payload, which is what the source system knows
+     * and what the Hub can check before anything is encoded. Base64 adds about a third on the wire, so the
+     * defaults sit below what a corporate relay usually accepts rather than at it.
+     */
+    public record Email(Integer maxAttachments, DataSize maxAttachmentSize, DataSize maxTotalAttachmentSize) {
+
+        public Email {
+            maxAttachments =
+                    maxAttachments == null || maxAttachments < 0 ? EmailPolicy.DEFAULT_MAX_ATTACHMENTS : maxAttachments;
+            maxAttachmentSize = maxAttachmentSize == null
+                    ? DataSize.ofBytes(EmailPolicy.DEFAULT_MAX_ATTACHMENT_BYTES)
+                    : maxAttachmentSize;
+            maxTotalAttachmentSize = maxTotalAttachmentSize == null
+                    ? DataSize.ofBytes(EmailPolicy.DEFAULT_MAX_TOTAL_BYTES)
+                    : maxTotalAttachmentSize;
+            if (maxTotalAttachmentSize.toBytes() < maxAttachmentSize.toBytes()) {
+                throw new IllegalArgumentException(
+                        "commhub.compliance.email.max-total-attachment-size (%s) is below max-attachment-size (%s): "
+                                        .formatted(maxTotalAttachmentSize, maxAttachmentSize)
+                                + "a single file within its own limit would always breach the total (EM-01)");
+            }
+        }
+
+        public EmailPolicy toPolicy() {
+            return new EmailPolicy(maxAttachments, maxAttachmentSize.toBytes(), maxTotalAttachmentSize.toBytes());
         }
     }
 }

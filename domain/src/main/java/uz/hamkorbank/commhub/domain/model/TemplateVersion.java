@@ -114,7 +114,8 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
         Guard.isTrue(status.isSendable(), "only a PUBLISHED template version may be rendered (FR-4.1)");
         Map<String, String> values = Guard.copyOf(variables);
         String subject = body.subject() == null ? null : substitute(body.subject(), values, strict);
-        return new Rendered(subject, substitute(body.text(), values, strict));
+        String html = body.html() == null ? null : substitute(body.html(), values, strict);
+        return new Rendered(subject, substitute(body.text(), values, strict), html);
     }
 
     /**
@@ -129,7 +130,8 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
     public Rendered renderPreview(Map<String, String> variables) {
         Map<String, String> values = Guard.copyOf(variables);
         String subject = body.subject() == null ? null : preview(body.subject(), values);
-        return new Rendered(subject, preview(body.text(), values));
+        String html = body.html() == null ? null : preview(body.html(), values);
+        return new Rendered(subject, preview(body.text(), values), html);
     }
 
     /** Merge fields of the body the supplied variables have no value for (FR-4.3, FR-4.4). */
@@ -220,28 +222,49 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
     /**
      * Body of a template version (§10.1 {@code template_version}).
      *
+     * <p>The plain text is always present and the HTML never alone: EM-01 wants
+     * {@code multipart/alternative}, and the alternative that survives a client which refuses HTML — or a
+     * mail gateway that strips it — is the text part. An email template written only in HTML would produce
+     * messages that are empty for exactly those recipients, so the text is what a template <em>is</em> and
+     * the HTML is what it may also carry.
+     *
      * @param subject email subject; {@code null} for SMS and push titles carried in the text
-     * @param text SMS text, push body or email body, with {@code {MERGE_FIELDS}}
+     * @param text SMS text, push body or the plain-text alternative of an email, with {@code {MERGE_FIELDS}}
+     * @param html HTML alternative of an email body; {@code null} everywhere else (EM-01)
      */
-    public record Body(String subject, String text) {
+    public record Body(String subject, String text, String html) {
 
         public static final int MAX_TEXT_LENGTH = 8192;
+
+        /** HTML carries markup as well as wording, so it gets its own, larger ceiling (EM-01). */
+        public static final int MAX_HTML_LENGTH = 262_144;
 
         public Body {
             Guard.notBlank(text, "Body.text");
             Guard.maxLength(text, MAX_TEXT_LENGTH, "Body.text");
+            html = html == null || html.isBlank() ? null : html;
+            Guard.maxLength(html, MAX_HTML_LENGTH, "Body.html");
         }
 
         public static Body ofText(String text) {
-            return new Body(null, text);
+            return new Body(null, text, null);
         }
 
         public static Body of(String subject, String text) {
-            return new Body(subject, text);
+            return new Body(subject, text, null);
+        }
+
+        /** Email body with both alternatives; the adapter builds {@code multipart/alternative} (EM-01). */
+        public static Body ofEmail(String subject, String text, String html) {
+            return new Body(subject, text, html);
+        }
+
+        public boolean hasHtml() {
+            return html != null;
         }
 
         /**
-         * Merge fields referenced by the subject and the text, in the order they appear (FR-4.3).
+         * Merge fields referenced by the subject, the text and the HTML, in the order they appear (FR-4.3).
          *
          * <p>Declaration order is kept deliberately: the admin panel lists the fields an operator has to
          * fill in, and reading them in the order of the text is how the text is proof-read (FR-4.4).
@@ -250,6 +273,7 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
             Set<String> variables = new LinkedHashSet<>();
             collectInto(subject, variables);
             collectInto(text, variables);
+            collectInto(html, variables);
             return Collections.unmodifiableSet(variables);
         }
 
@@ -268,15 +292,24 @@ public final class TemplateVersion extends AggregateRoot<TemplateVersionId> {
      * Result of rendering a template version (FR-4.3).
      *
      * @param subject rendered subject; {@code null} when the version has none
+     * @param html rendered HTML alternative; {@code null} when the version has none (EM-01)
      */
-    public record Rendered(String subject, String text) {
+    public record Rendered(String subject, String text, String html) {
 
         public Rendered {
             Guard.notBlank(text, "Rendered.text");
         }
 
+        public static Rendered ofText(String text) {
+            return new Rendered(null, text, null);
+        }
+
         public Optional<String> subjectOptional() {
             return Optional.ofNullable(subject);
+        }
+
+        public Optional<String> htmlOptional() {
+            return Optional.ofNullable(html);
         }
     }
 }
