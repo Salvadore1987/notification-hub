@@ -95,17 +95,99 @@ commhub:
       #     burst: 1000
       streams: {}
 
-  # Провайдерские callback'и статусов (PM-02, SEC-07). Ключи — коды провайдеров; адаптеры
-  # провайдеров с трансляторами появляются в Phase 7, до этого endpoint отвечает 404.
+  # Провайдерские callback'и статусов (PM-02, SEC-07). Ключи — коды провайдеров.
   # Секрет в проме приходит из секрет-хранилища Банка (SG-04) и в логах не появляется.
   callback:
     base: ${CALLBACK_BASE_PATH:/api/callbacks}
-    providers: {}
-    #  PLAYMOBILE:
-    #    enabled: true
-    #    allowed-ips: [ "10.0.0.1" ]
-    #    secret-header: X-Commhub-Callback-Secret
-    #    secret: ${PLAYMOBILE_CALLBACK_SECRET:}
+    providers:
+      PLAYMOBILE:
+        enabled: ${PLAYMOBILE_CALLBACK_ENABLED:true}
+        # Пусто = проверка адреса делегирована сети; список согласуется с Playmobile (PM-02).
+        allowed-ips: ${PLAYMOBILE_CALLBACK_IPS:}
+        secret-header: ${PLAYMOBILE_CALLBACK_HEADER:X-Commhub-Callback-Secret}
+        # В контуре Банка — ссылка в секрет-хранилище (SG-04); secret оставлен для локального стенда.
+        secret-ref: ${PLAYMOBILE_CALLBACK_SECRET_REF:}
+        secret: ${PLAYMOBILE_CALLBACK_SECRET:}
+      SMSGATE:
+        enabled: ${SMSGATE_CALLBACK_ENABLED:true}
+        allowed-ips: ${SMSGATE_CALLBACK_IPS:}
+        secret-header: ${SMSGATE_CALLBACK_HEADER:X-Commhub-Callback-Secret}
+        secret-ref: ${SMSGATE_CALLBACK_SECRET_REF:}
+        secret: ${SMSGATE_CALLBACK_SECRET:}
+
+  # Секрет-хранилище (SEC-04, SG-04). Значений здесь нет — только то, откуда их брать.
+  # В контуре Банка Vault-agent рендерит секреты в примонтированный том, а приложение читает файлы:
+  # так у Hub'а нет собственного токена Vault и Vault не оказывается на пути отправки сообщения.
+  # Ссылки поддерживают схемы env:/file:/prop:; без схемы — файл в directory, затем values.
+  secrets:
+    directory: ${SECRETS_DIR:}
+    # Кэш ссылки: ротация применяется без рестарта в пределах этого окна (SEC-04, AD-07 просит ≤30с).
+    cache-ttl: ${SECRETS_CACHE_TTL:30s}
+    values: {}
+
+  # Адаптеры провайдеров (§9, PR-01). Транспортные настройки переедут в provider.endpoint_config
+  # в Phase 8 (горячее применение, AD-07); креды не переедут никогда — они остаются ссылками.
+  provider:
+    # Playmobile SMS-Broker — основной провайдер SMS (§9.1, §18.1).
+    playmobile:
+      enabled: ${PLAYMOBILE_ENABLED:false}
+      provider-code: ${PLAYMOBILE_PROVIDER_CODE:PLAYMOBILE}
+      credentials:
+        username-ref: ${PLAYMOBILE_USERNAME_REF:playmobile/username}
+        password-ref: ${PLAYMOBILE_PASSWORD_REF:playmobile/password}
+      sending:
+        originator: ${PLAYMOBILE_ORIGINATOR:}
+        # Префикс message-id, согласован с Playmobile; вместе с номером — не более 20 символов (§9.1).
+        organisation-prefix: ${PLAYMOBILE_MESSAGE_ID_PREFIX:HB}
+        # default-ttl: 1h   # sms.ttl для сообщений без собственного TTL; без ключа поле не отправляется
+        # PM-03: класс трафика задаёт нижнюю границу приоритета, сообщение может её только поднять.
+        priorities:
+          critical-otp: realtime
+          transactional: normal
+          notification: low
+      http:
+        base-url: ${PLAYMOBILE_BASE_URL:http://localhost:8089/broker-api}
+        connect-timeout: ${PLAYMOBILE_CONNECT_TIMEOUT:3s}
+        read-timeout: ${PLAYMOBILE_READ_TIMEOUT:10s}
+      resilience:
+        # Ретрай внутри попытки допустим: message-id генерирует Hub, повтор дедуплицируется провайдером.
+        max-attempts: ${PLAYMOBILE_RETRY_ATTEMPTS:2}
+        open-duration: ${PLAYMOBILE_CB_OPEN:30s}
+
+    # SMS Gate v4.3 — резервный провайдер SMS (§9.2, §18.2).
+    smsgate:
+      enabled: ${SMSGATE_ENABLED:false}
+      provider-code: ${SMSGATE_PROVIDER_CODE:SMSGATE}
+      credentials:
+        login-ref: ${SMSGATE_LOGIN_REF:smsgate/login}
+        key-ref: ${SMSGATE_KEY_REF:smsgate/key}
+      sending:
+        sender: ${SMSGATE_SENDER:}
+        # weight 0–10, больше — раньше в очереди провайдера (§9.2).
+        weights:
+          critical-otp: 10
+          transactional: 7
+          notification: 3
+      # §18.2: антиспам-лимит провайдера 50 SMS/час/номер. Счётчик локальный на инстанс,
+      # поэтому целимся ниже линии, а не в неё (FR-2.5).
+      rate-limit:
+        per-recipient-per-hour: ${SMSGATE_RECIPIENT_PER_HOUR:45}
+      # SG-03: опрос /api/v2/search по сообщениям без DLR. Выключено по умолчанию —
+      # включается там, где FEEDBACK доказанно теряется.
+      reconciliation:
+        enabled: ${SMSGATE_RECONCILIATION_ENABLED:false}
+        after: ${SMSGATE_RECONCILIATION_AFTER:15m}
+        batch-size: ${SMSGATE_RECONCILIATION_BATCH:100}
+        interval: ${SMSGATE_RECONCILIATION_INTERVAL:5m}
+      http:
+        base-url: ${SMSGATE_BASE_URL:http://localhost:8089}
+        connect-timeout: ${SMSGATE_CONNECT_TIMEOUT:3s}
+        read-timeout: ${SMSGATE_READ_TIMEOUT:10s}
+      resilience:
+        # 1 = без ретрая внутри попытки: /api/v2/send не принимает клиентский id,
+        # повтор после потерянного ответа — это второе SMS клиенту (§9.2).
+        max-attempts: ${SMSGATE_RETRY_ATTEMPTS:1}
+        open-duration: ${SMSGATE_CB_OPEN:30s}
 
   # Хранилище: секции и retention (DB-02, DB-03), реплика для аналитики (DB-06).
   persistence:

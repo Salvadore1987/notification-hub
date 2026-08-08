@@ -244,6 +244,37 @@ public class MessagePersistenceAdapter implements MessageRepository {
         return complete(rows);
     }
 
+    /**
+     * Messages still waiting for a delivery report from a provider (SG-03).
+     *
+     * <p>Anchored on the delivery attempt rather than on the message row: the message reached
+     * {@code SENT_TO_PROVIDER} when the provider accepted it, and it is that acceptance whose age
+     * decides when a report is overdue. The partial index of DB-05 on the non-terminal statuses is what
+     * keeps this cheap on a partition holding a month of traffic.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<Message> findAwaitingDeliveryReport(ProviderCode providerCode, Instant acceptedBefore, int limit) {
+        List<PartialMessage> rows = jdbcClient
+                .sql(SELECT_MESSAGE + """
+                         WHERE status = 'SENT_TO_PROVIDER'
+                           AND selected_provider_code = :providerCode
+                           AND id IN (SELECT message_id
+                                      FROM delivery_attempt
+                                      WHERE provider_code = :providerCode
+                                        AND result = 'ACCEPTED'
+                                        AND response_at <= :acceptedBefore)
+                         ORDER BY accepted_at
+                         LIMIT :limit
+                        """)
+                .param("providerCode", providerCode.value())
+                .param("acceptedBefore", SqlValues.timestamp(acceptedBefore))
+                .param("limit", limit)
+                .query(messageRowMapper.partialRowMapper())
+                .list();
+        return complete(rows);
+    }
+
     @Override
     @Transactional(readOnly = true)
     public long countTerminalByBatch(BatchId batchId) {

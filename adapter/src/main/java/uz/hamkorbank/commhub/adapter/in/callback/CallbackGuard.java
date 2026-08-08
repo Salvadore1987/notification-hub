@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.adapter.in.callback.CallbackProperties.Provider;
+import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -35,9 +36,11 @@ public class CallbackGuard {
     private static final List<String> FORWARDED_FOR_HEADERS = List.of("X-Forwarded-For", "X-Real-IP");
 
     private final CallbackProperties properties;
+    private final SecretResolverPort secrets;
 
-    public CallbackGuard(CallbackProperties properties) {
+    public CallbackGuard(CallbackProperties properties, SecretResolverPort secrets) {
         this.properties = Guard.notNull(properties, "properties");
+        this.secrets = Guard.notNull(secrets, "secrets");
     }
 
     /**
@@ -55,6 +58,23 @@ public class CallbackGuard {
         checkSecret(providerCode, provider, request);
     }
 
+    /**
+     * The value the header is expected to carry (SG-04).
+     *
+     * <p>A reference wins over a literal: in the Bank's contour the secret is agreed with the provider
+     * and stored in the secret store, and the literal exists only so the local stack works without one.
+     * A reference that resolves to nothing fails the callback rather than falling through to an empty
+     * comparison — a guard that silently stops guarding is worse than one that is loudly broken.
+     */
+    private String expectedSecret(String providerCode, Provider provider) {
+        if (!provider.hasSecretRef()) {
+            return provider.secret();
+        }
+        return secrets.resolve(provider.secretRef())
+                .orElseThrow(() -> new CallbackAuthenticationException(
+                        providerCode, "the configured callback secret reference resolves to nothing"));
+    }
+
     private static void checkAddress(String providerCode, Provider provider, HttpServletRequest request) {
         if (!provider.checksAddress()) {
             return;
@@ -66,12 +86,12 @@ public class CallbackGuard {
         }
     }
 
-    private static void checkSecret(String providerCode, Provider provider, HttpServletRequest request) {
+    private void checkSecret(String providerCode, Provider provider, HttpServletRequest request) {
         if (!provider.checksSecret()) {
             return;
         }
         String presented = request.getHeader(provider.secretHeader());
-        if (presented == null || !constantTimeEquals(presented, provider.secret())) {
+        if (presented == null || !constantTimeEquals(presented, expectedSecret(providerCode, provider))) {
             LOG.warn("Callback for {} refused: the shared secret does not match", providerCode);
             throw new CallbackAuthenticationException(providerCode, "the shared secret does not match");
         }

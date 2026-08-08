@@ -5,9 +5,9 @@
  * to call it, and how the report reaches the use case — and nothing that is specific to one. The
  * vocabulary of a provider is its own business: each supplies a
  * {@link uz.hamkorbank.commhub.adapter.in.callback.ProviderCallbackTranslator} that turns its payload
- * into canonical status commands using the tables of §18.1 and §18.2. Those translators arrive with
- * their adapters in Phase 7; until then the endpoint stands, guarded and tested, and answers 404 for a
- * provider nobody has taught it about.
+ * into canonical status commands using the tables of §18.1 and §18.2. Those translators live with their
+ * adapters under {@code adapter/out/provider}; a provider nobody has taught this endpoint about is
+ * answered 404.
  *
  * <p>Two things protect it (SEC-07): the caller's address has to be on the allowlist agreed with the
  * provider, and the request has to carry the shared secret. Both are per provider, because the two SMS

@@ -6,6 +6,7 @@ archunit = "1.5.0"
 resilience4j = "2.4.0"
 spotless = "8.9.0"
 checkstyle = "13.9.0"
+wiremock = "3.13.1"
 
 [libraries]
 # BOM: версии Spring Boot / Spring Framework / Kafka / Flyway / Testcontainers / JUnit.
@@ -28,8 +29,11 @@ spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-te
 mapstruct = { module = "org.mapstruct:mapstruct", version.ref = "mapstruct" }
 mapstruct-processor = { module = "org.mapstruct:mapstruct-processor", version.ref = "mapstruct" }
 
-# Resilience4j — retry/circuit breaker/fallback для адаптеров провайдеров (AD-04, PR-01), подключается с Phase 7
-resilience4j-spring-boot = { module = "io.github.resilience4j:resilience4j-spring-boot4", version.ref = "resilience4j" }
+# Resilience4j — retry/circuit breaker для адаптеров провайдеров (AD-04, PR-01), подключён с Phase 7.
+# Берём ядро, а не spring-boot-стартер: реестры создаются явным @Configuration (ProviderResilienceConfig),
+# без AOP-аннотаций — так политика провайдера видна в коде и проверяется unit-тестом, а не только yaml'ом.
+resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
+resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }
 
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
@@ -45,6 +49,9 @@ archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" 
 testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka" }
+# Contract-тесты адаптеров провайдеров по стабам из документации (QA-04, PR-04).
+# standalone-артефакт: внутри затенён свой Jetty, поэтому он не конфликтует с Tomcat из Boot.
+wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
