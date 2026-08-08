@@ -27,15 +27,37 @@ spring:
     validate-on-migrate: true
     clean-disabled: true
 
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-
   # NF-05: graceful shutdown с дообработкой in-flight
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
-# Хранилище: секции и retention (DB-02, DB-03), реплика для аналитики (DB-06).
 commhub:
+  # Kafka (§8.1). Namespace свой, а не spring.kafka: в Spring Boot 4 автоконфигурация Kafka вынесена
+  # в отдельный модуль, который здесь не подключён — продюсер собирается явно (KafkaProducerConfig),
+  # чтобы гарантии AD-03 (acks=all, идемпотентность) жили в коде, а не в перенастраиваемом yaml.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    client-id: ${KAFKA_CLIENT_ID:notification-hub}
+    outbound:
+      status-topic: ${KAFKA_STATUS_TOPIC:comm.outbound.status.v1}
+      dlq-topic: ${KAFKA_DLQ_TOPIC:comm.outbound.dlq.v1}
+      # Сколько relay ждёт подтверждения брокера; на это время строки outbox остаются заблокированными.
+      send-timeout: ${KAFKA_SEND_TIMEOUT:10s}
+      # В контуре Банка топики заводит эксплуатация (партиции, retention, ACL) — здесь false.
+      create-topics: ${KAFKA_CREATE_TOPICS:false}
+      partitions: ${KAFKA_OUTBOUND_PARTITIONS:12}
+      replication-factor: ${KAFKA_OUTBOUND_REPLICATION_FACTOR:1}
+
+  # Transactional Outbox → Kafka (AD-03). Relay работает на каждом инстансе: строки берутся
+  # FOR UPDATE SKIP LOCKED, поэтому инстансы делят очередь, а не дублируют её.
+  outbox:
+    relay:
+      enabled: ${OUTBOX_RELAY_ENABLED:true}
+      poll-interval-ms: ${OUTBOX_RELAY_POLL_INTERVAL_MS:500}
+      batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
+      max-passes-per-tick: ${OUTBOX_RELAY_MAX_PASSES:10}
+
+  # Хранилище: секции и retention (DB-02, DB-03), реплика для аналитики (DB-06).
   persistence:
     partitions-ahead: ${DB_PARTITIONS_AHEAD:2}
     retention-months: ${DB_RETENTION_MONTHS:12}
@@ -47,6 +69,16 @@ commhub:
       url: ${DB_REPLICA_URL:}
       username: ${DB_REPLICA_USER:${DB_USER:commhub}}
       password: ${DB_REPLICA_PASSWORD:${DB_PASSWORD:commhub}}
+    # DB-04: контент сообщений шифруется приложением (AES-256-GCM) перед записью.
+    # Ключ — base64 32 байт (`openssl rand -base64 32`), в проме приходит из секрет-хранилища
+    # платформы; без него контекст не поднимется — тихого отката на открытый текст нет.
+    # Ротация: добавить новый ключ в keys, перевести на него active-key-id, старый держать,
+    # пока живы секции со строками, записанными под ним (DB-03).
+    encryption:
+      enabled: ${CONTENT_ENCRYPTION_ENABLED:true}
+      active-key-id: ${CONTENT_ENCRYPTION_KEY_ID:k1}
+      keys:
+        k1: ${CONTENT_ENCRYPTION_KEY:}
 
 server:
   port: ${SERVER_PORT:8080}

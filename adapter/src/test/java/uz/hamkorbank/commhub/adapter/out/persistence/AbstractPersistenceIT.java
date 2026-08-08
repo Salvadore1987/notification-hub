@@ -1,5 +1,6 @@
 package uz.hamkorbank.commhub.adapter.out.persistence;
 
+import java.util.Map;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Tag;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +14,7 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
+import uz.hamkorbank.commhub.adapter.out.persistence.crypto.ContentEncryptionProperties;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.PersistenceProperties;
 import uz.hamkorbank.commhub.adapter.out.time.SystemClockAdapter;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
@@ -32,6 +34,11 @@ import uz.hamkorbank.commhub.application.port.out.ClockPort;
 @SpringJUnitConfig(AbstractPersistenceIT.PersistenceTestConfig.class)
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 public abstract class AbstractPersistenceIT {
+
+    /** Content key of the test context; base64 of 32 bytes, as AES-256 requires (DB-04). */
+    protected static final String TEST_KEY_ID = "test";
+
+    protected static final String TEST_KEY = "dGVzdC1jb250ZW50LWtleS0zMi1ieXRlcy1sb25nISE=";
 
     private final JdbcClient jdbcClient;
     private final TransactionTemplate transactionTemplate;
@@ -82,6 +89,12 @@ public abstract class AbstractPersistenceIT {
         @Bean
         PersistenceProperties persistenceProperties() {
             return new PersistenceProperties(null, null, null, null);
+        }
+
+        /** The tests run with content encryption on, the way production does (DB-04). */
+        @Bean
+        ContentEncryptionProperties contentEncryptionProperties() {
+            return new ContentEncryptionProperties(true, TEST_KEY_ID, Map.of(TEST_KEY_ID, TEST_KEY));
         }
 
         @Bean

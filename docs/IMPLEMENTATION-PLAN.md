@@ -25,8 +25,9 @@
   запрет field injection, запрет `System.out/err`), suppressions-файл; входит в `./gradlew build`
 - ✅ `docker-compose` для локали: PostgreSQL 16, Kafka + Schema Registry, WireMock, MailHog/GreenMail
   — `docker-compose.yml`: postgres:16, apache/kafka:4.2.1 (KRaft), cp-schema-registry (BACKWARD), wiremock, greenmail
-- ✅ Базовый CI-пайплайн: build + unit + ArchUnit + integration (Testcontainers) + SAST/dependency-scan (SEC-09)
-  — `.github/workflows/ci.yml`: jobs `build` / `integration-test` / `security-scan` (CodeQL + dependency review)
+- ✅ Проверки сборки: `./gradlew build` (Spotless, Checkstyle, unit, ArchUnit) и `./gradlew integrationTest`
+  — пайплайн в репозитории не держим: сборка запускается локально, SAST/анализ зависимостей (SEC-09)
+  подключаются корпоративным конвейером Банка (Jenkins/GitLab CI, SonarQube, Nexus IQ)
 - ✅ Настроить Flyway, каталог миграций, воспроизведение схемы с нуля (DB-01)
   — `adapter/src/main/resources/db/migration/V1__baseline.sql`, схема `comm_hub`, тест `FlywayMigrationIT`
 - ✅ Git-репозиторий, ветвление, PR-шаблон
@@ -112,8 +113,8 @@
 > Реализации use case помечены `@Service`/`@Transactional`, но бинов output-портов ещё нет — контекст Spring поднимется
 > после Phase 4 (персистентность) и явного wiring в `bootstrap`. Компиляция, unit-тесты и ArchUnit от этого не зависят.
 >
-> После Phase 4 закрыты порты персистентности и `ClockPort`; контекст всё ещё не стартует целиком — ждут своих фаз
-> `StatusPublisherPort` (Phase 5), `SecretResolverPort` (Phase 7), `FrequencyCounterPort` (Phase 10),
+> После Phase 4 закрыты порты персистентности и `ClockPort`, после Phase 5 — `StatusPublisherPort`; контекст всё ещё
+> не стартует целиком — ждут своих фаз `SecretResolverPort` (Phase 7), `FrequencyCounterPort` (Phase 10),
 > `MetricsPort` (Phase 13), `KillSwitchPort` (Phase 14), `CustomerPreferencePort` (фаза 2 по SRS).
 
 ### Phase 4. Персистентность (`adapter/out/persistence`) — PostgreSQL
@@ -123,19 +124,37 @@
 - ✅ Индексы: `(stream_id, accepted_at)`, `(external_id, stream_id)`, `(batch_id)`, `(dedup_key)`, `(correlation_id)`, частичные по нетерминальным статусам (DB-05)
 - ✅ Реализация репозиториев под output-порты — JdbcClient + ручные row-мапперы (обоснование в `persistence/package-info.java`)
 - ✅ Хеширование PII: `suppression_list` хранит только `address_hash` (SHA-256), адресов в таблице нет (DB-04)
-- [ ] Шифрование контента сообщений (pgcrypto либо app-level) — **ждёт решения ИБ** (DB-04); схема к нему готова (`pgcrypto` установлен в V1)
+- ✅ Шифрование контента сообщений (DB-04) — app-level AES-256-GCM (`persistence/crypto`: `ContentCipher`,
+  `ContentCodec`, `ContentEncryptionProperties`), а не pgcrypto: ключ не уходит в SQL, в `pg_stat_statements`
+  и в реплику (DB-06). Шифруются `message.contents` и `message.template_variables`; `recipient` остаётся
+  открытым — на нём GIN-индекс и поиск (DB-05), его PII закрыта хешем и маскированием. Формат — JSON-скаляр
+  `"CH1.<keyId>.<base64url(nonce‖ciphertext)>"`, чтение принимает и открытые строки (включение на живой базе),
+  ключи ротируются по `active-key-id` (миграция V8 — контракт хранения в комментариях схемы)
 - ✅ Read-only реплика для аналитики (DB-06) — `ReadReplicaConfig`, включается заданием `commhub.persistence.read-replica.url`
 - ✅ Retention/архивация (конфигурируемый срок ≥12 мес) (DB-03) — `commhub.persistence.retention-months`; отцепление секций за флагом `detach-old-partitions`, включается вместе с процедурой архивации
-- ✅ Интеграционные тесты с Testcontainers PostgreSQL (QA-03) — конфигурация, сообщения, гарантии доставки, шаблоны, обслуживание секций
+- ✅ Интеграционные тесты с Testcontainers PostgreSQL (QA-03) — конфигурация, сообщения, гарантии доставки,
+  шаблоны, обслуживание секций; контекст тестов поднимается с включённым шифрованием контента (DB-04)
 - [ ] Порты `KillSwitchPort` и `FrequencyCounterPort` — таблиц под них нет в §10.1, реализуются вместе со своей функциональностью (Phase 10 и Phase 14)
 
-### Phase 5. Transactional Outbox + Kafka (гарантии доставки)
+### Phase 5. Transactional Outbox + Kafka (гарантии доставки) ✅
 
-- [ ] Запись `outbox_event` в одной транзакции с бизнес-изменением (AD-03)
-- [ ] Outbox relay (polling publisher) → Kafka, идемпотентная публикация, at-least-once
-- [ ] Топики: продюсер `comm.outbound.status.v1`, `comm.outbound.dlq.v1` (§8.1)
-- [ ] Формат исходящего статуса §6.4, сериализация Avro/JSON в Schema Registry (BACKWARD) (NF-08)
-- [ ] Тест chaos: падение инстанса в процессе отправки → нет потерь/дублей (QA-06, AD-03)
+- ✅ Запись `outbox_event` в одной транзакции с бизнес-изменением (AD-03) — `MessageStatusNotifier` пишет через
+  `OutboxPort`, адаптер требует `Propagation.MANDATORY`: вызов без транзакции падает, а не теряет гарантию
+- ✅ Outbox relay (polling publisher) → Kafka, идемпотентная публикация, at-least-once
+  — use case `PublishOutboxEvents`/`PublishOutboxEventsService` + планировщик `adapter/in/scheduler/OutboxRelayScheduler`;
+  выборка `FOR UPDATE SKIP LOCKED` (инстансы делят очередь), пометка `published_at` только после ack брокера,
+  продюсер с `acks=all` и `enable.idempotence=true`; сбой публикации останавливает проход — порядок статусов
+  по сообщению важнее, чем протолкнуть следующее событие (`attempts`/`last_error` на строке видны оператору)
+- ✅ Топики: продюсер `comm.outbound.status.v1`, `comm.outbound.dlq.v1` (§8.1) — `KafkaOutboundProperties`,
+  ключ партиционирования — `messageId`, заголовки `commhub-event-id`/`-event-type`/`-stream-id`/`-schema-version`
+- ✅ Формат исходящего статуса §6.4 — `StatusEventCodec` (JSON, поля §6.4 + `schemaVersion`, отсутствующие
+  значения как явные `null`), схема `adapter/src/main/resources/schema/comm.outbound.status.v1.json`
+  — ⚠️ регистрация субъекта в Schema Registry (BACKWARD, NF-08) остаётся операционным шагом: сериализатор
+  намеренно не ходит в реестр, иначе реестр окажется на пути отправки каждого статуса. Avro не берём —
+  контракт JSON, как у входящего IK-03. Команда регистрации — в `CONTRIBUTING.md`
+- ✅ Тест chaos: падение инстанса в процессе отправки → нет потерь/дублей (QA-06, AD-03) — `OutboxRelayIT`
+  (Testcontainers PostgreSQL + Kafka): падение между ack брокера и коммитом, недоступный брокер, конкурентная
+  выборка двумя relay
 
 ### Phase 6. Входящие адаптеры (`adapter/in`)
 
