@@ -61,7 +61,8 @@ CREATE TABLE message (
     recipient               jsonb       NOT NULL,
     channel_plan            jsonb       NOT NULL,
     contents                jsonb       NOT NULL,
-    template_id             uuid,
+    template_code           varchar(64),
+    template_locale         text,
     template_version_id     uuid,
     template_variables      jsonb,
     timing                  jsonb,
@@ -70,6 +71,7 @@ CREATE TABLE message (
     selected_channel        text,
     selected_provider_id    uuid,
     selected_provider_code  varchar(32),
+    selected_provider_adapter_type varchar(32),
     segments                integer     NOT NULL DEFAULT 0,
     cost                    numeric(18, 4),
     cost_currency           char(3),
@@ -86,6 +88,10 @@ CREATE TABLE message (
         'DELIVERED', 'UNDELIVERED', 'EXPIRED', 'REJECTED', 'DUPLICATE', 'CANCELLED', 'FAILED')),
     CONSTRAINT message_selected_channel_ck CHECK (
         selected_channel IS NULL OR selected_channel IN ('SMS', 'EMAIL', 'PUSH')),
+    CONSTRAINT message_template_locale_ck CHECK (
+        template_locale IS NULL OR template_locale IN ('RU', 'UZ', 'EN')),
+    CONSTRAINT message_route_ck CHECK (
+        num_nonnulls(selected_provider_id, selected_provider_code, selected_provider_adapter_type) IN (0, 3)),
     CONSTRAINT message_segments_ck CHECK (segments >= 0),
     CONSTRAINT message_cost_currency_ck CHECK ((cost IS NULL) = (cost_currency IS NULL))
 ) PARTITION BY RANGE (accepted_at);
@@ -94,6 +100,10 @@ COMMENT ON TABLE message IS 'Каноническое сообщение — е�
 COMMENT ON COLUMN message.contents IS 'MessageContents: контент на канал (MP-02), а не один MessageContent.';
 COMMENT ON COLUMN message.recipient IS 'Адреса получателя на канал + clientId; PII (DB-04), в логах и UI маскируется.';
 COMMENT ON COLUMN message.channel_plan IS 'ChannelPlan: режим выбора канала и упорядоченные кандидаты (MP-03).';
+COMMENT ON COLUMN message.selected_provider_code IS
+    'Маршрут хранится целиком (id, код, тип адаптера): строка сообщения остаётся читаемой в архиве, даже если профиль провайдера удалён.';
+COMMENT ON COLUMN message.template_code IS 'TemplateRef: сообщение ссылается на шаблон по коду и локали, а не по id версии (FR-4.1).';
+COMMENT ON COLUMN message.template_version_id IS 'Версия, которой сообщение было отрендерено; заполняется со стадии рендеринга (Phase 9).';
 COMMENT ON COLUMN message.status_reason IS 'RejectionReason терминального отказа (IR-01); список расширяется, CHECK намеренно нет.';
 COMMENT ON COLUMN message.duplicate_of IS 'Оригинал, из-за которого сообщение получило статус DUPLICATE (FR-1.5).';
 COMMENT ON COLUMN message.terminal_at IS 'Момент перехода в терминальный статус; обязателен для терминальных (ST-03).';
@@ -120,7 +130,6 @@ CREATE INDEX message_recipient_gin_idx ON message USING gin (recipient jsonb_pat
 -- -------------------------------------------------------------------------------------
 
 CREATE TABLE message_status_history (
-    id              uuid        NOT NULL,
     message_id      uuid        NOT NULL,
     occurred_at     timestamptz NOT NULL,
     status          text        NOT NULL,
@@ -129,7 +138,9 @@ CREATE TABLE message_status_history (
     actor_type      text        NOT NULL,
     actor_id        varchar(128),
     provider_code   varchar(32),
-    CONSTRAINT message_status_history_pk PRIMARY KEY (id, occurred_at),
+    -- Ключ естественный: у перехода нет собственной идентичности, а (сообщение, момент,
+    -- статус) делает повторную запись той же истории идемпотентной (AD-03, at-least-once).
+    CONSTRAINT message_status_history_pk PRIMARY KEY (message_id, occurred_at, status),
     CONSTRAINT message_status_history_status_ck CHECK (status IN (
         'ACCEPTED', 'VALIDATED', 'ROUTED', 'QUEUED', 'SENDING', 'SENT_TO_PROVIDER', 'RETRYING',
         'DELIVERED', 'UNDELIVERED', 'EXPIRED', 'REJECTED', 'DUPLICATE', 'CANCELLED', 'FAILED')),
@@ -152,6 +163,8 @@ CREATE TABLE delivery_attempt (
     request_at              timestamptz NOT NULL,
     provider_id             uuid        NOT NULL,
     provider_code           varchar(32) NOT NULL,
+    provider_channel        text        NOT NULL,
+    provider_adapter_type   varchar(32) NOT NULL,
     provider_message_id     varchar(64),
     attempt_no              integer     NOT NULL,
     result                  text        NOT NULL DEFAULT 'PENDING',
@@ -162,6 +175,7 @@ CREATE TABLE delivery_attempt (
     error_description       varchar(1024),
     CONSTRAINT delivery_attempt_pk PRIMARY KEY (id, request_at),
     CONSTRAINT delivery_attempt_no_ck CHECK (attempt_no > 0),
+    CONSTRAINT delivery_attempt_channel_ck CHECK (provider_channel IN ('SMS', 'EMAIL', 'PUSH')),
     CONSTRAINT delivery_attempt_result_ck CHECK (result IN ('PENDING', 'ACCEPTED', 'REJECTED', 'ERROR', 'TIMEOUT')),
     CONSTRAINT delivery_attempt_error_class_ck CHECK (
         error_class IS NULL OR error_class IN ('RETRYABLE', 'NON_RETRYABLE', 'BLOCKING')),
@@ -171,6 +185,8 @@ CREATE TABLE delivery_attempt (
 ) PARTITION BY RANGE (request_at);
 
 COMMENT ON TABLE delivery_attempt IS 'Попытка передачи сообщения провайдеру (§10.1, PR-01). Секции по request_at (DB-02).';
+COMMENT ON COLUMN delivery_attempt.provider_adapter_type IS
+    'Провайдер попытки хранится целиком (id, код, канал, тип адаптера) — как и маршрут сообщения, попытка самодостаточна в архиве.';
 COMMENT ON COLUMN delivery_attempt.provider_message_id IS 'Идентификатор на стороне провайдера; Playmobile message-id ≤ 20 символов (§18.1).';
 COMMENT ON COLUMN delivery_attempt.latency_ms IS 'response_at − request_at; денормализовано ради отчётов о латентности (NF-01).';
 COMMENT ON COLUMN delivery_attempt.error_class IS 'Классификация ошибки: retryable / non-retryable / blocking (PM-01, §18.1).';

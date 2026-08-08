@@ -24,4 +24,10 @@ dependencies {
     testAnnotationProcessor(libs.mapstruct.processor)
 
     testImplementation(libs.spring.boot.starter.test)
+
+    // Персистентность проверяется на настоящем PostgreSQL со схемой из Flyway (QA-03, DB-01).
+    testImplementation(libs.testcontainers.junit)
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.flyway.core)
+    testRuntimeOnly(libs.flyway.postgresql)
 }

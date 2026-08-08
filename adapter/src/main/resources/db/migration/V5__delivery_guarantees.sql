@@ -85,15 +85,14 @@ CREATE INDEX dedup_registry_expires_idx ON dedup_registry (expires_at);
 
 CREATE TABLE suppression_list (
     id              uuid        PRIMARY KEY,
-    channel         text        NOT NULL,
+    channel         text,
     address_hash    varchar(64),
     client_id       varchar(64),
     reason          text        NOT NULL,
-    source          varchar(64),
     valid_until     timestamptz,
     created_by      varchar(128) NOT NULL,
     created_at      timestamptz NOT NULL,
-    CONSTRAINT suppression_channel_ck CHECK (channel IN ('SMS', 'EMAIL', 'PUSH')),
+    CONSTRAINT suppression_channel_ck CHECK (channel IS NULL OR channel IN ('SMS', 'EMAIL', 'PUSH')),
     CONSTRAINT suppression_reason_ck CHECK (reason IN (
         'OPT_OUT', 'COMPLAINT', 'HARD_BOUNCE', 'DELIVERY_FAILURES', 'PROVIDER_BLACKLIST', 'MANUAL')),
     CONSTRAINT suppression_target_ck CHECK (num_nonnulls(address_hash, client_id) = 1)
@@ -101,41 +100,44 @@ CREATE TABLE suppression_list (
 
 COMMENT ON TABLE suppression_list IS 'Список подавления: адреса и клиенты, которым отправка запрещена (FR-5.1).';
 COMMENT ON COLUMN suppression_list.address_hash IS 'Хеш адреса (DB-04); сам номер/email в таблицу не попадает.';
+COMMENT ON COLUMN suppression_list.channel IS 'NULL — запись действует на все каналы (SuppressionEntry.coversChannel).';
 COMMENT ON COLUMN suppression_list.valid_until IS 'Срок действия записи; NULL — бессрочно.';
 
-CREATE UNIQUE INDEX suppression_address_uk ON suppression_list (channel, address_hash)
+-- Отступление от §10.1: колонки source нет — происхождение записи выражают reason
+-- (OPT_OUT / HARD_BOUNCE / MANUAL…) и created_by, отдельного справочника домен не знает.
+
+-- COALESCE в ключе уникальности: NULL-канал — это «все каналы», и двух таких записей
+-- на один адрес быть не должно, а обычный UNIQUE считал бы NULL-ы различными.
+CREATE UNIQUE INDEX suppression_address_uk ON suppression_list (COALESCE(channel, '*'), address_hash)
     WHERE address_hash IS NOT NULL;
-CREATE UNIQUE INDEX suppression_client_uk ON suppression_list (channel, client_id)
+CREATE UNIQUE INDEX suppression_client_uk ON suppression_list (COALESCE(channel, '*'), client_id)
     WHERE client_id IS NOT NULL;
 
 -- -------------------------------------------------------------------------------------
--- Счётчики квот (FR-2.6). Область действия — поток, канал и/или провайдер; NULL означает
--- «любой», поэтому уникальность строится по COALESCE-выражениям, а не по (scope, period).
+-- Счётчики квот (FR-2.6). Область действия — поток, канал и/или провайдер. «Любой»
+-- кодируется не NULL, а пустой строкой и нулевым uuid: ключ уникальности тогда обычный,
+-- а не по COALESCE-выражениям, и ON CONFLICT в инкременте попадает в него однозначно.
 -- -------------------------------------------------------------------------------------
 
 CREATE TABLE quota_counter (
     id              uuid        PRIMARY KEY,
-    stream_id       varchar(64),
-    channel         text,
-    provider_id     uuid,
+    stream_id       varchar(64) NOT NULL DEFAULT '',
+    channel         text        NOT NULL DEFAULT '',
+    provider_id     uuid        NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     window_type     text        NOT NULL,
     period_start    date        NOT NULL,
     counter         bigint      NOT NULL DEFAULT 0,
     cost_counter    numeric(18, 4) NOT NULL DEFAULT 0,
     cost_currency   char(3),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT quota_counter_channel_ck CHECK (channel IS NULL OR channel IN ('SMS', 'EMAIL', 'PUSH')),
+    CONSTRAINT quota_counter_scope_uk UNIQUE (stream_id, channel, provider_id, window_type, period_start),
+    CONSTRAINT quota_counter_channel_ck CHECK (channel IN ('', 'SMS', 'EMAIL', 'PUSH')),
     CONSTRAINT quota_counter_window_ck CHECK (window_type IN ('DAY', 'MONTH')),
-    CONSTRAINT quota_counter_scope_ck CHECK (num_nonnulls(stream_id, channel, provider_id) > 0),
+    CONSTRAINT quota_counter_scope_ck CHECK (
+        stream_id <> '' OR channel <> '' OR provider_id <> '00000000-0000-0000-0000-000000000000'),
     CONSTRAINT quota_counter_values_ck CHECK (counter >= 0 AND cost_counter >= 0)
 );
 
 COMMENT ON TABLE quota_counter IS 'Счётчики количества и стоимости по области и периоду (FR-2.6).';
+COMMENT ON COLUMN quota_counter.stream_id IS 'Пустая строка — счётчик не привязан к потоку (аналогично channel и provider_id).';
 COMMENT ON COLUMN quota_counter.period_start IS 'Начало окна: сутки для DAY, первое число месяца для MONTH (Asia/Tashkent).';
-
-CREATE UNIQUE INDEX quota_counter_scope_uk ON quota_counter (
-    COALESCE(stream_id, ''),
-    COALESCE(channel, ''),
-    COALESCE(provider_id, '00000000-0000-0000-0000-000000000000'::uuid),
-    window_type,
-    period_start);

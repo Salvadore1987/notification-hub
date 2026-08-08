@@ -8,7 +8,8 @@ spring:
       enabled: true
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/commhub}
+    # currentSchema: адаптеры пишут SQL без префикса схемы, весь Hub живёт в comm_hub.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/commhub?currentSchema=comm_hub}
     username: ${DB_USER:commhub}
     password: ${DB_PASSWORD:commhub}
     hikari:
@@ -32,6 +33,20 @@ spring:
   # NF-05: graceful shutdown с дообработкой in-flight
   lifecycle:
     timeout-per-shutdown-phase: 30s
+
+# Хранилище: секции и retention (DB-02, DB-03), реплика для аналитики (DB-06).
+commhub:
+  persistence:
+    partitions-ahead: ${DB_PARTITIONS_AHEAD:2}
+    retention-months: ${DB_RETENTION_MONTHS:12}
+    # Отцепление секций включается вместе с процедурой архивации — иначе данные уйдут в никуда.
+    detach-old-partitions: ${DB_DETACH_OLD_PARTITIONS:false}
+    maintenance-cron: ${DB_MAINTENANCE_CRON:0 30 2 * * *}
+    read-replica:
+      # Пусто — весь трафик идёт на основной узел; задать URL, чтобы включить реплику (DB-06).
+      url: ${DB_REPLICA_URL:}
+      username: ${DB_REPLICA_USER:${DB_USER:commhub}}
+      password: ${DB_REPLICA_PASSWORD:${DB_PASSWORD:commhub}}
 
 server:
   port: ${SERVER_PORT:8080}
