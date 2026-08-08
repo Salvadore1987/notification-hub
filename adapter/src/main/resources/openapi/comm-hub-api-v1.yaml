@@ -1,0 +1,552 @@
+openapi: 3.1.0
+
+# Контракт синхронного API систем-источников (SRS §8.2, IR-03).
+#
+# Документ ведётся рядом с кодом и проверяется тестом OpenApiContractTest: тест обходит
+# @RequestMapping всех контроллеров adapter/in/rest и падает, если в документе нет операции для
+# найденного пути и метода (или наоборот). Автогенерация через springdoc появится, когда выйдет
+# его релиз под Spring Boot 4 — текущая ветка 2.8.x собрана под Jackson 2 и Spring 6.
+
+info:
+  title: Notification Hub — Source System API
+  version: "1.0.0"
+  description: |
+    Приём сообщений и батчей от систем-источников Банка: единичные сообщения (в т.ч. OTP),
+    батчевые рассылки со списком получателей, управление батчами и опрос статусов.
+
+    Тело `POST /messages` — канонический входящий контракт IK-03 (§8.1), тот же самый документ,
+    который системы-источники кладут в Kafka. Ошибки — RFC 9457 `application/problem+json`
+    с машиночитаемым кодом в поле `code` (IR-01).
+  contact:
+    name: Notification Hub team
+
+servers:
+  - url: https://{host}/api/v1
+    description: Контур Банка
+    variables:
+      host:
+        default: comm-hub.hamkorbank.uz
+
+tags:
+  - name: messages
+    description: Единичные сообщения (FR-1.1, FR-1.7)
+  - name: batches
+    description: Батчевые рассылки (FR-1.6, FR-3.1, FR-3.2)
+
+paths:
+  /messages:
+    post:
+      tags: [messages]
+      summary: Отправить сообщение
+      description: |
+        Принимает одно сообщение (тело = IK-03) и отвечает 202 с идентификатором Модуля.
+        Отказ приходит как problem+json с кодом IR-01, а не как 202 с отказным статусом внутри.
+        Целевая латентность приёма OTP — p99 ≤ 200 мс (FR-1.7).
+      operationId: submitMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboundMessage"
+      responses:
+        "202":
+          description: Сообщение принято в конвейер
+          headers:
+            Location:
+              description: Адрес статуса принятого сообщения
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageAccepted"
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [messages]
+      summary: Статус сообщения по идентификатору системы-источника
+      operationId: getMessageByExternalId
+      parameters:
+        - name: streamId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: externalMessageId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Статус сообщения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageStatus"
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /messages/{messageId}:
+    get:
+      tags: [messages]
+      summary: Статус сообщения по идентификатору Модуля
+      operationId: getMessage
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Статус сообщения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageStatus"
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /batches:
+    post:
+      tags: [batches]
+      summary: Создать батч (заголовок)
+      operationId: createBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBatch"
+      responses:
+        "202":
+          description: Батч создан, элементы можно загружать чанками
+          headers:
+            Location:
+              description: Адрес состояния батча
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchAccepted"
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /batches/{batchId}:
+    get:
+      tags: [batches]
+      summary: Состояние и прогресс батча
+      operationId: getBatch
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200":
+          description: Состояние батча
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchStatus"
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /batches/{batchId}/items:
+    post:
+      tags: [batches]
+      summary: Загрузить чанк элементов батча
+      description: |
+        До 10 000 элементов за запрос. Ошибочные элементы не отменяют чанк целиком: принятые уходят
+        в конвейер, отклонённые перечисляются поимённо со своей причиной (FR-1.4).
+      operationId: addBatchItems
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+        - name: streamId
+          in: query
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchItems"
+      responses:
+        "202":
+          description: Чанк обработан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchItemsResult"
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /batches/{batchId}/actions/{action}:
+    post:
+      tags: [batches]
+      summary: Управление батчем (start / pause / resume / stop)
+      operationId: actOnBatch
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+        - name: action
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [start, pause, resume, stop]
+        - name: X-Commhub-Actor
+          in: header
+          required: false
+          description: Кто выполняет действие; попадает в журнал аудита (FR-7.3)
+          schema: { type: string }
+        - name: X-Commhub-Reason
+          in: header
+          required: false
+          description: Обоснование действия для журнала аудита
+          schema: { type: string }
+      responses:
+        "200":
+          description: Новое состояние батча
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchAction"
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+components:
+  parameters:
+    BatchId:
+      name: batchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Problem:
+      description: Ошибка в формате RFC 9457 с кодом IR-01
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RateLimited:
+      description: Превышен лимит скорости потока (IR-02)
+      headers:
+        Retry-After:
+          description: Через сколько секунд можно повторить
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem+json; ветвиться следует по `code`, а не по HTTP-статусу
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - DUPLICATE
+            - STREAM_SUSPENDED
+            - QUOTA_EXCEEDED
+            - TEMPLATE_NOT_PUBLISHED
+            - TEMPLATE_VARIABLE_MISSING
+            - SUPPRESSED
+            - OPT_OUT
+            - QUIET_HOURS
+            - FREQUENCY_CAPPED
+            - PAN_DETECTED
+            - NO_ROUTE_AVAILABLE
+            - KILL_SWITCH
+            - SEND_STOPPED
+            - TTL_EXPIRED
+            - PROVIDER_REJECTED
+            - ATTEMPTS_EXHAUSTED
+            - NOT_FOUND
+            - CONFLICT
+            - RATE_LIMITED
+            - INTERNAL_ERROR
+        field:
+          type: string
+          description: Поле входящего документа, вызвавшее отказ
+        messageId:
+          type: string
+          description: Идентификатор сообщения, к которому относится код (в т.ч. оригинал дубликата)
+      required: [title, status, code]
+
+    InboundMessage:
+      type: object
+      description: Канонический входящий контракт IK-03 (§8.1); то же тело принимает Kafka-ingress
+      properties:
+        schemaVersion: { type: string, default: "1.0" }
+        streamId: { type: string }
+        externalMessageId: { type: string, maxLength: 64 }
+        batchId: { type: [string, "null"], format: uuid }
+        trafficClass:
+          type: [string, "null"]
+          enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION, null]
+        priority:
+          type: [string, "null"]
+          enum: [REALTIME, HIGH, NORMAL, LOW, null]
+        recipient: { $ref: "#/components/schemas/Recipient" }
+        channels: { $ref: "#/components/schemas/Channels" }
+        content: { $ref: "#/components/schemas/Content" }
+        template: { $ref: "#/components/schemas/TemplateRef" }
+        timing: { $ref: "#/components/schemas/Timing" }
+        dedupKey: { type: [string, "null"], maxLength: 128 }
+        correlationId: { type: [string, "null"], maxLength: 64 }
+        test:
+          type: boolean
+          default: false
+          description: Тестовая отправка — доставляется, но не попадает в бизнес-статистику (FR-7.4)
+      required: [streamId, externalMessageId, recipient]
+
+    Recipient:
+      type: object
+      description: Хотя бы один адрес или clientId
+      properties:
+        clientId: { type: [string, "null"] }
+        msisdn:
+          type: [string, "null"]
+          pattern: "^9989[0-9]{8}$"
+          description: Строго 9989xxxxxxxx, без «+» и пробелов
+        email: { type: [string, "null"], format: email }
+        pushTokens:
+          type: array
+          items:
+            type: object
+            properties:
+              platform: { type: string, enum: [IOS, ANDROID, WEB] }
+              token: { type: string }
+            required: [platform, token]
+
+    Channels:
+      type: object
+      properties:
+        requested:
+          type: array
+          items: { type: string, enum: [SMS, EMAIL, PUSH] }
+        fallbackPolicy:
+          type: [string, "null"]
+          enum: [CHAIN, null]
+          description: CHAIN — идти по каналам по порядку до первой доставки (FR-8.1)
+
+    Content:
+      type: object
+      description: Готовый контент по каналам (MP-02); может отсутствовать, если задан template
+      properties:
+        sms:
+          type: object
+          properties:
+            text: { type: string, maxLength: 1071 }
+            originator: { type: [string, "null"], maxLength: 11 }
+          required: [text]
+        email:
+          type: object
+          properties:
+            subject: { type: string }
+            html: { type: [string, "null"] }
+            text: { type: [string, "null"] }
+            from: { type: [string, "null"], format: email }
+            attachments:
+              type: array
+              items:
+                type: object
+                properties:
+                  fileName: { type: string }
+                  contentType: { type: string }
+                  sizeBytes: { type: integer }
+                  contentRef: { type: string }
+                required: [fileName, contentType, contentRef]
+          required: [subject]
+        push:
+          type: object
+          properties:
+            title: { type: string }
+            body: { type: string }
+            data:
+              type: object
+              additionalProperties: { type: string }
+            deepLink: { type: [string, "null"] }
+            image: { type: [string, "null"] }
+          required: [title, body]
+
+    TemplateRef:
+      type: object
+      properties:
+        id: { type: string, description: Код шаблона; версию Модуль выбирает сам (FR-4.1) }
+        locale: { type: [string, "null"], enum: [RU, UZ, EN, null] }
+        variables:
+          type: object
+          additionalProperties: { type: string }
+
+    Timing:
+      type: object
+      properties:
+        sendAfter: { type: [string, "null"], format: date-time }
+        sendBefore: { type: [string, "null"], format: date-time }
+        ttlSeconds: { type: [integer, "null"], minimum: 1 }
+        allowedWindow:
+          type: [object, "null"]
+          properties:
+            start: { type: string, examples: ["09:00"] }
+            end: { type: string, examples: ["21:00"] }
+        sendEvenly: { type: boolean, default: false }
+        localTime: { type: boolean, default: false }
+
+    MessageAccepted:
+      type: object
+      properties:
+        messageId: { type: string, format: uuid }
+        status: { type: string, examples: ["QUEUED"] }
+      required: [messageId, status]
+
+    MessageStatus:
+      type: object
+      description: Состояние сообщения; контент и адрес получателя не возвращаются (SEC-03)
+      properties:
+        messageId: { type: string, format: uuid }
+        streamId: { type: string }
+        externalMessageId: { type: string }
+        batchId: { type: [string, "null"], format: uuid }
+        status:
+          type: string
+          enum:
+            [
+              ACCEPTED,
+              VALIDATED,
+              ROUTED,
+              QUEUED,
+              SENDING,
+              SENT_TO_PROVIDER,
+              RETRYING,
+              DELIVERED,
+              UNDELIVERED,
+              EXPIRED,
+              REJECTED,
+              DUPLICATE,
+              CANCELLED,
+              FAILED,
+            ]
+        reason: { type: [string, "null"] }
+        delivery:
+          type: object
+          properties:
+            channel: { type: [string, "null"], enum: [SMS, EMAIL, PUSH, null] }
+            provider: { type: [string, "null"] }
+            segments: { type: integer }
+            cost: { type: [string, "null"], examples: ["120.0000 UZS"] }
+            acceptedAt: { type: string, format: date-time }
+            terminalAt: { type: [string, "null"], format: date-time }
+            correlationId: { type: string }
+            test: { type: boolean }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              reason: { type: [string, "null"] }
+              detail: { type: [string, "null"] }
+              occurredAt: { type: string, format: date-time }
+      required: [messageId, streamId, externalMessageId, status]
+
+    CreateBatch:
+      type: object
+      properties:
+        batchId: { type: [string, "null"], format: uuid }
+        streamId: { type: string }
+        channel: { type: string, enum: [SMS, EMAIL, PUSH] }
+        trafficClass:
+          type: [string, "null"]
+          enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION, null]
+        timing: { $ref: "#/components/schemas/Timing" }
+        template: { $ref: "#/components/schemas/TemplateRef" }
+        expectedTotal: { type: integer, minimum: 0 }
+        test: { type: boolean, default: false }
+      required: [streamId, channel]
+
+    BatchItems:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 10000
+          items:
+            type: object
+            properties:
+              externalMessageId: { type: string }
+              recipient: { $ref: "#/components/schemas/Recipient" }
+              content: { $ref: "#/components/schemas/Content" }
+              template: { $ref: "#/components/schemas/TemplateRef" }
+              channels: { $ref: "#/components/schemas/Channels" }
+            required: [externalMessageId, recipient]
+      required: [items]
+
+    BatchAccepted:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        status: { type: string }
+        total: { type: integer }
+      required: [batchId, status, total]
+
+    BatchItemsResult:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        accepted: { type: integer }
+        duplicates: { type: integer }
+        rejected: { type: integer }
+        rejections:
+          type: array
+          items:
+            type: object
+            properties:
+              externalMessageId: { type: string }
+              reason: { type: string }
+              detail: { type: [string, "null"] }
+        progress: { $ref: "#/components/schemas/BatchProgress" }
+      required: [batchId, accepted, duplicates, rejected, progress]
+
+    BatchProgress:
+      type: object
+      properties:
+        total: { type: integer }
+        processed: { type: integer }
+        sent: { type: integer }
+        delivered: { type: integer }
+        failed: { type: integer }
+        completionPercent: { type: number }
+
+    BatchAction:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        status: { type: string }
+        progress: { $ref: "#/components/schemas/BatchProgress" }
+      required: [batchId, status]
+
+    BatchStatus:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        streamId: { type: string }
+        channel: { type: string, enum: [SMS, EMAIL, PUSH] }
+        status:
+          type: string
+          enum: [ACCEPTED, PROCESSING, PAUSED, STOPPED, COMPLETED]
+        total: { type: integer }
+        progress: { $ref: "#/components/schemas/BatchProgress" }
+        createdAt: { type: string, format: date-time }
+        costEstimate: { type: [string, "null"] }
+      required: [batchId, streamId, channel, status, total, progress, createdAt]

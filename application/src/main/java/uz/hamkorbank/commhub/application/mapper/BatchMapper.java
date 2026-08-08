@@ -5,6 +5,7 @@ import org.mapstruct.Mapping;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
 import uz.hamkorbank.commhub.application.dto.BatchControlResult;
 import uz.hamkorbank.commhub.application.dto.BatchProgressDto;
+import uz.hamkorbank.commhub.application.dto.BatchView;
 import uz.hamkorbank.commhub.domain.model.Batch;
 
 /** Conversions of the {@code Batch} aggregate into the batch DTOs (FR-1.6, FR-3.1, FR-3.2). */
@@ -21,5 +22,18 @@ public interface BatchMapper {
 
     default BatchControlResult toControlResult(Batch batch) {
         return new BatchControlResult(batch.id(), batch.status(), toProgressDto(batch.progress()));
+    }
+
+    /** Read model of one batch for its source system (§8.2 {@code GET /batches/{id}}). */
+    default BatchView toView(Batch batch) {
+        return new BatchView(
+                batch.id(),
+                batch.streamId(),
+                batch.channel(),
+                batch.status(),
+                batch.total(),
+                toProgressDto(batch.progress()),
+                batch.createdAt(),
+                batch.costEstimate().orElse(null));
     }
 }

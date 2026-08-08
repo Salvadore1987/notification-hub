@@ -9,6 +9,7 @@ import uz.hamkorbank.commhub.application.exception.NotFoundException;
 import uz.hamkorbank.commhub.application.mapper.BatchMapper;
 import uz.hamkorbank.commhub.application.port.in.PauseBatch;
 import uz.hamkorbank.commhub.application.port.in.ResumeBatch;
+import uz.hamkorbank.commhub.application.port.in.StartBatch;
 import uz.hamkorbank.commhub.application.port.in.StopBatch;
 import uz.hamkorbank.commhub.application.port.in.command.BatchActionCommand;
 import uz.hamkorbank.commhub.application.port.out.AuditEntry;
@@ -29,7 +30,7 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * <p>Every action is written to the audit journal with its actor (FR-7.3, SEC-08).
  */
 @Service
-public class BatchControlService implements PauseBatch, ResumeBatch, StopBatch {
+public class BatchControlService implements StartBatch, PauseBatch, ResumeBatch, StopBatch {
 
     private static final String ENTITY_TYPE = "batch";
 
@@ -43,6 +44,12 @@ public class BatchControlService implements PauseBatch, ResumeBatch, StopBatch {
         this.batches = Guard.notNull(batches, "batches");
         this.audit = Guard.notNull(audit, "audit");
         this.mapper = Guard.notNull(mapper, "mapper");
+    }
+
+    @Override
+    @Transactional
+    public BatchControlResult start(BatchActionCommand command) {
+        return apply(command, "batch.start", Batch::startProcessing);
     }
 
     @Override

@@ -158,17 +158,54 @@
 
 ### Phase 6. Входящие адаптеры (`adapter/in`)
 
-- [ ] Kafka-консьюмеры входящих топиков по классам: `critical`/`transactional`/`notification`/`batch-control` (IK-01, AD-05)
-- [ ] Раздельные пулы/конкурентность на класс трафика, изоляция OTP (TC-01)
-- [ ] Poison-pill/DLT: `comm.inbound.parse-error.v1` + алерт (IK-04)
-- [ ] REST API систем-источников `/api/v1`: `POST /messages`, `/batches`, `/batches/{id}/items`, actions, `GET /messages`, `GET /batches/{id}` (§8.2)
-- [ ] OTP-приём p99 ≤ 200 мс, приоритетная постановка (FR-1.7)
-- [ ] Обработка ошибок RFC 9457 (problem+json) с кодами `VALIDATION_FAILED`, `DUPLICATE`, `STREAM_SUSPENDED`, `QUOTA_EXCEEDED`, `TEMPLATE_NOT_PUBLISHED` (IR-01)
-- [ ] Rate limiting на поток + `Retry-After` (IR-02)
-- [ ] Провайдерский Callback API (webhook) — driving adapter: IP allowlist + секрет, идемпотентность (PM-02, SEC-07)
-- [ ] Трансляция транспортных DTO → Command (AR-06), обработчики ошибок в `handlers/` (правило проекта)
-- [ ] OpenAPI 3.1 генерация из кода (IR-03)
-- [ ] `@RestControllerAdvice` в `rest/handlers/` — валидация, домен-ошибки, fallback (правило проекта)
+- ✅ Kafka-консьюмеры входящих топиков по классам: `critical`/`transactional`/`notification`/`batch-control`
+  (IK-01, AD-05) — `adapter/in/kafka`: `InboundMessageListener` (три топика сообщений) и `BatchControlListener`
+  (заголовки и команды батчей, ключ `batchId` — create и следующий за ним pause попадают в одну партицию).
+  Класс трафика берётся **из топика**, а не из поля документа: изоляция построена на топиках, и payload не
+  должен уметь себя переклассифицировать
+- ✅ Раздельные пулы/конкурентность на класс трафика, изоляция OTP (TC-01) — четыре
+  `ConcurrentKafkaListenerContainerFactory` в `KafkaConsumerConfig`, у каждого свой consumer group, client-id и
+  пул потоков (`commhub.kafka.inbound.concurrency`, по умолчанию 2/4/8/1). Критичному классу намеренно дано
+  меньше потоков: ему нужны не многие, а свободные
+- ✅ Poison-pill/DLT: `comm.inbound.parse-error.v1` + алерт (IK-04) — `InboundErrorHandlerConfig`: нарушения
+  контракта не ретраятся (документ неверен, а не момент) и сразу уезжают в parse-error с заголовками
+  `commhub-origin-topic`/`commhub-failed-field` и ERROR-логом; транзиентные сбои — экспоненциальный backoff
+  до минуты. Записи читаются как строки и парсятся в листенере: упавший десериализатор унёс бы весь poll
+- ✅ REST API систем-источников `/api/v1` (§8.2) — `MessageController` (`POST /messages`, `GET /messages/{id}`,
+  `GET /messages?streamId=&externalMessageId=`) и `BatchController` (`POST /batches`,
+  `POST /batches/{id}/items`, `POST /batches/{id}/actions/{start|pause|resume|stop}`, `GET /batches/{id}`).
+  Под чтение статусов добавлены query-use case'ы `GetMessage`/`GetBatch` (`port/in/query`, `MessageView`/`BatchView`),
+  под `actions/start` — входной порт `StartBatch` (реализован тем же `BatchControlService`)
+- ✅ OTP-приём: приоритетная постановка (FR-1.7) — изоляция пулов по классам трафика (см. TC-01) плюс короткий
+  синхронный путь приёма на виртуальных потоках: один разбор документа, ответ из той же транзакции, никаких
+  очередей перед use case'ом. ⚠️ Сам порог p99 ≤ 200 мс — предмет нагрузочных тестов (Phase 15, NF-01/TC-01),
+  контроллер его гарантировать не может
+- ✅ Обработка ошибок RFC 9457 (problem+json) с кодами IR-01 — `rest/problem`: каталог `ProblemType`
+  (`VALIDATION_FAILED`, `DUPLICATE`, `STREAM_SUSPENDED`, `QUOTA_EXCEEDED`, `TEMPLATE_NOT_PUBLISHED` и остальные
+  `RejectionReason`) + `ProblemFactory`. Отказ конвейера никогда не приходит как 202 с отказным статусом внутри:
+  клиент, проверяющий только HTTP-код, не должен принять отказ за приём
+- ✅ Rate limiting на поток + `Retry-After` (IR-02) — `rest/ratelimit`: token bucket на поток, in-memory на
+  инстанс (общий счётчик поставил бы сетевой вызов перед каждым приёмом OTP); лимиты в
+  `commhub.rest.rate-limit`, пер-стримовые переопределения переедут в реестр потоков Phase 8 (AD-07)
+- ✅ Провайдерский Callback API (webhook) — `adapter/in/callback`: `POST /api/callbacks/{providerCode}`,
+  `CallbackGuard` (IP allowlist + общий секрет, сравнение секрета в постоянном времени, конфигурация на
+  провайдера), ответ на отказ — голый 403 без причины. Идемпотентность обеспечивает `ProcessProviderStatus`
+  (AD-06): отчёт, ничего не изменивший, тоже отвечает 200, иначе провайдер будет ретраить бесконечно.
+  ⚠️ Сами трансляторы payload'ов (`ProviderCallbackTranslator`) приходят с адаптерами провайдеров в Phase 7 —
+  до этого настроенный провайдер без транслятора получает 404
+- ✅ Трансляция транспортных DTO → Command (AR-06), обработчики ошибок в `handlers/` — `adapter/in/contract`
+  (общий для REST и Kafka: §8.2 говорит «тело = IK-03», поэтому парсер один) + MapStruct-мапперы
+  `InboundPayloadMapper` и `RestResponseMapper`
+- ✅ OpenAPI 3.1 (IR-03) — `adapter/src/main/resources/openapi/comm-hub-api-v1.yaml`, отдаётся по
+  `GET /api/v1/openapi.yaml`. ⚠️ Не генерируется springdoc'ом: его актуальная ветка 2.8.x собрана под Spring 6 и
+  Jackson 2, релиза под Boot 4 нет. Вместо генерации — `OpenApiContractTest`: обходит `@RequestMapping`
+  контроллеров и валит сборку, если эндпоинт не описан в документе. Заменить на генерацию, когда springdoc
+  выпустит совместимую версию
+- ✅ `@RestControllerAdvice` в `rest/handlers/` — по классу на концерн: `SubmissionRejectionHandler` (вердикт
+  конвейера → код IR-01), `ContractViolationHandler` (400 с указанием поля), `NotFoundHandler` (404),
+  `StateConflictHandler` (409 на запрещённый переход), `RateLimitHandler` (429 + `Retry-After`),
+  `UnexpectedFailureHandler` (голый 500, стек — только в лог: в сообщении исключения может быть адрес
+  получателя или секрет провайдера)
 
 ### Phase 7. Адаптеры провайдеров — SMS (этап MVP, §16 этап 2)
 
