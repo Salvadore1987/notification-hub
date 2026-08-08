@@ -41,10 +41,37 @@ public final class Batch extends AggregateRoot<BatchId> {
         this.status = BatchStatus.ACCEPTED;
     }
 
+    private Batch(Rehydration source) {
+        this(
+                Guard.notNull(source, "source").id,
+                source.streamId,
+                source.channel,
+                Guard.notNegative(source.total, "Batch.total"),
+                source.timing,
+                source.createdAt);
+        this.status = Guard.notNull(source.status, "Batch.status");
+        this.processed = Guard.notNegative(source.processed, "Batch.processed");
+        this.sent = Guard.notNegative(source.sent, "Batch.sent");
+        this.delivered = Guard.notNegative(source.delivered, "Batch.delivered");
+        this.failed = Guard.notNegative(source.failed, "Batch.failed");
+        this.costEstimate = source.costEstimate;
+    }
+
     /** Accepts a batch header; {@code total} may be 0 when items are uploaded afterwards (FR-1.6). */
     public static Batch accept(
             BatchId id, StreamId streamId, Channel channel, long total, Timing timing, Instant createdAt) {
         return new Batch(id, streamId, channel, total, timing, createdAt);
+    }
+
+    /**
+     * Starts the reconstitution of a batch read back from storage (§10.1 {@code batch}).
+     *
+     * <p>The stored status is restored as it is: replaying the transition table over a batch that is
+     * already {@code STOPPED} would reject the very state the database holds.
+     */
+    public static Rehydration rehydrate(
+            BatchId id, StreamId streamId, Channel channel, Timing timing, Instant createdAt) {
+        return new Rehydration(id, streamId, channel, timing, createdAt);
     }
 
     /** Registers another chunk of uploaded items (FR-1.6). */
@@ -145,6 +172,60 @@ public final class Batch extends AggregateRoot<BatchId> {
             throw InvalidStatusTransitionException.of("Batch", status, next);
         }
         this.status = next;
+    }
+
+    /** Collects the stored state of a batch before handing it back to the application (§10.1). */
+    public static final class Rehydration {
+
+        private final BatchId id;
+        private final StreamId streamId;
+        private final Channel channel;
+        private final Timing timing;
+        private final Instant createdAt;
+
+        private BatchStatus status = BatchStatus.ACCEPTED;
+        private long total;
+        private long processed;
+        private long sent;
+        private long delivered;
+        private long failed;
+        private Money costEstimate;
+
+        private Rehydration(BatchId id, StreamId streamId, Channel channel, Timing timing, Instant createdAt) {
+            this.id = id;
+            this.streamId = streamId;
+            this.channel = channel;
+            this.timing = timing;
+            this.createdAt = createdAt;
+        }
+
+        public Rehydration status(BatchStatus currentStatus) {
+            this.status = currentStatus;
+            return this;
+        }
+
+        /** Progress counters as they were last persisted (FR-3.1). */
+        public Rehydration progress(long totalItems, long processedItems, long sentItems, long deliveredItems) {
+            this.total = totalItems;
+            this.processed = processedItems;
+            this.sent = sentItems;
+            this.delivered = deliveredItems;
+            return this;
+        }
+
+        public Rehydration failed(long failedItems) {
+            this.failed = failedItems;
+            return this;
+        }
+
+        public Rehydration costEstimate(Money estimate) {
+            this.costEstimate = estimate;
+            return this;
+        }
+
+        public Batch build() {
+            return new Batch(this);
+        }
     }
 
     private long increase(long current, long count, String counter) {
