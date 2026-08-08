@@ -1,8 +1,10 @@
 package uz.hamkorbank.commhub.application.port.out;
 
+import java.util.List;
 import java.util.Optional;
 import uz.hamkorbank.commhub.domain.model.Template;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
+import uz.hamkorbank.commhub.domain.model.type.TemplateCatalogStatus;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateId;
 
@@ -24,4 +26,16 @@ public interface TemplateRepository {
 
     /** Template of a code restricted to one channel, used by the admin panel listings (FR-4.1). */
     Optional<Template> findByCode(TemplateCode code, Channel channel);
+
+    /**
+     * Page of the catalogue for the administration listings (FR-4.1, FR-4.6).
+     *
+     * <p>Filters are optional — {@code null} means "any" — and the page is always bounded: the Bank's
+     * catalogue is around 470 templates today and every one of them arrives with its versions attached,
+     * so an unbounded listing would pull the whole catalogue into memory to render one screen.
+     *
+     * @param direction business direction, matched exactly (§18.4)
+     */
+    List<Template> findAll(
+            Channel channel, String direction, TemplateCatalogStatus catalogStatus, int limit, int offset);
 }

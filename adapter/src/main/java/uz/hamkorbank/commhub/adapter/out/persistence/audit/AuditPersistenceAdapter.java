@@ -16,6 +16,11 @@ import uz.hamkorbank.commhub.domain.support.UuidV7;
  *
  * <p>The user id is resolved from the actor's login in the same statement; an actor the user table does
  * not know — the system itself, a provider callback — simply leaves it null.
+ *
+ * <p>{@code before_state}/{@code after_state} are {@code jsonb} columns and the port hands over rendered
+ * text, so the value is wrapped with {@code to_jsonb} into a JSON string rather than cast: casting
+ * {@code "status=ACTIVE, strategy=WEIGHTED"} to {@code jsonb} fails, and an audit write that throws would
+ * roll back the very change it was journalling. {@code to_jsonb} is strict, so a null state stays null.
  */
 @Repository
 public class AuditPersistenceAdapter implements AuditPort {
@@ -26,7 +31,8 @@ public class AuditPersistenceAdapter implements AuditPort {
             VALUES (:id,
                     (SELECT u.id FROM app_user u WHERE u.username = :username),
                     :username, :action, :entityType, :entityId,
-                    CAST(:before AS jsonb), CAST(:after AS jsonb), CAST(:ip AS inet), :occurredAt)
+                    to_jsonb(CAST(:before AS text)), to_jsonb(CAST(:after AS text)),
+                    CAST(:ip AS inet), :occurredAt)
             """;
 
     private final JdbcClient jdbcClient;

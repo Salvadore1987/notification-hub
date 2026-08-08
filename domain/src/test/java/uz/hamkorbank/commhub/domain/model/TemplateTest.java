@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
+import uz.hamkorbank.commhub.domain.model.type.TemplateCatalogStatus;
+import uz.hamkorbank.commhub.domain.model.type.TemplateStatus;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateId;
@@ -130,6 +132,105 @@ class TemplateTest {
                 .isThrownBy(() -> Template.ProviderMapping.pendingApproval(ProviderCode.of("PLAYMOBILE"), " "));
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> new Template.ProviderMapping(null, "tmpl-1", false));
+    }
+
+    @Test
+    @DisplayName("FR-4.1: publishing a version archives the one it replaces — a locale has one sendable version")
+    void publishingArchivesThePreviousVersion() {
+        // Arrange
+        Template template = newTemplate();
+        TemplateVersion first = version(template, ContentLocale.RU, 1);
+        TemplateVersion second = version(template, ContentLocale.RU, 2);
+        template.addVersion(first);
+        template.addVersion(second);
+        first.submitForReview();
+        second.submitForReview();
+        template.publishVersion(first, "reviewer", NOW);
+
+        // Act
+        template.publishVersion(second, "reviewer", NOW);
+
+        // Assert
+        assertThat(first.status()).isEqualTo(TemplateStatus.ARCHIVED);
+        assertThat(second.status()).isEqualTo(TemplateStatus.PUBLISHED);
+        assertThat(template.publishedVersion(ContentLocale.RU)).contains(second);
+    }
+
+    @Test
+    @DisplayName("FR-4.2: a rejected publication leaves the version it would have replaced published")
+    void refusedPublicationKeepsThePreviousVersion() {
+        // Arrange
+        Template template = newTemplate();
+        TemplateVersion published = version(template, ContentLocale.RU, 1);
+        TemplateVersion candidate = version(template, ContentLocale.RU, 2);
+        template.addVersion(published);
+        template.addVersion(candidate);
+        published.submitForReview();
+        template.publishVersion(published, "reviewer", NOW);
+        candidate.submitForReview();
+
+        // Act + Assert — "author" is the author of the candidate (maker/checker)
+        assertThatExceptionOfType(DomainValidationException.class)
+                .isThrownBy(() -> template.publishVersion(candidate, "author", NOW));
+        assertThat(published.status()).isEqualTo(TemplateStatus.PUBLISHED);
+        assertThat(template.publishedVersion(ContentLocale.RU)).contains(published);
+    }
+
+    @Test
+    @DisplayName("a version of another template cannot be published through this one")
+    void refusesForeignVersion() {
+        // Arrange
+        Template template = newTemplate();
+        Template other = Template.create(
+                TemplateId.newId(), TemplateCode.of("OTP_PAYMENT"), Channel.SMS, "Чакана", "retail-department");
+        TemplateVersion foreign = version(other, ContentLocale.RU, 1);
+        foreign.submitForReview();
+
+        // Act + Assert
+        assertThatExceptionOfType(DomainValidationException.class)
+                .isThrownBy(() -> template.publishVersion(foreign, "reviewer", NOW));
+    }
+
+    @Test
+    @DisplayName("FR-4.1: an archived card is not sendable and publishes nothing, restoring brings it back")
+    void catalogueCardIsArchivedNotDeleted() {
+        // Arrange
+        Template template = newTemplate();
+        TemplateVersion draft = version(template, ContentLocale.RU, 1);
+        template.addVersion(draft);
+        draft.submitForReview();
+
+        // Act
+        template.archive();
+
+        // Assert
+        assertThat(template.catalogStatus()).isEqualTo(TemplateCatalogStatus.ARCHIVED);
+        assertThat(template.isSendable()).isFalse();
+        assertThatExceptionOfType(DomainValidationException.class)
+                .isThrownBy(() -> template.publishVersion(draft, "reviewer", NOW));
+        assertThat(template.versions()).hasSize(1);
+
+        // Act + Assert — the card comes back with the history it went away with
+        template.restore();
+        assertThat(template.isSendable()).isTrue();
+        assertThat(template.version(ContentLocale.RU, 1)).contains(draft);
+    }
+
+    @Test
+    @DisplayName("FR-4.5: a provider mapping can be dropped when the provider goes away")
+    void providerMappingCanBeDropped() {
+        // Arrange
+        Template template = newTemplate();
+        template.mapToProviderTemplate(Template.ProviderMapping.pendingApproval(ProviderCode.of("PLAYMOBILE"), "pm-1"));
+
+        // Act
+        boolean removed = template.unmapProviderTemplate(ProviderCode.of("PLAYMOBILE"));
+
+        // Assert
+        assertThat(removed).isTrue();
+        assertThat(template.providerMappings()).isEmpty();
+        assertThat(template.unmapProviderTemplate(ProviderCode.of("PLAYMOBILE")))
+                .isFalse();
     }
 
     private static Template newTemplate() {
