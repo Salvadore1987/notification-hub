@@ -15,15 +15,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import uz.hamkorbank.commhub.application.mapper.ProviderSubmissionMapperImpl;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
+import uz.hamkorbank.commhub.application.port.out.PushDeliveryLogPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
+import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.Provider;
 import uz.hamkorbank.commhub.domain.model.type.AttemptResult;
 import uz.hamkorbank.commhub.domain.model.type.ErrorClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
+import uz.hamkorbank.commhub.domain.model.vo.AttemptId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
+import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 
 /** Resolution of a routed provider onto its adapter (MP-05, AR-04, PR-01). */
 class ProviderGatewayTest {
@@ -43,7 +47,7 @@ class ProviderGatewayTest {
         gateway = new ProviderGateway(
                 ports(playmobileAdapter),
                 ports(),
-                ports(),
+                pushFanOut(clock),
                 new ProviderSubmissionMapperImpl(),
                 new ProviderMessageIdFactory(),
                 clock);
@@ -57,7 +61,8 @@ class ProviderGatewayTest {
         ProviderMessageId providerMessageId = gateway.providerMessageIdFor(message);
 
         // Act
-        ProviderAck ack = gateway.submit(message, playmobile.ref(), providerMessageId, null);
+        ProviderAck ack =
+                gateway.submit(message, playmobile.ref(), attempt(message, playmobile.ref(), providerMessageId), null);
 
         // Assert
         assertThat(ack.isAccepted()).isTrue();
@@ -75,7 +80,7 @@ class ProviderGatewayTest {
         Message message = smsMessage();
 
         // Act
-        ProviderAck ack = gateway.submit(message, smsgate.ref(), null, null);
+        ProviderAck ack = gateway.submit(message, smsgate.ref(), attempt(message, smsgate.ref(), null), null);
 
         // Assert
         assertThat(ack.result()).isEqualTo(AttemptResult.ERROR);
@@ -93,13 +98,14 @@ class ProviderGatewayTest {
         ProviderGateway failing = new ProviderGateway(
                 ports(new ThrowingSmsAdapter(playmobile.adapterType())),
                 ports(),
-                ports(),
+                pushFanOut(clock),
                 new ProviderSubmissionMapperImpl(),
                 new ProviderMessageIdFactory(),
                 clock);
 
         // Act
-        ProviderAck ack = failing.submit(smsMessage(), playmobile.ref(), null, null);
+        Message message = smsMessage();
+        ProviderAck ack = failing.submit(message, playmobile.ref(), attempt(message, playmobile.ref(), null), null);
 
         // Assert
         assertThat(ack.isRetryable()).isTrue();
@@ -114,6 +120,20 @@ class ProviderGatewayTest {
 
         // Assert
         assertThat(id.value()).hasSizeLessThanOrEqualTo(ProviderMessageIdFactory.MAX_LENGTH);
+    }
+
+    /** A fan-out with no push adapters deployed; this test is about the SMS branch of the gateway. */
+    private static PushFanOut pushFanOut(ClockPort clock) {
+        return new PushFanOut(
+                ports(),
+                new ProviderSubmissionMapperImpl(),
+                mock(PushTokenRegistrar.class),
+                mock(PushDeliveryLogPort.class),
+                clock);
+    }
+
+    private static DeliveryAttempt attempt(Message message, ProviderRef provider, ProviderMessageId providerMessageId) {
+        return DeliveryAttempt.start(AttemptId.newId(), message.id(), provider, 1, providerMessageId, NOW);
     }
 
     private static <T> ObjectProvider<T> ports(T adapter) {

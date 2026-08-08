@@ -124,7 +124,7 @@ class KafkaStatusPublisherAdapterTest {
         // Arrange
         when(kafkaTemplate.send(anyRecord())).thenReturn(new CompletableFuture<>());
         KafkaStatusPublisherAdapter adapter =
-                adapter(new KafkaOutboundProperties(null, null, Duration.ofMillis(50), null, null, null));
+                adapter(new KafkaOutboundProperties(null, null, null, Duration.ofMillis(50), null, null, null));
         MessageStatusEvent event = statusEvent();
 
         // Act & Assert
@@ -132,7 +132,7 @@ class KafkaStatusPublisherAdapterTest {
     }
 
     private KafkaStatusPublisherAdapter adapter(KafkaOutboundProperties properties) {
-        return new KafkaStatusPublisherAdapter(kafkaTemplate, codec, properties);
+        return new KafkaStatusPublisherAdapter(kafkaTemplate, codec, new PushTokenEventCodec(), properties);
     }
 
     @SuppressWarnings("unchecked")

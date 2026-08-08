@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hamkorbank.uz/commhub/schema/comm.outbound.push-token.invalidated.v1.json",
+  "title": "Notification Hub push token invalidation event",
+  "description": "Токен устройства, признанный платформой недействительным (SRS §9.4, PU-04, PU-08). Топик: comm.outbound.push-token.invalidated.v1. Потребитель — владелец реестра устройств: событие означает «удалите эту строку», а не «сообщение не дошло» (статус сообщения приходит отдельно, §6.4). Совместимость субъекта в Schema Registry — BACKWARD (NF-08).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "occurredAt",
+    "streamId",
+    "clientId",
+    "token",
+    "platform",
+    "provider",
+    "reason"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Версия контракта; растёт при изменении набора полей (NF-08).",
+      "const": "1.0"
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Идентификатор события; ключ идемпотентности потребителя (AD-03). Инвалидация повторяется при повторной публикации, но не при каждом следующем сообщении на тот же токен."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Момент ответа платформы, ISO-8601 в UTC."
+    },
+    "streamId": {
+      "type": "string",
+      "description": "Поток, при отправке по которому токен был признан мёртвым; он же в заголовке commhub-stream-id."
+    },
+    "clientId": {
+      "type": ["string", "null"],
+      "description": "Клиент Банка, если система-источник его указала; ключ партиционирования события."
+    },
+    "token": {
+      "type": "string",
+      "description": "Сам токен устройства, в открытом виде: реестр потребителя ключуется по нему, и хеш не назвал бы ни одной строки. Это единственное поле контракта, ради которого событие существует."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["ANDROID", "IOS", "WEB"],
+      "description": "Платформа токена (§9.4)."
+    },
+    "provider": {
+      "type": "string",
+      "description": "Код провайдера, сообщившего об этом: FCM или APNs."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Формулировка платформы как есть: UNREGISTERED, NOT_FOUND (FCM, PU-04), Unregistered, BadDeviceToken, DeviceTokenNotForTopic (APNs, PU-08)."
+    }
+  }
+}

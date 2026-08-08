@@ -30,6 +30,7 @@ import uz.hamkorbank.commhub.adapter.out.persistence.AbstractPersistenceIT;
 import uz.hamkorbank.commhub.application.dto.MessageKey;
 import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
 import uz.hamkorbank.commhub.application.dto.OutboxRelayResult;
+import uz.hamkorbank.commhub.application.dto.PushTokenInvalidatedEvent;
 import uz.hamkorbank.commhub.application.port.in.PublishOutboxEvents;
 import uz.hamkorbank.commhub.application.port.in.command.PublishOutboxEventsCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
@@ -275,7 +276,8 @@ class OutboxRelayIT {
 
         @Bean
         KafkaOutboundProperties kafkaOutboundProperties() {
-            return new KafkaOutboundProperties(STATUS_TOPIC, DLQ_TOPIC, Duration.ofSeconds(20), true, 1, (short) 1);
+            return new KafkaOutboundProperties(
+                    STATUS_TOPIC, DLQ_TOPIC, null, Duration.ofSeconds(20), true, 1, (short) 1);
         }
 
         @Bean
@@ -308,6 +310,12 @@ class OutboxRelayIT {
                     delegate.publishDlq(event);
                     throw new SimulatedCrash();
                 }
+
+                @Override
+                public void publishPushTokenInvalidated(PushTokenInvalidatedEvent event) {
+                    delegate.publishPushTokenInvalidated(event);
+                    throw new SimulatedCrash();
+                }
             };
         }
 
@@ -321,6 +329,11 @@ class OutboxRelayIT {
 
                 @Override
                 public void publishDlq(MessageStatusEvent event) {
+                    throw new IllegalStateException("broker is down");
+                }
+
+                @Override
+                public void publishPushTokenInvalidated(PushTokenInvalidatedEvent event) {
                     throw new IllegalStateException("broker is down");
                 }
             };

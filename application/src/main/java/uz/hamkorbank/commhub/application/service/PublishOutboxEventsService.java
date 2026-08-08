@@ -3,7 +3,10 @@ package uz.hamkorbank.commhub.application.service;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
+import uz.hamkorbank.commhub.application.dto.OutboxPayload;
 import uz.hamkorbank.commhub.application.dto.OutboxRelayResult;
+import uz.hamkorbank.commhub.application.dto.PushTokenInvalidatedEvent;
 import uz.hamkorbank.commhub.application.port.in.PublishOutboxEvents;
 import uz.hamkorbank.commhub.application.port.in.command.PublishOutboxEventsCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
@@ -62,11 +65,31 @@ public class PublishOutboxEventsService implements PublishOutboxEvents {
 
     private void publish(PendingOutboxEvent event) {
         switch (event.type()) {
-            case MESSAGE_STATUS -> publisher.publishStatus(event.payload());
-            case MESSAGE_DLQ -> publisher.publishDlq(event.payload());
+            case MESSAGE_STATUS -> publisher.publishStatus(payload(event, MessageStatusEvent.class));
+            case MESSAGE_DLQ -> publisher.publishDlq(payload(event, MessageStatusEvent.class));
+            case PUSH_TOKEN_INVALIDATED ->
+                publisher.publishPushTokenInvalidated(payload(event, PushTokenInvalidatedEvent.class));
             // Новый тип события без своего топика лучше остановит очередь, чем уйдёт не туда.
             default -> throw new IllegalStateException("No outbound topic for outbox event type " + event.type());
         }
+    }
+
+    /**
+     * Payload of the row in the shape its type promises.
+     *
+     * <p>A mismatch is a bug in the store, not bad traffic, and it stops the queue on purpose: a status
+     * row holding a token payload would otherwise be published onto the status topic as something no
+     * consumer can parse.
+     */
+    private static <T extends OutboxPayload> T payload(PendingOutboxEvent event, Class<T> type) {
+        if (!type.isInstance(event.payload())) {
+            throw new IllegalStateException("Outbox event %s of type %s carries a %s payload"
+                    .formatted(
+                            event.eventId(),
+                            event.type(),
+                            event.payload().getClass().getSimpleName()));
+        }
+        return type.cast(event.payload());
     }
 
     /** Keeps the class of the failure, which is what identifies it, even when the message is empty. */

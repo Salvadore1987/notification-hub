@@ -5,6 +5,7 @@ import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.vo.AddressHash;
 import uz.hamkorbank.commhub.domain.model.vo.EmailAddress;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
+import uz.hamkorbank.commhub.domain.model.vo.PushToken;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
@@ -24,7 +25,27 @@ public final class RecipientAddresses {
 
     private RecipientAddresses() {}
 
-    /** Hash of the address this recipient is reached at on the channel, when there is one. */
+    /**
+     * Hash of one device token (PU-04, PU-09).
+     *
+     * <p>Push is the one channel whose recipient has several addresses at once, so the per-device
+     * decisions — is this token retired, which device did the platform refuse — are made one token at a
+     * time by the fan-out, not through {@link #of(Recipient, Channel)}.
+     */
+    public static AddressHash of(PushToken token) {
+        Guard.notNull(token, "token");
+        return AddressHash.ofPushToken(token);
+    }
+
+    /**
+     * Hash of the address this recipient is reached at on the channel, when there is one.
+     *
+     * <p>For push that is the first registered device, which is what the recipient-level filters and
+     * counters key on: "has this customer been written to too often" is a question about the customer,
+     * and answering it once per device would multiply the count by however many phones they own
+     * (FR-5.4). Whether an individual device may still be written to is decided per token in the
+     * fan-out (PU-04).
+     */
     public static Optional<AddressHash> of(Recipient recipient, Channel channel) {
         Guard.notNull(recipient, "recipient");
         Guard.notNull(channel, "channel");

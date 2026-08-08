@@ -1,5 +1,7 @@
 package uz.hamkorbank.commhub.application.mapper;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.mapstruct.Mapper;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailSubmission;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderTemplateBinding;
@@ -12,6 +14,7 @@ import uz.hamkorbank.commhub.domain.model.content.EmailContent;
 import uz.hamkorbank.commhub.domain.model.content.PushContent;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
+import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.PushToken;
@@ -60,16 +63,51 @@ public interface ProviderSubmissionMapper {
                 toContext(message));
     }
 
+    /**
+     * Reserved key of the data payload that asks for collapsing (PU-03, §9.4).
+     *
+     * <p>A transport instruction rather than business data, so it is read out of the payload and not
+     * forwarded to the device: the application would receive a field it never sent.
+     */
+    String COLLAPSE_KEY_FIELD = "collapseKey";
+
     /** Push submission for one device token; a multi-device recipient yields several (PU-09). */
     default PushSubmission toPushSubmission(Message message, ProviderRef provider, PushToken token) {
+        PushContent content = contentOf(message, Channel.PUSH, PushContent.class);
         return new PushSubmission(
                 provider,
                 message.id(),
                 token,
-                contentOf(message, Channel.PUSH, PushContent.class),
+                withoutTransportFields(content),
                 message.timing(),
-                null,
+                collapseKeyOf(message, content),
                 toContext(message));
+    }
+
+    /**
+     * Notification group this message supersedes, when the source system asked for one (PU-03).
+     *
+     * <p>Never for {@code CRITICAL_OTP}, whatever the payload says: collapsing means an undelivered
+     * notification is replaced by the next one of the same group, and a one-time password the customer
+     * never sees is exactly the failure the OTP path exists to prevent (TC-01). A password is also not
+     * "the same notification, only fresher" — the previous one is still valid until it expires.
+     */
+    private static String collapseKeyOf(Message message, PushContent content) {
+        if (message.envelope().trafficClass() == TrafficClass.CRITICAL_OTP) {
+            return null;
+        }
+        String requested = content.data().get(COLLAPSE_KEY_FIELD);
+        return requested == null || requested.isBlank() ? null : requested.trim();
+    }
+
+    /** The payload the device receives: business data only. */
+    private static PushContent withoutTransportFields(PushContent content) {
+        if (!content.data().containsKey(COLLAPSE_KEY_FIELD)) {
+            return content;
+        }
+        Map<String, String> data = new LinkedHashMap<>(content.data());
+        data.remove(COLLAPSE_KEY_FIELD);
+        return new PushContent(content.title(), content.body(), data, content.deepLink(), content.image());
     }
 
     private static <T> T contentOf(Message message, Channel channel, Class<T> type) {

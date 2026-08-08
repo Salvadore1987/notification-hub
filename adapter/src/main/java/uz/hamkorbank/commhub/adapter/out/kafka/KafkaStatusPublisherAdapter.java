@@ -8,11 +8,13 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
+import uz.hamkorbank.commhub.application.dto.PushTokenInvalidatedEvent;
 import uz.hamkorbank.commhub.application.port.out.StatusPublisherPort;
 
 /**
  * {@link StatusPublisherPort} over Kafka: statuses to {@code comm.outbound.status.v1}, DLQ events to
- * {@code comm.outbound.dlq.v1} (§8.1 IK-02).
+ * {@code comm.outbound.dlq.v1} (§8.1 IK-02) and invalidated device tokens to
+ * {@code comm.outbound.push-token.invalidated.v1} (PU-04).
  *
  * <p><strong>Synchronous by design.</strong> The relay may only mark an outbox row published once the
  * broker has the record, so this waits for the acknowledgement instead of handing back a future. A
@@ -32,15 +34,21 @@ public class KafkaStatusPublisherAdapter implements StatusPublisherPort {
 
     private static final String STATUS_EVENT = "MESSAGE_STATUS";
     private static final String DLQ_EVENT = "MESSAGE_DLQ";
+    private static final String PUSH_TOKEN_EVENT = "PUSH_TOKEN_INVALIDATED";
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final StatusEventCodec codec;
+    private final PushTokenEventCodec pushTokenCodec;
     private final KafkaOutboundProperties properties;
 
     public KafkaStatusPublisherAdapter(
-            KafkaTemplate<String, String> kafkaTemplate, StatusEventCodec codec, KafkaOutboundProperties properties) {
+            KafkaTemplate<String, String> kafkaTemplate,
+            StatusEventCodec codec,
+            PushTokenEventCodec pushTokenCodec,
+            KafkaOutboundProperties properties) {
         this.kafkaTemplate = kafkaTemplate;
         this.codec = codec;
+        this.pushTokenCodec = pushTokenCodec;
         this.properties = properties;
     }
 
@@ -54,19 +62,49 @@ public class KafkaStatusPublisherAdapter implements StatusPublisherPort {
         send(properties.dlqTopic(), DLQ_EVENT, event);
     }
 
+    @Override
+    public void publishPushTokenInvalidated(PushTokenInvalidatedEvent event) {
+        send(
+                properties.pushTokenTopic(),
+                PUSH_TOKEN_EVENT,
+                PushTokenEventCodec.SCHEMA_VERSION,
+                pushTokenCodec.keyOf(event),
+                pushTokenCodec.write(event),
+                event.eventId().toString(),
+                event.streamId().value());
+    }
+
     private void send(String topic, String eventType, MessageStatusEvent event) {
-        ProducerRecord<String, String> record = new ProducerRecord<>(topic, codec.keyOf(event), codec.write(event));
-        header(record, HEADER_EVENT_ID, event.eventId().toString());
+        send(
+                topic,
+                eventType,
+                StatusEventCodec.SCHEMA_VERSION,
+                codec.keyOf(event),
+                codec.write(event),
+                event.eventId().toString(),
+                event.key().streamId().value());
+    }
+
+    private void send(
+            String topic,
+            String eventType,
+            String schemaVersion,
+            String key,
+            String body,
+            String eventId,
+            String streamId) {
+        ProducerRecord<String, String> record = new ProducerRecord<>(topic, key, body);
+        header(record, HEADER_EVENT_ID, eventId);
         header(record, HEADER_EVENT_TYPE, eventType);
-        header(record, HEADER_STREAM_ID, event.key().streamId().value());
-        header(record, HEADER_SCHEMA_VERSION, StatusEventCodec.SCHEMA_VERSION);
+        header(record, HEADER_STREAM_ID, streamId);
+        header(record, HEADER_SCHEMA_VERSION, schemaVersion);
         try {
             kafkaTemplate.send(record).get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new StatusPublicationException(topic, event, e);
+            throw new StatusPublicationException(topic, eventId, e);
         } catch (ExecutionException | TimeoutException | RuntimeException e) {
-            throw new StatusPublicationException(topic, event, e);
+            throw new StatusPublicationException(topic, eventId, e);
         }
     }
 

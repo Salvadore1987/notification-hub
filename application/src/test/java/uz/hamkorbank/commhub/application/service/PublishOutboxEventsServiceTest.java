@@ -22,18 +22,23 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uz.hamkorbank.commhub.application.dto.MessageKey;
 import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
 import uz.hamkorbank.commhub.application.dto.OutboxRelayResult;
+import uz.hamkorbank.commhub.application.dto.PushTokenInvalidatedEvent;
 import uz.hamkorbank.commhub.application.port.in.command.PublishOutboxEventsCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
+import uz.hamkorbank.commhub.application.port.out.OutboxEvent;
 import uz.hamkorbank.commhub.application.port.out.OutboxEventType;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
 import uz.hamkorbank.commhub.application.port.out.PendingOutboxEvent;
 import uz.hamkorbank.commhub.application.port.out.StatusPublisherPort;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
+import uz.hamkorbank.commhub.domain.model.vo.ClientId;
 import uz.hamkorbank.commhub.domain.model.vo.CorrelationId;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
+import uz.hamkorbank.commhub.domain.model.vo.PushToken;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.support.UuidV7;
 
@@ -71,8 +76,8 @@ class PublishOutboxEventsServiceTest {
         assertThat(result.published()).isEqualTo(2);
         assertThat(result.failed()).isZero();
         assertThat(result.more()).isFalse();
-        verify(publisher).publishStatus(status.payload());
-        verify(publisher).publishDlq(dlq.payload());
+        verify(publisher).publishStatus(statusOf(status));
+        verify(publisher).publishDlq(statusOf(dlq));
         verify(outbox).markPublished(status, NOW);
         verify(outbox).markPublished(dlq, NOW);
     }
@@ -83,7 +88,7 @@ class PublishOutboxEventsServiceTest {
         // Arrange
         PendingOutboxEvent event = pending(OutboxEventType.MESSAGE_STATUS);
         when(outbox.pollUnpublished(anyInt())).thenReturn(List.of(event));
-        doThrow(new IllegalStateException("broker is down")).when(publisher).publishStatus(event.payload());
+        doThrow(new IllegalStateException("broker is down")).when(publisher).publishStatus(statusOf(event));
 
         // Act
         OutboxRelayResult result = service.publish(PublishOutboxEventsCommand.defaults());
@@ -102,14 +107,14 @@ class PublishOutboxEventsServiceTest {
         PendingOutboxEvent first = pending(OutboxEventType.MESSAGE_STATUS);
         PendingOutboxEvent second = pending(OutboxEventType.MESSAGE_STATUS);
         when(outbox.pollUnpublished(anyInt())).thenReturn(List.of(first, second));
-        doThrow(new IllegalStateException("broker is down")).when(publisher).publishStatus(first.payload());
+        doThrow(new IllegalStateException("broker is down")).when(publisher).publishStatus(statusOf(first));
 
         // Act
         OutboxRelayResult result = service.publish(PublishOutboxEventsCommand.defaults());
 
         // Assert
         assertThat(result.more()).isFalse();
-        verify(publisher, never()).publishStatus(second.payload());
+        verify(publisher, never()).publishStatus(statusOf(second));
         verify(outbox, never()).markPublished(any(), any());
     }
 
@@ -143,6 +148,44 @@ class PublishOutboxEventsServiceTest {
         verify(outbox).pollUnpublished(eq(PublishOutboxEventsCommand.DEFAULT_LIMIT));
         verifyNoMoreInteractions(outbox);
         verifyNoMoreInteractions(publisher);
+    }
+
+    @Test
+    @DisplayName("PU-04: an invalidated token goes to its own topic, not onto the status stream")
+    void publishesAnInvalidatedToken() {
+        // Arrange
+        PushTokenInvalidatedEvent payload = new PushTokenInvalidatedEvent(
+                UuidV7.generate(),
+                NOW,
+                StreamId.of("mobile-app"),
+                ClientId.of("C123"),
+                PushToken.of("device-a", PushPlatform.ANDROID),
+                ProviderCode.of("FCM"),
+                "UNREGISTERED");
+        PendingOutboxEvent event = new PendingOutboxEvent(
+                UuidV7.generate(),
+                NOW,
+                OutboxEventType.PUSH_TOKEN_INVALIDATED,
+                OutboxEvent.AGGREGATE_PUSH_TOKEN,
+                payload.aggregateId(),
+                payload,
+                0);
+        when(outbox.pollUnpublished(anyInt())).thenReturn(List.of(event));
+        when(clock.now()).thenReturn(NOW);
+
+        // Act
+        OutboxRelayResult result = service.publish(PublishOutboxEventsCommand.defaults());
+
+        // Assert
+        assertThat(result.published()).isEqualTo(1);
+        verify(publisher).publishPushTokenInvalidated(payload);
+        verify(publisher, never()).publishStatus(any());
+        verify(outbox).markPublished(event, NOW);
+    }
+
+    /** The payload of an outbox row is polymorphic since PU-04; these rows all carry a status. */
+    private static MessageStatusEvent statusOf(PendingOutboxEvent event) {
+        return (MessageStatusEvent) event.payload();
     }
 
     private static PendingOutboxEvent pending(OutboxEventType type) {

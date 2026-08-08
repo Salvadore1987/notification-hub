@@ -104,7 +104,7 @@ public class DispatchMessageService implements DispatchMessage {
         moveToSending(message, now);
         ProviderMessageId providerMessageId = gateway.providerMessageIdFor(message);
         DeliveryAttempt attempt = message.startAttempt(providerMessageId, now);
-        ProviderAck ack = gateway.submit(message, provider, providerMessageId, null);
+        ProviderAck ack = gateway.submit(message, provider, attempt, null);
         recordAttempt(attempt, ack);
         suppressIfAddressRejected(message, provider, ack);
         if (ack.isAccepted()) {

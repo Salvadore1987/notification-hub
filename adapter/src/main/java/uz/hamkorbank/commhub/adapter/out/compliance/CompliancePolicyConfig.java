@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
+import uz.hamkorbank.commhub.application.policy.PushPolicy;
 
 /**
  * Turns the deployment settings of the compliance filters into the policies the pipeline reads (FR-5.4,
@@ -42,6 +43,17 @@ public class CompliancePolicyConfig {
                 email.maxAttachmentSize(),
                 email.maxTotalAttachmentSize());
         return email.toPolicy();
+    }
+
+    /** Payload and fan-out ceilings the validator refuses a push by (PU-09, PU-11). */
+    @Bean
+    public PushPolicy pushPolicy(ComplianceProperties properties) {
+        ComplianceProperties.Push push = properties.push();
+        LOG.info(
+                "Push content limits (PU-11, PU-09): payload up to {}, up to {} device tokens per message",
+                push.maxPayloadSize(),
+                push.maxTokensPerMessage());
+        return push.toPolicy();
     }
 
     @Bean

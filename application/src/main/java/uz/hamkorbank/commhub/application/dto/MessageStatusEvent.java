@@ -7,6 +7,7 @@ import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.RejectionReason;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
+import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -30,7 +31,8 @@ public record MessageStatusEvent(
         MessageStatus status,
         String providerStatus,
         StatusReason reason,
-        int segments) {
+        int segments)
+        implements OutboxPayload {
 
     public MessageStatusEvent {
         Guard.notNull(eventId, "MessageStatusEvent.eventId");
@@ -38,6 +40,12 @@ public record MessageStatusEvent(
         Guard.notNull(key, "MessageStatusEvent.key");
         Guard.notNull(status, "MessageStatusEvent.status");
         Guard.notNegative(segments, "MessageStatusEvent.segments");
+    }
+
+    /** Stream of the message; the outbox and the broker headers key on it (§8.1 IK-02). */
+    @Override
+    public StreamId streamId() {
+        return key.streamId();
     }
 
     public Optional<Channel> channelOptional() {
