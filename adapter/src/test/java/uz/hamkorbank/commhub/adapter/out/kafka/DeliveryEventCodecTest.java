@@ -68,8 +68,13 @@ class DeliveryEventCodecTest {
         // Arrange + Act
         String document = codec.write(delivered());
 
-        // Assert
-        assertThat(document).doesNotContain("recipient").doesNotContain("998").doesNotContain("text");
+        // Assert — by field name and by a whole address. A bare "998" would also match the hex of a
+        // UUIDv7, which is how this assertion used to fail on roughly one run in a hundred.
+        assertThat(document)
+                .doesNotContain("recipient")
+                .doesNotContain("msisdn")
+                .doesNotContain("998901234567")
+                .doesNotContain("text");
     }
 
     @Test

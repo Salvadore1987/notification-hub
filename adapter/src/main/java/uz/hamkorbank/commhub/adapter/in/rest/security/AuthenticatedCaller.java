@@ -1,11 +1,14 @@
 package uz.hamkorbank.commhub.adapter.in.rest.security;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
@@ -82,6 +85,29 @@ public class AuthenticatedCaller {
             return actor();
         }
         return declaredActor == null || declaredActor.isBlank() ? Actor.system() : Actor.operator(declaredActor.trim());
+    }
+
+    /**
+     * Whether this caller holds one of the given RBAC roles (SEC-03, FR-7.2).
+     *
+     * <p>Used where the answer is a <em>degree</em> rather than a yes or no — how much of an address a
+     * screen shows (§11.2 "Сообщения") — and never as a substitute for the {@code @PreAuthorize} that
+     * decides whether the endpoint may be called at all. Those two must not be the same mechanism: one
+     * refuses a request, the other shapes a response, and collapsing them is how an endpoint ends up
+     * with authorisation expressed only in what it happens to render.
+     *
+     * <p>With nobody authenticated the answer is whatever {@link SecurityProperties#isAuthenticationRequired()}
+     * implies: on the local stack every role is granted, exactly as every stream is.
+     */
+    public boolean hasAnyRole(String... roles) {
+        Optional<Authentication> authentication = authentication();
+        if (authentication.isEmpty()) {
+            return !properties.isAuthenticationRequired();
+        }
+        Set<String> held = authentication.get().getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return Arrays.stream(roles).map(Roles::authority).anyMatch(held::contains);
     }
 
     /** Whether this caller may submit for, and read, the given stream (SEC-01). */

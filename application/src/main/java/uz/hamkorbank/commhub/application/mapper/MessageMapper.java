@@ -1,10 +1,12 @@
 package uz.hamkorbank.commhub.application.mapper;
 
 import org.mapstruct.Mapper;
+import uz.hamkorbank.commhub.application.dto.MessageDigestView;
 import uz.hamkorbank.commhub.application.dto.MessageKey;
 import uz.hamkorbank.commhub.application.dto.MessageStatusEvent;
 import uz.hamkorbank.commhub.application.dto.MessageView;
 import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
+import uz.hamkorbank.commhub.application.port.out.MessageDigest;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.MessageEnvelope;
 import uz.hamkorbank.commhub.domain.model.StatusChange;
@@ -64,6 +66,34 @@ public interface MessageMapper {
                 message.statusHistory().stream()
                         .map(MessageMapper::toTransition)
                         .toList());
+    }
+
+    /**
+     * One line of the admin message list (§11.2 "Сообщения").
+     *
+     * <p>Takes the row the search port read, not the aggregate: the list shows fifty messages and
+     * rebuilding fifty aggregates would decrypt fifty message bodies (DB-04) for a screen that shows
+     * none of them.
+     */
+    default MessageDigestView toDigestView(MessageDigest digest) {
+        MessageDigest.Routing routing = digest.routing();
+        return new MessageDigestView(
+                digest.messageId(),
+                digest.streamId(),
+                digest.externalMessageId(),
+                digest.channel(),
+                digest.status(),
+                digest.recipient(),
+                digest.acceptedAt(),
+                new MessageDigestView.Routing(
+                        routing.provider(),
+                        routing.channel(),
+                        routing.reason(),
+                        routing.batchId(),
+                        routing.correlationId(),
+                        routing.cost(),
+                        routing.segments(),
+                        routing.terminalAt()));
     }
 
     /** Result returned to the caller of {@code SubmitMessage} (FR-1.1, FR-1.4). */

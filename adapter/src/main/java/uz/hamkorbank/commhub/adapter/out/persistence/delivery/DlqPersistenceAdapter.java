@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
+import uz.hamkorbank.commhub.application.port.in.query.DlqQuery;
 import uz.hamkorbank.commhub.application.port.out.DlqRepository;
 import uz.hamkorbank.commhub.domain.model.DlqEntry;
 import uz.hamkorbank.commhub.domain.model.type.RejectionReason;
@@ -19,6 +20,20 @@ public class DlqPersistenceAdapter implements DlqRepository {
 
     private static final String SELECT =
             "SELECT message_id, reason, last_error, moved_at, retried_by, retried_at, archived FROM dlq_entry";
+
+    /**
+     * Filters of the DLQ screen, written once so the page and its count cannot disagree (UI-03).
+     *
+     * <p>With both flags off the predicate is the one {@code dlq_entry_pending_idx} was built for (V5),
+     * which is the default page and the one that is asked for constantly.
+     */
+    private static final String WHERE = """
+             WHERE (CAST(:from AS timestamptz) IS NULL OR moved_at >= :from)
+               AND (CAST(:to AS timestamptz) IS NULL OR moved_at < :to)
+               AND (CAST(:reason AS varchar) IS NULL OR reason = :reason)
+               AND (CAST(:includeRetried AS boolean) OR retried_at IS NULL)
+               AND (CAST(:includeArchived AS boolean) OR NOT archived)
+            """;
 
     private static final String UPSERT = """
             INSERT INTO dlq_entry (message_id, reason, last_error, moved_at, retried_by, retried_at, archived)
@@ -71,6 +86,33 @@ public class DlqPersistenceAdapter implements DlqRepository {
                 .param("limit", limit)
                 .query(rowMapper())
                 .list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DlqEntry> search(DlqQuery query) {
+        return bind(jdbcClient.sql(SELECT + WHERE + " ORDER BY moved_at LIMIT :limit OFFSET :offset"), query)
+                .param("limit", query.limit())
+                .param("offset", query.offset())
+                .query(rowMapper())
+                .list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long count(DlqQuery query) {
+        return bind(jdbcClient.sql("SELECT count(*) FROM dlq_entry" + WHERE), query)
+                .query(Long.class)
+                .single();
+    }
+
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement, DlqQuery query) {
+        return statement
+                .param("from", SqlValues.timestamp(query.from()))
+                .param("to", SqlValues.timestamp(query.to()))
+                .param("reason", SqlValues.nameOf(query.reason()))
+                .param("includeRetried", query.includeRetried())
+                .param("includeArchived", query.includeArchived());
     }
 
     private RowMapper<DlqEntry> rowMapper() {

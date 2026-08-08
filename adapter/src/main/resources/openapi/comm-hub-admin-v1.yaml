@@ -1,0 +1,2057 @@
+openapi: 3.1.0
+
+# Контракт админ-BFF (SRS §11.2, UI-02, UI-03).
+#
+# Документ ведётся рядом с кодом и проверяется тестом AdminOpenApiContractTest: тест обходит
+# @RequestMapping всех контроллеров adapter/in/admin и падает, если в документе нет операции для
+# найденного пути и метода. Из этого файла SPA фазы 16 генерирует клиент и типы, поэтому
+# расхождение здесь — это не документация, а сломанный фронтенд.
+#
+# Аутентификация — OIDC-токен корпоративного SSO (SEC-02); авторизация — роли app_role из §10.1,
+# проверяются на бэкенде через @PreAuthorize (SEC-03, FR-7.2). Роль, необходимая операции,
+# указана в её описании; клиент дублирует гейтинг только для того, чтобы не показывать кнопку,
+# которую бэкенд всё равно отклонит.
+
+info:
+  title: Notification Hub — Admin BFF
+  version: "1.0.0"
+  description: |
+    Бэкенд админ-панели: дашборд, рассылки, сообщения, DLQ, потоки, каналы и провайдеры,
+    маршрутизация, шаблоны, suppression list, статистика, аудит и администрирование (§11.2).
+
+    Списки — серверная пагинация `limit`/`offset` с общим числом строк в `total` (UI-03).
+    Периоды — ISO-8601 UTC; отображение в Asia/Tashkent делает клиент (UI-04). Период
+    обязателен по смыслу и подставляется по умолчанию (последние сутки): `message`
+    партиционирована по `accepted_at`, и запрос без периода — это скан всех партиций (DB-02).
+
+    Ошибки — RFC 9457 `application/problem+json` с машиночитаемым кодом в поле `code` (IR-01),
+    те же коды, что и у API систем-источников: панели и системе-источнику, упёршимся в одну и ту
+    же стену, отвечают одинаково.
+  contact:
+    name: Notification Hub team
+
+servers:
+  - url: https://{host}/api/admin/v1
+    description: Контур Банка
+    variables:
+      host:
+        default: comm-hub.hamkorbank.uz
+
+security:
+  - oidc: []
+
+tags:
+  - name: dashboard
+    description: Сводка состояния (§11.2 «Дашборд»)
+  - name: batches
+    description: Рассылки (§11.2, FR-3.1, FR-3.2)
+  - name: messages
+    description: Поиск сообщений и карточка (§11.2, SEC-08)
+  - name: dlq
+    description: Dead-letter queue (§11.2, FR-3.3)
+  - name: streams
+    description: Входящие потоки (§11.2, FR-1.3)
+  - name: channels
+    description: Каналы (§11.2, FR-2.2)
+  - name: providers
+    description: Провайдеры и тестовая отправка (§11.2, FR-2.1, FR-7.4)
+  - name: routing
+    description: Маршрутизация и dry-run (§11.2, FR-2.2)
+  - name: templates
+    description: Шаблоны (§11.2, FR-4.1, FR-4.2)
+  - name: suppressions
+    description: Suppression list (§11.2, FR-5.1)
+  - name: statistics
+    description: Статистика и отчёты (§11.2, FR-6.2)
+  - name: audit
+    description: Журнал аудита (§11.2, FR-7.3, SEC-08)
+  - name: administration
+    description: Kill switch и системные параметры (§11.2, FR-3.2)
+
+paths:
+
+  # ------------------------------------------------------------------ дашборд
+
+  /dashboard:
+    get:
+      tags: [dashboard]
+      summary: Сводка состояния за период
+      description: Доступен всем ролям. Объёмы по каналам, delivery rate, латентность OTP (TC-01),
+        health провайдеров, активные батчи, состояние kill switch.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/IncludeTest'
+      responses:
+        '200':
+          description: Снимок дашборда
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /dashboard/stream:
+    get:
+      tags: [dashboard]
+      summary: Тот же снимок, но server-sent events
+      description: |
+        Событие `dashboard` с телом `Dashboard` раз в 15 секунд. Удобство для оставленной
+        открытой вкладки; основной способ — обычный `GET /dashboard` с polling'ом, который
+        переживает балансировщик, корпоративный прокси и заснувший ноутбук.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/IncludeTest'
+      responses:
+        '200':
+          description: Поток событий
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ рассылки
+
+  /batches:
+    get:
+      tags: [batches]
+      summary: Список рассылок
+      description: OPERATOR+ и VIEWER.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - { name: streamId, in: query, schema: { type: string } }
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/BatchStatus' } }
+        - { name: activeOnly, in: query, schema: { type: boolean, default: false },
+            description: Только незавершённые; не то же самое, что фильтр по одному статусу }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Страница списка
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/BatchStatus_' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /batches/{batchId}:
+    get:
+      tags: [batches]
+      summary: Карточка рассылки с прогрессом
+      description: OPERATOR+ и VIEWER. Тело совпадает с ответом §8.2 `GET /batches/{id}`.
+      parameters:
+        - $ref: '#/components/parameters/BatchId'
+      responses:
+        '200':
+          description: Карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchStatus_' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /batches/{batchId}/actions/{action}:
+    post:
+      tags: [batches]
+      summary: Старт, пауза, возобновление или остановка рассылки
+      description: OPERATOR+. Действие журналируется с именем сотрудника (FR-3.2, FR-7.3).
+      parameters:
+        - $ref: '#/components/parameters/BatchId'
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [start, pause, resume, stop] }
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Новое состояние рассылки
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAction' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ сообщения
+
+  /messages:
+    get:
+      tags: [messages]
+      summary: Поиск сообщений
+      description: |
+        OPERATOR+ и VIEWER; у VIEWER адреса приходят маскированными (`99890***4567`, DB-04).
+        Чтение журналируется как доступ к ПДн (SEC-08) — одна запись на поиск, а не на строку.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - { name: streamId, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/MessageStatus' } }
+        - { name: externalMessageId, in: query, schema: { type: string } }
+        - { name: recipient, in: query, schema: { type: string },
+            description: Адрес как есть — номер или почтовый ящик; точное совпадение }
+        - { name: correlationId, in: query, schema: { type: string } }
+        - { name: batchId, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Страница списка
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/MessageDigest' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /messages/{messageId}:
+    get:
+      tags: [messages]
+      summary: Карточка сообщения с полным таймлайном
+      description: OPERATOR+ и VIEWER. Тело совпадает с ответом §8.2 `GET /messages/{id}`.
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageCard' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ DLQ
+
+  /dlq:
+    get:
+      tags: [dlq]
+      summary: Очередь недоставленных
+      description: OPERATOR+. Без периода по умолчанию — очередь читают, чтобы найти самое старое.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: reason, in: query, schema: { $ref: '#/components/schemas/RejectionReason' } }
+        - { name: includeRetried, in: query, schema: { type: boolean, default: false } }
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Страница очереди
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/DlqEntry' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /dlq/retry:
+    post:
+      tags: [dlq]
+      summary: Ручной повтор — единично или пакетно
+      description: |
+        OPERATOR+. Только явный список идентификаторов и никогда фильтр: «повторить всё,
+        что подходит» — это одно опечатанное поле до повторной отправки суток трафика.
+        Отвечает 200 даже если часть записей пропущена, и перечисляет их.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DlqActionRequest' }
+      responses:
+        '200':
+          description: Что применено и что пропущено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DlqActionResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /dlq/archive:
+    post:
+      tags: [dlq]
+      summary: Архивирование записей DLQ
+      description: |
+        OPERATOR+. Запись остаётся в таблице — очередь это свидетельство того, что не дошло, —
+        и уходит из рабочего списка. Причина из заголовка попадает в аудит (FR-7.3).
+      parameters:
+        - $ref: '#/components/parameters/ReasonHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DlqActionRequest' }
+      responses:
+        '200':
+          description: Что применено и что пропущено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DlqActionResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ потоки
+
+  /streams:
+    get:
+      tags: [streams]
+      summary: Все зарегистрированные потоки
+      description: ADMIN. Без пагинации — потоков десятки, и пейджер здесь только прячет строки.
+      responses:
+        '200':
+          description: Список потоков
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Stream' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /streams/{streamId}:
+    post:
+      tags: [streams]
+      summary: Зарегистрировать поток
+      description: ADMIN.
+      parameters:
+        - $ref: '#/components/parameters/StreamIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StreamRequest' }
+      responses:
+        '200':
+          description: Созданный поток
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stream' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [streams]
+      summary: Изменить дефолты, квоты и лимиты потока
+      description: ADMIN. `null` означает «не трогать»; снять quiet hours — `clearQuietHours: true`.
+      parameters:
+        - $ref: '#/components/parameters/StreamIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StreamRequest' }
+      responses:
+        '200':
+          description: Изменённый поток
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stream' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /streams/{streamId}/suspend:
+    post:
+      tags: [streams]
+      summary: Приостановить приём из потока
+      description: ADMIN (FR-1.3).
+      parameters:
+        - $ref: '#/components/parameters/StreamIdPath'
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Состояние потока
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stream' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /streams/{streamId}/resume:
+    post:
+      tags: [streams]
+      summary: Возобновить приём из потока
+      description: ADMIN (FR-1.3).
+      parameters:
+        - $ref: '#/components/parameters/StreamIdPath'
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Состояние потока
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stream' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ каналы
+
+  /channels:
+    get:
+      tags: [channels]
+      summary: Все каналы с их состоянием
+      description: ADMIN. Каналов ровно три — добавление канала это релиз (AR-05), а не строка.
+      responses:
+        '200':
+          description: Список каналов
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChannelConfig' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /channels/{channel}:
+    put:
+      tags: [channels]
+      summary: Стратегия балансировки, порядок fallback, quiet hours, квота
+      description: ADMIN (FR-2.2, FR-2.3, FR-2.6).
+      parameters:
+        - $ref: '#/components/parameters/ChannelPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChannelRequest' }
+      responses:
+        '200':
+          description: Изменённый канал
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelConfig' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /channels/{channel}/state/{status}:
+    post:
+      tags: [channels]
+      summary: Включить, выключить или перевести канал в обслуживание
+      description: ADMIN (FR-2.7).
+      parameters:
+        - $ref: '#/components/parameters/ChannelPath'
+        - name: status
+          in: path
+          required: true
+          schema: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Изменённый канал
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelConfig' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ провайдеры
+
+  /providers:
+    get:
+      tags: [providers]
+      summary: Все провайдеры с их живым состоянием
+      description: |
+        ADMIN. `state.health` и `state.selectable` — только чтение: health выводится пассивно
+        из реальных попыток отправки (FR-6.3, PR-02), и кнопки «объявить провайдера живым» нет.
+      responses:
+        '200':
+          description: Список провайдеров
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Provider' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /providers/{code}:
+    post:
+      tags: [providers]
+      summary: Зарегистрировать профиль провайдера
+      description: ADMIN (FR-2.1). `credentialsRef` — ссылка в секрет-хранилище, не сам секрет (SEC-04).
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProviderRequest' }
+      responses:
+        '200':
+          description: Созданный провайдер
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Provider' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /providers/{providerId}:
+    put:
+      tags: [providers]
+      summary: Вес, тариф, лимиты, квота, endpoint-настройки
+      description: ADMIN (FR-2.1, FR-2.5).
+      parameters:
+        - $ref: '#/components/parameters/ProviderIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProviderRequest' }
+      responses:
+        '200':
+          description: Изменённый провайдер
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Provider' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [providers]
+      summary: Удалить профиль провайдера
+      description: |
+        ADMIN. Отклоняется, пока через провайдера что-то маршрутизируется: удалённый из-под
+        порядка fallback провайдер — это канал, который перестаёт работать при следующем
+        переключении, а не в момент правки.
+      parameters:
+        - $ref: '#/components/parameters/ProviderIdPath'
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '204': { description: Удалён }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /providers/{providerId}/state/{state}:
+    post:
+      tags: [providers]
+      summary: Включить, выключить или перевести провайдера в обслуживание
+      description: ADMIN (FR-2.7).
+      parameters:
+        - $ref: '#/components/parameters/ProviderIdPath'
+        - name: state
+          in: path
+          required: true
+          schema: { type: string, enum: [ENABLED, DISABLED, MAINTENANCE] }
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Изменённый провайдер
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Provider' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /providers/test-send:
+    post:
+      tags: [providers]
+      summary: Тестовая отправка с меткой TEST
+      description: |
+        ADMIN (FR-7.4). Идёт по обычному конвейеру — квоты потока, фильтры канала, креды
+        провайдера, sandbox платформы (PU-13), — потому что проверяют именно конвейер.
+        Метка `test` остаётся измерением метрик и полем контракта витрины, а не выброшенными
+        данными: панели и алерты фильтруют по ней.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestSendRequest' }
+      responses:
+        '200':
+          description: Результат приёма сообщения
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageAccepted' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ маршрутизация
+
+  /routing/policies:
+    get:
+      tags: [routing]
+      summary: Политики маршрутизации в порядке применения
+      description: ADMIN (FR-2.2).
+      responses:
+        '200':
+          description: Список политик
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RoutingPolicy' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [routing]
+      summary: Создать политику
+      description: ADMIN (FR-2.2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoutingPolicyRequest' }
+      responses:
+        '200':
+          description: Созданная политика
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoutingPolicy' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /routing/policies/{policyId}:
+    put:
+      tags: [routing]
+      summary: Заменить политику целиком
+      description: ADMIN. Целиком, а не патчем: половина правила — это не правило.
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoutingPolicyRequest' }
+      responses:
+        '200':
+          description: Изменённая политика
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoutingPolicy' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [routing]
+      summary: Удалить политику
+      description: ADMIN (FR-2.2).
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdPath'
+      responses:
+        '204': { description: Удалена }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /routing/policies/{policyId}/state/{enabled}:
+    post:
+      tags: [routing]
+      summary: Включить или выключить политику
+      description: |
+        ADMIN. Отдельная операция, потому что выключение политики — это способ быстро откатить
+        правку маршрутизации: один клик, без повторной отправки тела, которое кто-то мог успеть
+        поменять.
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdPath'
+        - name: enabled
+          in: path
+          required: true
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Изменённая политика
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoutingPolicy' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /routing/evaluate:
+    post:
+      tags: [routing]
+      summary: Dry-run «какой маршрут получит сообщение X»
+      description: |
+        ADMIN. Ничего не отправляется и ничего не сохраняется: сообщение строится в памяти и
+        прогоняется через настоящий Router по настоящей конфигурации — второй реализации правил
+        маршрутизации в системе нет и не будет.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RouteEvaluationRequest' }
+      responses:
+        '200':
+          description: Маршрут, сегменты и стоимость
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteEvaluation' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ шаблоны
+
+  /templates:
+    get:
+      tags: [templates]
+      summary: Каталог шаблонов без текстов
+      description: TEMPLATE_MANAGER (FR-4.1).
+      parameters:
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: direction, in: query, schema: { type: string } }
+        - { name: catalogStatus, in: query, schema: { type: string, enum: [ACTIVE, ARCHIVED] } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Страница каталога
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/TemplateSummary' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /templates/import:
+    post:
+      tags: [templates]
+      summary: Импорт каталога из CSV
+      description: |
+        TEMPLATE_MANAGER (FR-4.6). Колонки по именам заголовка: обязательны `code`, `channel`,
+        `locale`, `text`. Идемпотентен по формулировке, плохие строки сообщает и продолжает.
+        `approver` обязан отличаться от автора (им является аутентифицированный вызывающий),
+        иначе версии останутся черновиками — четыре глаза FR-4.2 важнее всего именно при
+        массовой загрузке.
+      parameters:
+        - name: approver
+          in: query
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Что создано, импортировано, пропущено и что не прошло
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateImportResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /templates/{code}:
+    get:
+      tags: [templates]
+      summary: Карточка шаблона со всеми версиями
+      description: TEMPLATE_MANAGER (FR-4.1, FR-4.5).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+      responses:
+        '200':
+          description: Карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [templates]
+      summary: Завести карточку шаблона
+      description: TEMPLATE_MANAGER (FR-4.1).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateRequest' }
+      responses:
+        '200':
+          description: Созданная карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '409': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [templates]
+      summary: Изменить направление и владельца
+      description: TEMPLATE_MANAGER (§18.4).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateRequest' }
+      responses:
+        '200':
+          description: Изменённая карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [templates]
+      summary: Архивировать карточку
+      description: |
+        TEMPLATE_MANAGER. Удаление шаблона — это архивирование: его код лежит в истории каждого
+        отправленного по нему сообщения. Версии остаются, карточка перестаёт быть отправляемой.
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Архивированная карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /templates/{code}/restore:
+    post:
+      tags: [templates]
+      summary: Вернуть карточку в рабочий каталог
+      description: TEMPLATE_MANAGER (FR-4.1).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '200':
+          description: Восстановленная карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /templates/{code}/versions:
+    put:
+      tags: [templates]
+      summary: Записать черновик версии
+      description: |
+        TEMPLATE_MANAGER (FR-4.1). Переписать можно только `DRAFT`: версия на ревью — это то,
+        на что смотрит ревьюер, а опубликованная — то, по чему рендерились отправленные
+        сообщения. Автор — аутентифицированный вызывающий, поля `author` в теле нет (FR-4.2).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateVersionRequest' }
+      responses:
+        '200':
+          description: Записанная версия
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateVersion' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /templates/{code}/versions/{locale}/{version}/state/{status}:
+    post:
+      tags: [templates]
+      summary: Провести версию по workflow ревью и публикации
+      description: |
+        TEMPLATE_MANAGER (FR-4.1, FR-4.2). Публикация требует второго человека, и это проверяет
+        use case, а не экран. Публикация v2 архивирует v1: у локали ровно одна отправляемая
+        версия.
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+        - name: locale
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ContentLocale' }
+        - name: version
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: status
+          in: path
+          required: true
+          schema: { type: string, enum: [DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED, REJECTED] }
+      responses:
+        '200':
+          description: Версия в новом состоянии
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateVersion' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /templates/{code}/preview:
+    post:
+      tags: [templates]
+      summary: Предпросмотр с расчётом сегментов и стоимости
+      description: |
+        TEMPLATE_MANAGER (FR-4.4). Не strict-режим: незаполненное поле остаётся видимым как
+        `{NAME}` и перечисляется в `missingVariables` — экран существует, чтобы им пользовались
+        на черновике. Путь отправки при этом остаётся строгим (`TEMPLATE_VARIABLE_MISSING`).
+        Сегменты и стоимость считает настоящий SegmentCalculator по настоящим тарифам.
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplatePreviewRequest' }
+      responses:
+        '200':
+          description: Отрендеренный текст, сегменты и стоимость по провайдерам
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplatePreview' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /templates/{code}/providers/{providerCode}:
+    put:
+      tags: [templates]
+      summary: Записать регистрацию шаблона у провайдера
+      description: TEMPLATE_MANAGER (FR-4.5).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+        - $ref: '#/components/parameters/ProviderCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProviderTemplateRequest' }
+      responses:
+        '200':
+          description: Карточка с обновлёнными маппингами
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [templates]
+      summary: Снять регистрацию шаблона у провайдера
+      description: TEMPLATE_MANAGER (FR-4.5).
+      parameters:
+        - $ref: '#/components/parameters/TemplateCodePath'
+        - $ref: '#/components/parameters/ProviderCodePath'
+      responses:
+        '200':
+          description: Карточка с обновлёнными маппингами
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ suppression list
+
+  /suppressions:
+    get:
+      tags: [suppressions]
+      summary: Страница suppression list
+      description: |
+        ADMIN и OPERATOR (FR-5.1). Фильтра по адресу нет и не будет: в таблице лежат хеши
+        (DB-04), и «покажи этот номер» — это `/suppressions/check`, а не фильтр.
+      parameters:
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: reason, in: query, schema: { $ref: '#/components/schemas/SuppressionReason' } }
+        - { name: clientId, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Страница списка
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Suppression' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [suppressions]
+      summary: Забанить адрес или клиента
+      description: |
+        ADMIN и OPERATOR (FR-5.1). Ровно одно из `address` и `clientId`. Адрес приходит в
+        открытом виде, проверяется value object'ом своего канала и хешируется до записи:
+        мимо набранный номер отклоняется здесь, а не превращается в хеш, который потом ничему
+        не соответствует.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuppressionRequest' }
+      responses:
+        '200':
+          description: Созданная запись
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Suppression' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /suppressions/check:
+    get:
+      tags: [suppressions]
+      summary: Можно ли ещё писать на этот адрес
+      description: ADMIN и OPERATOR (FR-5.1). Адрес хешируется на сервере, наружу хеш не требуется.
+      parameters:
+        - { name: channel, in: query, required: true, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: address, in: query, schema: { type: string } }
+        - { name: clientId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Результат проверки
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuppressionCheck' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /suppressions/import:
+    post:
+      tags: [suppressions]
+      summary: Импорт suppression list из CSV
+      description: |
+        ADMIN и OPERATOR (§11.2). Колонки по именам заголовка: обязательны `channel` и `reason`,
+        плюс одно из `address` / `clientId`. Каждая строка идёт через тот же use case, что и
+        добавление руками, — та же валидация, то же хеширование, та же запись в аудит.
+        Уже существующая запись считается пропущенной, а не ошибкой: загрузить один файл дважды
+        должно быть безопасно.
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Что импортировано, пропущено и что не прошло
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /suppressions/{entryId}:
+    delete:
+      tags: [suppressions]
+      summary: Снять запись — opt-in после opt-out
+      description: ADMIN и OPERATOR (FR-5.1).
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ReasonHeader'
+      responses:
+        '204': { description: Снята }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ статистика
+
+  /statistics:
+    get:
+      tags: [statistics]
+      summary: Отчёт за период
+      description: |
+        ANALYST+ (FR-6.2). Разрез задаёт `dimension`, фильтры — сужают; они независимы.
+        `includeTest` по умолчанию false: FR-7.4 выполнен как измерение, а не как удаление —
+        строки на месте и видны тому, кто запускал тест.
+      parameters:
+        - $ref: '#/components/parameters/Dimension'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: streamId, in: query, schema: { type: string } }
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: batchId, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IncludeTest'
+      responses:
+        '200':
+          description: Строки отчёта
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StatisticsRow' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /statistics/export:
+    get:
+      tags: [statistics]
+      summary: Тот же отчёт в CSV
+      description: |
+        ANALYST+ (§11.2). Тот же запрос, что и на экране: выгрузка, которая читает иначе, — это
+        выгрузка, которую не сверить с тем, что видели. UTF-8 с BOM, чтобы Excel не превращал
+        кириллицу в кракозябры.
+      parameters:
+        - $ref: '#/components/parameters/Dimension'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: streamId, in: query, schema: { type: string } }
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: batchId, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IncludeTest'
+      responses:
+        '200':
+          description: CSV-файл
+          content:
+            text/csv:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ аудит
+
+  /audit:
+    get:
+      tags: [audit]
+      summary: Журнал действий
+      description: |
+        SECURITY_AUDITOR и ADMIN (FR-7.3, SEC-08). Чтение журнала само не аудируется — иначе
+        он рос бы от того, что в него смотрят. Фильтры `entityType`+`entityId` отвечают на
+        вопрос SEC-08 «кто трогал эти данные», `username` — на «что делал этот человек».
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: username, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: entityType, in: query, schema: { type: string } }
+        - { name: entityId, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Страница журнала
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AuditEntry' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /audit/export:
+    get:
+      tags: [audit]
+      summary: Тот же запрос, пройденный до конца, в CSV
+      description: |
+        SECURITY_AUDITOR и ADMIN (FR-7.3). Заголовок `X-Commhub-Truncated: true` означает, что
+        обход остановился на потолке в 50 000 строк: необъявленный потолок — это выгрузка,
+        которая выглядит полной и не является ею, а для файла аудита это единственный режим
+        отказа, который имеет значение.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: username, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: entityType, in: query, schema: { type: string } }
+        - { name: entityId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: CSV-файл
+          headers:
+            X-Commhub-Truncated:
+              schema: { type: boolean }
+              description: Обход остановлен на потолке; сузьте период
+          content:
+            text/csv:
+              schema: { type: string }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  # ------------------------------------------------------------------ администрирование
+
+  /administration/kill-switch:
+    get:
+      tags: [administration]
+      summary: Состояние глобального kill switch
+      description: ADMIN (FR-3.2).
+      responses:
+        '200':
+          description: Состояние
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KillSwitch' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [administration]
+      summary: Остановить или возобновить все отправки
+      description: |
+        ADMIN (FR-3.2, SEC-03). Ни одно сообщение не переписывается: сага читает состояние на
+        каждом ходу и придерживает всё, что ей разрешено придержать, поэтому снятие рубильника
+        возобновляет поток ровно с того места, где он встал. `CRITICAL_OTP` продолжает идти,
+        пока об этом не попросят явно. Причина обязательна при включении и попадает в аудит:
+        запись «всё встало в 03:14» имеет смысл только с ответом «почему».
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KillSwitchRequest' }
+      responses:
+        '200':
+          description: Новое состояние
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KillSwitch' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /administration/parameters:
+    get:
+      tags: [administration]
+      summary: Системные параметры
+      description: |
+        ADMIN (NF-06). Здесь живёт то, что оператор меняет ночью и что должно совпасть на всех
+        инстансах. Всё, у чего есть форма — маршрутизация, провайдеры, квоты, quiet hours, —
+        лежит в своих таблицах со своими агрегатами (AD-07).
+      responses:
+        '200':
+          description: Все параметры
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SystemParameter' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /administration/parameters/{key}:
+    put:
+      tags: [administration]
+      summary: Записать параметр
+      description: ADMIN (NF-06). Значение до и после попадает в аудит (FR-7.3).
+      parameters:
+        - $ref: '#/components/parameters/ParameterKeyPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SystemParameterRequest' }
+      responses:
+        '200':
+          description: Записанный параметр
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemParameter' }
+        '400': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [administration]
+      summary: Удалить параметр — вернуться к деплойному умолчанию
+      description: ADMIN (NF-06).
+      parameters:
+        - $ref: '#/components/parameters/ParameterKeyPath'
+      responses:
+        '204': { description: Удалён }
+        '404': { $ref: '#/components/responses/Problem' }
+
+components:
+
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://sso.hamkorbank.uz/realms/commhub/.well-known/openid-configuration
+      description: |
+        Токен корпоративного SSO (SEC-02). Группы из claim'а `groups` отображаются на роли
+        `app_role` из §10.1 и проверяются на бэкенде (SEC-03, FR-7.2).
+
+  parameters:
+    From:
+      name: from
+      in: query
+      description: Начало периода, ISO-8601 UTC; по умолчанию — 24 часа назад
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: Конец периода (исключительно), ISO-8601 UTC; по умолчанию — сейчас
+      schema: { type: string, format: date-time }
+    IncludeTest:
+      name: includeTest
+      in: query
+      description: Включать ли тестовые отправки FR-7.4
+      schema: { type: boolean, default: false }
+    Limit:
+      name: limit
+      in: query
+      description: Размер страницы; потолок зависит от списка
+      schema: { type: integer, minimum: 1 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Dimension:
+      name: dimension
+      in: query
+      description: Разрез отчёта
+      schema:
+        type: string
+        enum: [CHANNEL, PROVIDER, STREAM, BATCH, DAY, HOUR]
+        default: CHANNEL
+    BatchId:
+      name: batchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    StreamIdPath:
+      name: streamId
+      in: path
+      required: true
+      schema: { type: string }
+    ChannelPath:
+      name: channel
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Channel' }
+    ProviderIdPath:
+      name: providerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProviderCodePath:
+      name: providerCode
+      in: path
+      required: true
+      schema: { type: string }
+    PolicyIdPath:
+      name: policyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TemplateCodePath:
+      name: code
+      in: path
+      required: true
+      schema: { type: string }
+    ParameterKeyPath:
+      name: key
+      in: path
+      required: true
+      schema: { type: string }
+    ReasonHeader:
+      name: X-Commhub-Reason
+      in: header
+      description: Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03)
+      schema: { type: string }
+
+  responses:
+    Problem:
+      description: |
+        Ошибка в формате RFC 9457. Поле `code` — машиночитаемая причина IR-01; словарь тот же,
+        что у API систем-источников: VALIDATION_FAILED, DUPLICATE, STREAM_SUSPENDED,
+        QUOTA_EXCEEDED, TEMPLATE_NOT_PUBLISHED, TEMPLATE_VARIABLE_MISSING, SUPPRESSED, OPT_OUT,
+        QUIET_HOURS, FREQUENCY_CAPPED, PAN_DETECTED, NO_ROUTE_AVAILABLE, KILL_SWITCH,
+        SEND_STOPPED, TTL_EXPIRED, PROVIDER_REJECTED, ATTEMPTS_EXHAUSTED, NOT_FOUND, FORBIDDEN,
+        CONFLICT, RATE_LIMITED, INTERNAL_ERROR.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string }
+        field: { type: string, description: Указатель на поле, если ошибка в конкретном поле }
+
+    Page:
+      type: object
+      description: |
+        Страница списка. Пагинация по offset, а не курсором, сознательно: эти экраны читает
+        человек, который прыгает на седьмую страницу, сортирует и возвращается — ровно то, в чём
+        курсор плох. Строки под ним при этом двигаются, и для списка «что было вчера» это не
+        проблема корректности; единственное место, которое этого не терпит, — выгрузка, а она
+        не пагинируется, а проходит тот же запрос до конца.
+      properties:
+        total: { type: integer, format: int64 }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    Channel:
+      type: string
+      enum: [SMS, EMAIL, PUSH]
+
+    ContentLocale:
+      type: string
+      enum: [RU, UZ, EN]
+
+    MessageStatus:
+      type: string
+      enum: [ACCEPTED, VALIDATED, ROUTED, QUEUED, SENDING, SENT_TO_PROVIDER, RETRYING,
+             DELIVERED, UNDELIVERED, EXPIRED, REJECTED, DUPLICATE, CANCELLED, FAILED]
+
+    BatchStatus:
+      type: string
+      enum: [ACCEPTED, PROCESSING, PAUSED, STOPPED, COMPLETED]
+
+    RejectionReason:
+      type: string
+      enum: [VALIDATION_FAILED, DUPLICATE_SUBMISSION, SUPPRESSED, OPT_OUT, QUIET_HOURS,
+             FREQUENCY_CAPPED, QUOTA_EXCEEDED, STREAM_SUSPENDED, TEMPLATE_NOT_PUBLISHED,
+             TEMPLATE_VARIABLE_MISSING, NO_ROUTE_AVAILABLE, PAN_DETECTED, TTL_EXPIRED,
+             SEND_STOPPED, KILL_SWITCH, PROVIDER_REJECTED, ATTEMPTS_EXHAUSTED]
+
+    SuppressionReason:
+      type: string
+      enum: [OPT_OUT, COMPLAINT, HARD_BOUNCE, INVALID_ADDRESS, BLACKLISTED, MANUAL]
+
+    Money:
+      type: string
+      description: Сумма с кодом валюты, например `12.5000 UZS`
+
+    Quota:
+      type: object
+      properties:
+        dailyCount: { type: integer, format: int64, nullable: true }
+        monthlyCount: { type: integer, format: int64, nullable: true }
+        dailyCost: { $ref: '#/components/schemas/Money' }
+        monthlyCost: { $ref: '#/components/schemas/Money' }
+        behavior: { type: string, enum: [BLOCK, ALERT_ONLY] }
+
+    QuietHours:
+      type: object
+      description: Окно тишины; пересечение полуночи — норма (FR-5.3)
+      properties:
+        start: { type: string, example: "21:00" }
+        end: { type: string, example: "09:00" }
+        zone: { type: string, default: Asia/Tashkent }
+        behavior: { type: string, enum: [DEFER, REJECT] }
+
+    RateLimit:
+      type: object
+      properties:
+        tps: { type: integer }
+        perMinute: { type: integer }
+        perRecipientPerHour: { type: integer }
+
+    Tariff:
+      type: object
+      properties:
+        perMessage: { $ref: '#/components/schemas/Money' }
+        perSegment: { $ref: '#/components/schemas/Money' }
+
+    Recipient:
+      type: object
+      description: Получатель; у одного человека может быть и номер, и почта, и устройства (MP-02)
+      properties:
+        clientId: { type: string }
+        msisdn: { type: string, example: "998901234567" }
+        email: { type: string, format: email }
+        pushToken: { type: string }
+        pushPlatform: { type: string, enum: [APNS, FCM] }
+
+    Dashboard:
+      type: object
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        totals:
+          type: object
+          properties:
+            accepted: { type: integer, format: int64 }
+            delivered: { type: integer, format: int64 }
+            failed: { type: integer, format: int64 }
+            rejected: { type: integer, format: int64 }
+            inFlight: { type: integer, format: int64 }
+            segments: { type: integer, format: int64 }
+            cost: { $ref: '#/components/schemas/Money' }
+            deliveryRate: { type: number, format: double }
+        byChannel:
+          type: array
+          items: { $ref: '#/components/schemas/StatisticsRow' }
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              provider: { type: string }
+              channel: { $ref: '#/components/schemas/Channel' }
+              health: { type: string, enum: [UP, DEGRADED, DOWN, UNKNOWN] }
+              selectable: { type: boolean }
+        backlog:
+          type: object
+          properties:
+            dlqPending: { type: integer, format: int64 }
+            activeBatches:
+              type: array
+              items:
+                type: object
+                properties:
+                  batchId: { type: string, format: uuid }
+                  streamId: { type: string }
+                  channel: { $ref: '#/components/schemas/Channel' }
+                  status: { $ref: '#/components/schemas/BatchStatus' }
+                  total: { type: integer, format: int64 }
+                  processed: { type: integer, format: int64 }
+                  completionPercent: { type: number, format: double }
+                  createdAt: { type: string, format: date-time }
+        otpLatencyP99Millis:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            p99 приём → передача провайдеру для CRITICAL_OTP (TC-01). `null`, когда OTP-трафика
+            в периоде не было: это не то же самое, что нулевая латентность, и рисовать его нулём
+            на этой плитке нельзя.
+        killSwitch: { $ref: '#/components/schemas/KillSwitch' }
+
+    StatisticsRow:
+      type: object
+      description: |
+        Счётчики — по сообщениям, а не по переходам. Суммы вёдер сознательно не сходятся с
+        `accepted`: разница и есть `inFlight`.
+      properties:
+        key: { type: string, description: Значение разреза — канал, код провайдера, дата }
+        accepted: { type: integer, format: int64 }
+        delivered: { type: integer, format: int64 }
+        failed: { type: integer, format: int64 }
+        rejected: { type: integer, format: int64 }
+        inFlight: { type: integer, format: int64 }
+        segments: { type: integer, format: int64 }
+        cost:
+          type: object
+          properties:
+            amount: { $ref: '#/components/schemas/Money' }
+            deliveryRate: { type: number, format: double }
+
+    MessageDigest:
+      type: object
+      properties:
+        messageId: { type: string, format: uuid }
+        streamId: { type: string }
+        externalMessageId: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        status: { $ref: '#/components/schemas/MessageStatus' }
+        recipient:
+          type: string
+          description: Маскирован для всех ролей кроме ADMIN и OPERATOR (DB-04, SEC-06)
+        acceptedAt: { type: string, format: date-time }
+        routing:
+          type: object
+          properties:
+            provider: { type: string }
+            channel: { $ref: '#/components/schemas/Channel' }
+            reason: { $ref: '#/components/schemas/RejectionReason' }
+            batchId: { type: string, format: uuid }
+            correlationId: { type: string }
+            cost: { $ref: '#/components/schemas/Money' }
+            segments: { type: integer }
+            terminalAt: { type: string, format: date-time }
+
+    MessageCard:
+      type: object
+      description: То же тело, что отдаёт §8.2 `GET /messages/{id}`; ни текста, ни адреса в нём нет
+      properties:
+        messageId: { type: string, format: uuid }
+        streamId: { type: string }
+        externalMessageId: { type: string }
+        batchId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/MessageStatus' }
+        reason: { $ref: '#/components/schemas/RejectionReason' }
+        delivery:
+          type: object
+          properties:
+            channel: { $ref: '#/components/schemas/Channel' }
+            provider: { type: string }
+            segments: { type: integer }
+            cost: { $ref: '#/components/schemas/Money' }
+            acceptedAt: { type: string, format: date-time }
+            terminalAt: { type: string, format: date-time }
+            correlationId: { type: string }
+            test: { type: boolean }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { $ref: '#/components/schemas/MessageStatus' }
+              reason: { $ref: '#/components/schemas/RejectionReason' }
+              detail: { type: string }
+              occurredAt: { type: string, format: date-time }
+
+    MessageAccepted:
+      type: object
+      properties:
+        messageId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/MessageStatus' }
+
+    BatchStatus_:
+      type: object
+      description: Карточка рассылки; то же тело, что отдаёт §8.2
+      properties:
+        batchId: { type: string, format: uuid }
+        streamId: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        status: { $ref: '#/components/schemas/BatchStatus' }
+        total: { type: integer, format: int64 }
+        progress: { $ref: '#/components/schemas/BatchProgress' }
+        createdAt: { type: string, format: date-time }
+        costEstimate: { $ref: '#/components/schemas/Money' }
+
+    BatchAction:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/BatchStatus' }
+        progress: { $ref: '#/components/schemas/BatchProgress' }
+
+    BatchProgress:
+      type: object
+      properties:
+        total: { type: integer, format: int64 }
+        processed: { type: integer, format: int64 }
+        sent: { type: integer, format: int64 }
+        delivered: { type: integer, format: int64 }
+        failed: { type: integer, format: int64 }
+        completionPercent: { type: number, format: double }
+
+    DlqEntry:
+      type: object
+      properties:
+        messageId: { type: string, format: uuid }
+        reason: { $ref: '#/components/schemas/RejectionReason' }
+        lastError: { type: string }
+        movedAt: { type: string, format: date-time }
+        retriedBy: { type: string }
+        retriedAt: { type: string, format: date-time }
+        archived: { type: boolean }
+        retryable: { type: boolean, description: Повторить запись можно один раз }
+
+    DlqActionRequest:
+      type: object
+      required: [messageIds]
+      properties:
+        messageIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    DlqActionResult:
+      type: object
+      properties:
+        applied:
+          type: array
+          items: { type: string, format: uuid }
+        skipped:
+          type: array
+          items: { type: string, format: uuid }
+
+    Stream:
+      type: object
+      properties:
+        streamId: { type: string }
+        name: { type: string }
+        integrationType: { type: string, enum: [REST, KAFKA, BOTH] }
+        status: { type: string, enum: [ACTIVE, SUSPENDED] }
+        connectionStatus: { type: string, enum: [CONNECTED, IDLE, UNKNOWN] }
+        defaults: { $ref: '#/components/schemas/StreamDefaults' }
+        limits:
+          type: object
+          properties:
+            quota: { $ref: '#/components/schemas/Quota' }
+            rateLimit: { $ref: '#/components/schemas/RateLimit' }
+            quietHours: { $ref: '#/components/schemas/QuietHours' }
+        lastActivityAt: { type: string, format: date-time }
+
+    StreamDefaults:
+      type: object
+      description: Что получает отправка из этого потока, если сама ничего не назвала (FR-1.3)
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        provider: { type: string }
+        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
+        priority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+
+    StreamRequest:
+      type: object
+      properties:
+        name: { type: string }
+        integrationType: { type: string, enum: [REST, KAFKA, BOTH] }
+        defaults: { $ref: '#/components/schemas/StreamDefaults' }
+        quota: { $ref: '#/components/schemas/Quota' }
+        quietHours: { $ref: '#/components/schemas/QuietHours' }
+        clearQuietHours:
+          type: boolean
+          default: false
+          description: |
+            Снять окно тишины. Отдельный флаг, потому что «окна нет» и «окно не трогать» —
+            оба осмысленны, и пропуск поля не может значить и то и другое.
+        rateLimit: { $ref: '#/components/schemas/RateLimit' }
+        credentialsRef: { type: string }
+
+    ChannelConfig:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        status: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
+        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        fallbackOrder:
+          type: array
+          items: { type: string }
+        quietHours: { $ref: '#/components/schemas/QuietHours' }
+        quota: { $ref: '#/components/schemas/Quota' }
+        available: { type: boolean }
+
+    ChannelRequest:
+      type: object
+      properties:
+        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        fallbackOrder:
+          type: array
+          items: { type: string }
+          description: Порядок и есть конфигурация, поэтому список присылается целиком
+        quietHours: { $ref: '#/components/schemas/QuietHours' }
+        quota: { $ref: '#/components/schemas/Quota' }
+
+    Provider:
+      type: object
+      properties:
+        providerId: { type: string, format: uuid }
+        code: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        adapterType: { type: string }
+        weight: { type: integer }
+        tariff: { $ref: '#/components/schemas/Tariff' }
+        rateLimit: { $ref: '#/components/schemas/RateLimit' }
+        state:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            maintenance: { type: boolean }
+            health: { type: string, enum: [UP, DEGRADED, DOWN, UNKNOWN] }
+            selectable: { type: boolean, readOnly: true }
+            quota: { $ref: '#/components/schemas/Quota' }
+            credentialsRef:
+              type: string
+              description: Ссылка в секрет-хранилище; сам секрет наружу не выходит (SEC-04)
+            endpointConfig:
+              type: object
+              additionalProperties: { type: string }
+
+    ProviderRequest:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        adapterType: { type: string }
+        weight: { type: integer }
+        tariff: { $ref: '#/components/schemas/Tariff' }
+        rateLimit: { $ref: '#/components/schemas/RateLimit' }
+        quota: { $ref: '#/components/schemas/Quota' }
+        credentialsRef: { type: string }
+        endpointConfig:
+          type: object
+          additionalProperties: { type: string }
+
+    RoutingPolicy:
+      type: object
+      properties:
+        policyId: { type: string, format: uuid }
+        match: { $ref: '#/components/schemas/RoutingMatch' }
+        action: { $ref: '#/components/schemas/RoutingAction' }
+        priority: { type: integer, description: Меньше — раньше }
+        enabled: { type: boolean }
+
+    RoutingMatch:
+      type: object
+      description: Каким должно быть сообщение, чтобы политика применилась; все поля опциональны
+      properties:
+        streamId: { type: string }
+        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
+        minPriority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        channel: { $ref: '#/components/schemas/Channel' }
+
+    RoutingAction:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        providerOrder:
+          type: array
+          items: { type: string }
+        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+
+    RoutingPolicyRequest:
+      type: object
+      required: [match, action]
+      properties:
+        match: { $ref: '#/components/schemas/RoutingMatch' }
+        action: { $ref: '#/components/schemas/RoutingAction' }
+        priority: { type: integer }
+
+    RouteEvaluationRequest:
+      type: object
+      required: [streamId, recipient]
+      properties:
+        streamId: { type: string }
+        recipient: { $ref: '#/components/schemas/Recipient' }
+        channel: { $ref: '#/components/schemas/Channel' }
+        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
+        priority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        text: { type: string, description: Нужен для расчёта сегментов и стоимости (§18.3) }
+
+    RouteEvaluation:
+      type: object
+      properties:
+        routed: { type: boolean }
+        channel: { $ref: '#/components/schemas/Channel' }
+        provider: { type: string }
+        fallbackProviders:
+          type: array
+          items: { type: string }
+        strategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        segments: { type: integer }
+        estimatedCost: { $ref: '#/components/schemas/Money' }
+        rejection:
+          type: object
+          nullable: true
+          properties:
+            reason: { $ref: '#/components/schemas/RejectionReason' }
+            detail: { type: string }
+
+    Template:
+      type: object
+      properties:
+        templateId: { type: string, format: uuid }
+        code: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        direction: { type: string }
+        owner: { type: string }
+        catalogStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+        versions:
+          type: array
+          items: { $ref: '#/components/schemas/TemplateVersion' }
+        providerMappings:
+          type: array
+          items:
+            type: object
+            properties:
+              providerCode: { type: string }
+              providerTemplateId: { type: string }
+              approved: { type: boolean }
+
+    TemplateSummary:
+      type: object
+      description: Строка каталога; текстов в ней нет
+      properties:
+        templateId: { type: string, format: uuid }
+        code: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        direction: { type: string }
+        owner: { type: string }
+        catalogStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+        publishedLocales:
+          type: array
+          items: { $ref: '#/components/schemas/ContentLocale' }
+
+    TemplateVersion:
+      type: object
+      properties:
+        versionId: { type: string, format: uuid }
+        version: { type: integer }
+        locale: { $ref: '#/components/schemas/ContentLocale' }
+        body: { $ref: '#/components/schemas/TemplateBody' }
+        status: { type: string, enum: [DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED, REJECTED] }
+        variables:
+          type: array
+          items: { type: string }
+        review:
+          type: object
+          properties:
+            createdBy: { type: string }
+            reviewedBy: { type: string }
+            publishedAt: { type: string, format: date-time }
+
+    TemplateBody:
+      type: object
+      properties:
+        subject: { type: string }
+        text: { type: string }
+        html:
+          type: string
+          description: Только вместе с `text` и только на email-шаблоне (EM-01)
+
+    TemplateRequest:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        direction: { type: string }
+        owner: { type: string }
+
+    TemplateVersionRequest:
+      type: object
+      required: [locale, text]
+      properties:
+        locale: { $ref: '#/components/schemas/ContentLocale' }
+        version:
+          type: integer
+          nullable: true
+          description: Черновик, который переписывают; `null` начинает следующий
+        subject: { type: string }
+        text: { type: string }
+        html: { type: string }
+
+    TemplatePreviewRequest:
+      type: object
+      required: [locale]
+      properties:
+        locale: { $ref: '#/components/schemas/ContentLocale' }
+        version: { type: integer, nullable: true }
+        variables:
+          type: object
+          additionalProperties: { type: string }
+
+    TemplatePreview:
+      type: object
+      properties:
+        code: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        locale: { $ref: '#/components/schemas/ContentLocale' }
+        version:
+          type: object
+          properties:
+            number: { type: integer }
+            status: { type: string }
+        rendered: { $ref: '#/components/schemas/TemplateBody' }
+        missingVariables:
+          type: array
+          items: { type: string }
+        costs:
+          type: array
+          items:
+            type: object
+            properties:
+              providerCode: { type: string }
+              cost: { $ref: '#/components/schemas/Money' }
+              selectable: { type: boolean }
+        segmentation:
+          type: object
+          nullable: true
+          properties:
+            encoding: { type: string, enum: [GSM7, UCS2] }
+            characterCount: { type: integer }
+            segments: { type: integer }
+
+    ProviderTemplateRequest:
+      type: object
+      required: [providerTemplateId]
+      properties:
+        providerTemplateId: { type: string }
+        approved: { type: boolean, default: false }
+
+    TemplateImportResult:
+      type: object
+      properties:
+        created: { type: integer }
+        imported: { type: integer }
+        skipped: { type: integer }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              locale: { type: string }
+              reason: { type: string }
+
+    ImportResult:
+      type: object
+      properties:
+        imported: { type: integer }
+        skipped: { type: integer }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: integer, description: Строка файла, 1-based }
+              reason: { type: string }
+
+    Suppression:
+      type: object
+      properties:
+        entryId: { type: string, format: uuid }
+        channel: { $ref: '#/components/schemas/Channel' }
+        addressHash:
+          type: string
+          description: SHA-256 адреса; открытого адреса в таблице нет и наружу он не выходит (DB-04)
+        clientId: { type: string }
+        reason: { $ref: '#/components/schemas/SuppressionReason' }
+        validUntil: { type: string, format: date-time, nullable: true }
+        createdBy:
+          type: string
+          description: Логин оператора либо код провайдера, сообщившего адрес непригодным
+        createdAt: { type: string, format: date-time }
+
+    SuppressionRequest:
+      type: object
+      required: [reason]
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        address: { type: string, description: В открытом виде; хешируется на сервере }
+        clientId: { type: string }
+        reason: { $ref: '#/components/schemas/SuppressionReason' }
+        validUntil: { type: string, format: date-time }
+
+    SuppressionCheck:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        suppressed: { type: boolean }
+        entry:
+          oneOf:
+            - { $ref: '#/components/schemas/Suppression' }
+            - { type: 'null' }
+
+    TestSendRequest:
+      type: object
+      required: [streamId, channel, recipient]
+      properties:
+        streamId: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        recipient: { $ref: '#/components/schemas/Recipient' }
+        provider:
+          type: string
+          description: |
+            Закрепляет отправку за одним провайдером, исключая остальных; непригодный провайдер
+            даёт обычный NO_ROUTE_AVAILABLE, а не особый отказ
+        subject: { type: string }
+        text: { type: string }
+
+    AuditEntry:
+      type: object
+      properties:
+        occurredAt: { type: string, format: date-time }
+        username: { type: string }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+        before: { type: string }
+        after: { type: string }
+        sourceIp: { type: string }
+
+    KillSwitch:
+      type: object
+      properties:
+        active: { type: boolean }
+        includesCriticalOtp:
+          type: boolean
+          description: Остановлен ли и OTP; по умолчанию нет (FR-3.2)
+        changedAt: { type: string, format: date-time, nullable: true }
+
+    KillSwitchRequest:
+      type: object
+      required: [activate]
+      properties:
+        activate: { type: boolean }
+        includeCriticalOtp: { type: boolean, default: false }
+        reason: { type: string, description: Обязателен при включении (FR-7.3) }
+
+    SystemParameter:
+      type: object
+      properties:
+        key: { type: string }
+        value: { type: string }
+        description: { type: string }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+
+    SystemParameterRequest:
+      type: object
+      required: [value]
+      properties:
+        value: { type: string }
+        description: { type: string }

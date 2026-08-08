@@ -6,6 +6,7 @@ import uz.hamkorbank.commhub.application.port.out.AuditPort;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.type.ActorType;
+import uz.hamkorbank.commhub.domain.model.vo.AddressHash;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
@@ -30,6 +31,9 @@ public class PersonalDataAccess {
     /** Action verb of a read; deliberately distinct from every verb that changes something. */
     public static final String ACTION_VIEW = "message.view";
 
+    /** Action verb of a list; the entity id is the filter rather than one message (SEC-08). */
+    public static final String ACTION_SEARCH = "message.search";
+
     private final AuditPort audit;
     private final ClockPort clock;
 
@@ -51,5 +55,36 @@ public class PersonalDataAccess {
         }
         audit.write(AuditEntry.of(
                 actor, ACTION_VIEW, MESSAGE, messageId == null ? null : messageId.toString(), clock.now()));
+    }
+
+    /**
+     * Journals a search over the message list (SEC-08).
+     *
+     * <p>A list of a customer's messages is access to their data as much as one card is — more of it, in
+     * fact — so the same rule applies. One row per search, not per result: an auditor needs to see that
+     * somebody looked a number up, and a row per hit would make one wide search look like a hundred
+     * separate reads.
+     *
+     * <p>The entity of such a row is the <em>address hash</em>, not a message id, which is what makes
+     * "who has been looking at this customer" one indexed query over {@code (entity_type, entity_id)} —
+     * the shape SEC-08 actually asks about. Searches carrying no address have no entity and are found by
+     * user and period instead.
+     *
+     * @param addressHash hash of the address that was searched for, or {@code null}
+     * @param filter readable description of the filter, without the address itself
+     */
+    public void recordMessageSearch(Actor actor, AddressHash addressHash, String filter) {
+        if (actor == null || actor.type() != ActorType.OPERATOR) {
+            return;
+        }
+        audit.write(new AuditEntry(
+                actor,
+                ACTION_SEARCH,
+                MESSAGE,
+                addressHash == null ? null : addressHash.value(),
+                null,
+                filter,
+                null,
+                clock.now()));
     }
 }
