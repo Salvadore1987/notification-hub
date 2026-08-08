@@ -111,17 +111,23 @@
 
 > Реализации use case помечены `@Service`/`@Transactional`, но бинов output-портов ещё нет — контекст Spring поднимется
 > после Phase 4 (персистентность) и явного wiring в `bootstrap`. Компиляция, unit-тесты и ArchUnit от этого не зависят.
+>
+> После Phase 4 закрыты порты персистентности и `ClockPort`; контекст всё ещё не стартует целиком — ждут своих фаз
+> `StatusPublisherPort` (Phase 5), `SecretResolverPort` (Phase 7), `FrequencyCounterPort` (Phase 10),
+> `MetricsPort` (Phase 13), `KillSwitchPort` (Phase 14), `CustomerPreferencePort` (фаза 2 по SRS).
 
 ### Phase 4. Персистентность (`adapter/out/persistence`) — PostgreSQL
 
-- [ ] Flyway-миграции таблиц (§10.1): `stream`, `channel`, `provider`, `routing_policy`, `template`, `template_version`, `batch`, `message`, `message_status_history`, `delivery_attempt`, `outbox_event`, `dlq_entry`, `suppression_list`, `dedup_registry`, `quota_counter`, `audit_log`, `app_user`/`app_role`/`user_role`
-- [ ] Партиционирование по времени `message`, `message_status_history`, `delivery_attempt`, `outbox_event` + авто-создание/отсоединение партиций (DB-02)
-- [ ] Индексы: `(stream_id, accepted_at)`, `(external_id, stream_id)`, `(batch_id)`, `(dedup_key)`, `(correlation_id)`, частичные по нетерминальным статусам (DB-05)
-- [ ] Реализация репозиториев (Spring Data JDBC/JPA) под output-порты
-- [ ] Шифрование/хеширование PII (`address_hash` в suppression; контент — pgcrypto/app-level по согласованию с ИБ) (DB-04)
-- [ ] Read-only реплика для аналитики (DB-06) — конфигурация datasource
-- [ ] Retention/архивация (конфигурируемый срок ≥12 мес) (DB-03)
-- [ ] Интеграционные тесты с Testcontainers PostgreSQL (QA-03)
+- ✅ Flyway-миграции таблиц (§10.1): `stream`, `channel`, `provider`, `routing_policy`, `template`, `template_version`, `batch`, `message`, `message_status_history`, `delivery_attempt`, `outbox_event`, `dlq_entry`, `suppression_list`, `dedup_registry`, `quota_counter`, `audit_log`, `app_user`/`app_role`/`user_role` (V2…V7)
+- ✅ Партиционирование по времени `message`, `message_status_history`, `delivery_attempt`, `outbox_event` + авто-создание/отсоединение партиций (DB-02) — `comm_hub.ensure_partitions` / `detach_partitions_before` + `PartitionMaintenanceJob`
+- ✅ Индексы: `(stream_id, accepted_at)`, `(external_id, stream_id)`, `(batch_id)`, `(dedup_key)`, `(correlation_id)`, частичные по нетерминальным статусам (DB-05)
+- ✅ Реализация репозиториев под output-порты — JdbcClient + ручные row-мапперы (обоснование в `persistence/package-info.java`)
+- ✅ Хеширование PII: `suppression_list` хранит только `address_hash` (SHA-256), адресов в таблице нет (DB-04)
+- [ ] Шифрование контента сообщений (pgcrypto либо app-level) — **ждёт решения ИБ** (DB-04); схема к нему готова (`pgcrypto` установлен в V1)
+- ✅ Read-only реплика для аналитики (DB-06) — `ReadReplicaConfig`, включается заданием `commhub.persistence.read-replica.url`
+- ✅ Retention/архивация (конфигурируемый срок ≥12 мес) (DB-03) — `commhub.persistence.retention-months`; отцепление секций за флагом `detach-old-partitions`, включается вместе с процедурой архивации
+- ✅ Интеграционные тесты с Testcontainers PostgreSQL (QA-03) — конфигурация, сообщения, гарантии доставки, шаблоны, обслуживание секций
+- [ ] Порты `KillSwitchPort` и `FrequencyCounterPort` — таблиц под них нет в §10.1, реализуются вместе со своей функциональностью (Phase 10 и Phase 14)
 
 ### Phase 5. Transactional Outbox + Kafka (гарантии доставки)
 
