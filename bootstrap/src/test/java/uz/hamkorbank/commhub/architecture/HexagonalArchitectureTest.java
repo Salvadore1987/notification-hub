@@ -11,10 +11,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Enforces the hexagonal rules of the Notification Hub (AR-02, AR-03, QA-02).
+ * Enforces the hexagonal rules of the Notification Hub (AR-02, AR-03, AR-04, QA-02).
  *
- * <p>Phase 1 covers the layering and the framework-freedom of the domain. Finer-grained rules
- * (naming of use cases, ports, mappers) are added in Phase 15.
+ * <p>This class holds the rules about who may see whom: the layering, the framework-freedom of the
+ * domain, and the self-containment of a provider adapter that AR-04 turns into a promise — adding a
+ * provider is a new package and nothing else. The conventions about where a kind of class lives and
+ * what it is called are in {@link LayerConventionsTest}.
  */
 class HexagonalArchitectureTest {
 
@@ -64,13 +66,16 @@ class HexagonalArchitectureTest {
         // Arrange
         String[] forbiddenPackages = {
             "org.springframework..",
-            "jakarta.persistence..",
-            "jakarta.validation..",
-            "javax.persistence..",
+            "jakarta..",
+            "javax..",
             "org.apache.kafka..",
             "com.fasterxml.jackson..",
+            "tools.jackson..",
             "org.hibernate..",
             "org.slf4j..",
+            "org.mapstruct..",
+            "io.micrometer..",
+            "io.github.resilience4j..",
         };
 
         // Act + Assert
@@ -81,6 +86,47 @@ class HexagonalArchitectureTest {
                 .dependOnClassesThat()
                 .resideInAnyPackage(forbiddenPackages)
                 .because("AR-02: the domain module may only depend on the JDK and its own value objects")
+                .allowEmptyShould(true)
+                .check(classes);
+    }
+
+    @Test
+    @DisplayName("AR-04: a provider adapter is self-contained — nothing outside its package names it")
+    void providerAdaptersStaySelfContained() {
+        // Arrange — every concrete provider of §9, one package each.
+        String[] providers = {"playmobile", "smsgate", "smtp", "fcm", "apns"};
+
+        // Act + Assert
+        for (String provider : providers) {
+            String providerPackage = BASE_PACKAGE + ".adapter.out.provider." + provider + "..";
+            noClasses()
+                    .that()
+                    .resideOutsideOfPackage(providerPackage)
+                    .and()
+                    .resideInAPackage(BASE_PACKAGE + "..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage(providerPackage)
+                    .because("AR-04: swapping a provider must touch that provider's package and nothing else — "
+                            + "its callback translator and its error table live next to it, and the rest of "
+                            + "the Hub reaches it through SmsProviderPort/EmailProviderPort/PushProviderPort")
+                    .allowEmptyShould(true)
+                    .check(classes);
+        }
+    }
+
+    @Test
+    @DisplayName("AR-04: the shared provider framework knows no concrete provider")
+    void theProviderFrameworkKnowsNoProvider() {
+        // Arrange + Act + Assert
+        noClasses()
+                .that()
+                .resideInAPackage(BASE_PACKAGE + ".adapter.out.provider.support..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage(BASE_PACKAGE + ".adapter.out.provider.*.")
+                .because("timeouts, retry, breaker and throttling are the same for every provider; "
+                        + "the moment the framework names one, the next one needs a change in it")
                 .allowEmptyShould(true)
                 .check(classes);
     }

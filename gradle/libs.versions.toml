@@ -58,6 +58,9 @@ spring-boot-starter-oauth2-resource-server = { module = "org.springframework.boo
 spring-security-test = { module = "org.springframework.security:spring-security-test" }
 
 flyway-core = { module = "org.flywaydb:flyway-core" }
+# Автоконфигурация Flyway в Boot 4 вынесена в отдельный модуль: без него spring.flyway.* в yaml
+# ничего не включает, и приложение стартует на непромигрированной базе (DB-01).
+spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }
 

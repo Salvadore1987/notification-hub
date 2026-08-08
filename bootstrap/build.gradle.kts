@@ -24,11 +24,22 @@ dependencies {
 
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.spring.boot.testcontainers)
+    // Ассерты приёмочных сценариев читают таблицы напрямую: проверяется, что записал адаптер,
+    // а не что вернул тот же адаптер (QA-03, QA-08).
+    testImplementation(libs.spring.boot.starter.data.jdbc)
+    // Приёмочные сценарии ходят в Модуль по HTTP, как система-источник: RestClient, а не MockMvc —
+    // §8.2 обещан по сети, и сериализация с кодами ответов входят в обещание (QA-08).
+    testImplementation(libs.spring.boot.starter.web)
 
     // ArchUnit видит классы всех слоёв через runtime classpath (AR-03, QA-02)
     testImplementation(libs.archunit)
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
+    // QA-03/QA-08: полный контекст поднимается на настоящем брокере — входящие консьюмеры и relay
+    // без него не стартуют, а именно их сборка и проверяется.
+    testImplementation(libs.testcontainers.kafka)
+    // QA-04/QA-08: провайдерские стабы для приёмочных сценариев (WireMock со своим Jetty внутри).
+    testImplementation(libs.wiremock.standalone)
     testImplementation(libs.flyway.core)
     testRuntimeOnly(libs.flyway.postgresql)
     testRuntimeOnly(libs.postgresql)
