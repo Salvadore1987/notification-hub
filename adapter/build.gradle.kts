@@ -25,9 +25,11 @@ dependencies {
 
     testImplementation(libs.spring.boot.starter.test)
 
-    // Персистентность проверяется на настоящем PostgreSQL со схемой из Flyway (QA-03, DB-01).
+    // Персистентность проверяется на настоящем PostgreSQL со схемой из Flyway (QA-03, DB-01),
+    // outbox-relay — на настоящем брокере (AD-03, QA-06).
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.kafka)
     testImplementation(libs.flyway.core)
     testRuntimeOnly(libs.flyway.postgresql)
 }

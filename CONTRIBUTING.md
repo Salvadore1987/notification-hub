@@ -37,6 +37,24 @@ docker compose down -v    # останов с удалением данных
 Приложение читает настройки из `bootstrap/src/main/resources/application.yml`; значения по умолчанию
 совпадают с `docker-compose.yml` и переопределяются переменными окружения (`DB_URL`, `KAFKA_BOOTSTRAP_SERVERS`, …).
 
+### Схема исходящих статусов в Schema Registry (NF-08)
+
+Приложение публикует статусы как JSON и в реестр само не ходит — иначе реестр окажется на пути
+отправки каждого статуса. Субъект регистрируется отдельно (в контуре Банка — эксплуатацией):
+
+```bash
+jq -Rs '{schemaType:"JSON", schema:.}' \
+  adapter/src/main/resources/schema/comm.outbound.status.v1.json \
+  | curl -s -X POST -H 'Content-Type: application/vnd.schemaregistry.v1+json' -d @- \
+    http://localhost:8081/subjects/comm.outbound.status.v1-value/versions
+```
+
+Режим совместимости субъекта — `BACKWARD` (в локальном `docker-compose.yml` это дефолт кластера):
+поля можно добавлять (nullable/с default), переименовывать и удалять — нельзя. Тот же формат
+и та же схема у `comm.outbound.dlq.v1`.
+
+### Ключ шифрования контента
+
 Одна переменная обязательна и значения по умолчанию не имеет — ключ шифрования контента (DB-04):
 
 ```bash

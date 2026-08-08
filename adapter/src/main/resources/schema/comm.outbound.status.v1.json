@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hamkorbank.uz/commhub/schema/comm.outbound.status.v1.json",
+  "title": "Notification Hub outbound status event",
+  "description": "Канонический статус доставки для систем-источников (SRS §6.4, IK-02). Топики: comm.outbound.status.v1 и comm.outbound.dlq.v1 — формат общий. Совместимость субъекта в Schema Registry — BACKWARD (NF-08): поля можно добавлять (обязательно с default/nullable), переименовывать и удалять — нельзя.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "occurredAt",
+    "streamId",
+    "batchId",
+    "messageId",
+    "externalMessageId",
+    "channel",
+    "provider",
+    "status",
+    "providerStatus",
+    "reason",
+    "segments",
+    "correlationId"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Версия контракта; растёт при изменении набора полей (NF-08).",
+      "const": "1.0"
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Идентификатор события; ключ идемпотентности потребителя (AD-03, FR-1.5)."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Момент перехода статуса, ISO-8601 в UTC."
+    },
+    "streamId": {
+      "type": "string",
+      "description": "Поток системы-источника; по нему источники фильтруют топик (§8.1)."
+    },
+    "batchId": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Батч, если сообщение пришло в составе рассылки (FR-1.6); иначе null."
+    },
+    "messageId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Идентификатор сообщения в Модуле; он же ключ партиционирования записи."
+    },
+    "externalMessageId": {
+      "type": "string",
+      "description": "Идентификатор сообщения на стороне системы-источника (FR-1.5)."
+    },
+    "channel": {
+      "type": ["string", "null"],
+      "enum": ["SMS", "EMAIL", "PUSH", null],
+      "description": "Канал доставки; null, если сообщение отклонено до маршрутизации."
+    },
+    "provider": {
+      "type": ["string", "null"],
+      "description": "Код провайдера, сообщившего статус; null для внутренних переходов."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACCEPTED",
+        "VALIDATED",
+        "ROUTED",
+        "QUEUED",
+        "SENDING",
+        "SENT_TO_PROVIDER",
+        "RETRYING",
+        "DELIVERED",
+        "UNDELIVERED",
+        "EXPIRED",
+        "REJECTED",
+        "DUPLICATE",
+        "CANCELLED",
+        "FAILED"
+      ],
+      "description": "Канонический статус (§6.3); список пополняется только добавлением значений."
+    },
+    "providerStatus": {
+      "type": ["string", "null"],
+      "description": "Статус в терминах провайдера, как он пришёл (§18.1, §18.2)."
+    },
+    "reason": {
+      "type": ["object", "null"],
+      "description": "Причина недоставки (IR-01); null на успешном пути.",
+      "additionalProperties": false,
+      "required": ["code", "detail"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Канонический RejectionReason; список расширяемый."
+        },
+        "detail": {
+          "type": ["string", "null"],
+          "description": "Человекочитаемое пояснение, в т.ч. описание ошибки провайдера (PR-03)."
+        }
+      }
+    },
+    "segments": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Число SMS-сегментов (MP-06); 0 для прочих каналов и до сегментации."
+    },
+    "correlationId": {
+      "type": "string",
+      "description": "Сквозной идентификатор трассировки цепочки (OBS-03)."
+    }
+  }
+}

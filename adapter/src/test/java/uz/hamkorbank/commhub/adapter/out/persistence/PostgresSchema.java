@@ -10,7 +10,7 @@ import org.testcontainers.utility.DockerImageName;
  * <p>Singleton rather than {@code @Testcontainers}-managed per class: the schema is expensive to build
  * and identical for every test, and Ryuk removes the container when the JVM ends.
  */
-final class PostgresSchema {
+public final class PostgresSchema {
 
     private static final DockerImageName IMAGE = DockerImageName.parse("postgres:16");
     private static final String SCHEMA = "comm_hub";
@@ -24,7 +24,7 @@ final class PostgresSchema {
 
     private PostgresSchema() {}
 
-    static synchronized void start() {
+    public static synchronized void start() {
         if (migrated) {
             return;
         }
@@ -41,16 +41,16 @@ final class PostgresSchema {
     }
 
     /** Connects straight into {@code comm_hub}, so the adapters' unqualified table names resolve. */
-    static String jdbcUrl() {
+    public static String jdbcUrl() {
         String url = CONTAINER.getJdbcUrl();
         return url + (url.contains("?") ? "&" : "?") + "currentSchema=" + SCHEMA;
     }
 
-    static String username() {
+    public static String username() {
         return CONTAINER.getUsername();
     }
 
-    static String password() {
+    public static String password() {
         return CONTAINER.getPassword();
     }
 }
