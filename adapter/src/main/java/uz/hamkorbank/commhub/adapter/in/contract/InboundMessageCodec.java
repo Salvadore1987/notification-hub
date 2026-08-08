@@ -113,7 +113,10 @@ public class InboundMessageCodec {
                         delivery.timing(),
                         delivery.dedupKey(),
                         delivery.correlationId(),
-                        delivery.test()));
+                        delivery.test(),
+                        // Никогда не из документа: провайдера выбирает Модуль (FR-2.2), закрепить его
+                        // может только тестовая отправка администратора (FR-7.4).
+                        null));
     }
 
     private SubmitMessageCommand.Delivery delivery(JsonNode root, TimingPayload timing) {
@@ -123,7 +126,8 @@ public class InboundMessageCodec {
                 mapper.toTiming(timing, "timing"),
                 optional(text(root, "dedupKey"), "dedupKey", DedupKey::of),
                 optional(text(root, "correlationId"), "correlationId", CorrelationId::of),
-                root.path("test").asBoolean(false));
+                root.path("test").asBoolean(false),
+                null);
     }
 
     private static void requireSupportedSchema(String schemaVersion) {

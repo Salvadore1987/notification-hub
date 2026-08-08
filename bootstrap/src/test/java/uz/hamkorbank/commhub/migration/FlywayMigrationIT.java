@@ -62,7 +62,9 @@ class FlywayMigrationIT {
     }
 
     private int schemaHistoryCount(PostgreSQLContainer postgres) {
-        String sql = "SELECT count(*) FROM " + SCHEMA + ".flyway_schema_history WHERE success";
+        // type <> 'SCHEMA': Flyway records the creation of the schema itself as a history row, and it is
+        // not one of the migrations it reports as executed.
+        String sql = "SELECT count(*) FROM " + SCHEMA + ".flyway_schema_history WHERE success AND type <> 'SCHEMA'";
         String jdbcUrl = postgres.getJdbcUrl();
         String username = postgres.getUsername();
         String password = postgres.getPassword();

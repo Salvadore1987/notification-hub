@@ -11,6 +11,7 @@ import uz.hamkorbank.commhub.domain.model.vo.BatchId;
 import uz.hamkorbank.commhub.domain.model.vo.CorrelationId;
 import uz.hamkorbank.commhub.domain.model.vo.DedupKey;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
+import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.support.Guard;
@@ -78,6 +79,9 @@ public record SubmitMessageCommand(
      *     {@code (streamId, externalMessageId)} (FR-1.5)
      * @param correlationId trace identifier propagated by the caller; {@code null} generates one (FR-8.6)
      * @param test test send: delivered normally but excluded from business statistics (FR-7.4)
+     * @param pinnedProvider provider the message must go to instead of the one routing would choose;
+     *     set only by the configuration test send of FR-7.4, never by a source system — the inbound
+     *     contract IK-03 has no such field, and choosing providers is the Hub's decision (FR-2.2)
      */
     public record Delivery(
             TrafficClass trafficClass,
@@ -85,16 +89,30 @@ public record SubmitMessageCommand(
             Timing timing,
             DedupKey dedupKey,
             CorrelationId correlationId,
-            boolean test) {
+            boolean test,
+            ProviderRef pinnedProvider) {
 
-        private static final Delivery DEFAULTS = new Delivery(null, null, null, null, null, false);
+        private static final Delivery DEFAULTS = new Delivery(null, null, null, null, null, false, null);
+
+        public Delivery {
+            Guard.isTrue(pinnedProvider == null || test, "a provider may only be pinned by a test send (FR-7.4)");
+        }
 
         public static Delivery defaults() {
             return DEFAULTS;
         }
 
         public static Delivery of(TrafficClass trafficClass, Timing timing) {
-            return new Delivery(trafficClass, null, timing, null, null, false);
+            return new Delivery(trafficClass, null, timing, null, null, false, null);
+        }
+
+        /** Delivery attributes of a configuration test send; the provider may be left unpinned. */
+        public static Delivery testSend(TrafficClass trafficClass, DedupKey dedupKey, ProviderRef provider) {
+            return new Delivery(trafficClass, null, null, dedupKey, null, true, provider);
+        }
+
+        public Optional<ProviderRef> pinnedProviderOptional() {
+            return Optional.ofNullable(pinnedProvider);
         }
 
         public Optional<Timing> timingOptional() {

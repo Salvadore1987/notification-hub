@@ -1,0 +1,89 @@
+{
+  "uid": "commhub-channels",
+  "title": "Notification Hub — каналы",
+  "description": "SMS, Email и Push по отдельности (OBS-05, FR-6.1). Push терминален на SENT_TO_PROVIDER (PU-12), поэтому его доставляемость по определению не считается — панель статусов показывает это как есть.",
+  "tags": ["commhub", "channels"],
+  "timezone": "Asia/Tashkent",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "datasource", "type": "datasource", "query": "prometheus", "current": {} },
+      {
+        "name": "channel",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(commhub_message_status_total, channel)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Статусы по каналам",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (channel, status) (rate(commhub_message_status_total{test=\"false\",channel=~\"$channel\"}[5m]))",
+          "legendFormat": "{{channel}} {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Доставляемость канала",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(commhub_message_status_total{status=\"DELIVERED\",test=\"false\",channel=~\"$channel\"}[30m])) / clamp_min(sum by (channel) (rate(commhub_message_status_total{status=~\"DELIVERED|UNDELIVERED|FAILED|EXPIRED\",test=\"false\",channel=~\"$channel\"}[30m])), 0.001)",
+          "legendFormat": "{{channel}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Фильтры compliance: подавления и частотный кап",
+      "description": "FR-5.1, FR-5.4. Автоматические подавления (hard bounce, чёрный список оператора, мёртвый push-токен) видны здесь раньше, чем в жалобах.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (channel, reason) (rate(commhub_recipients_suppressed_total{channel=~\"$channel\"}[15m]))",
+          "legendFormat": "suppressed {{channel}} {{reason}}"
+        },
+        {
+          "expr": "sum by (channel) (rate(commhub_frequency_cap_exceeded_total{channel=~\"$channel\"}[15m]))",
+          "legendFormat": "frequency cap {{channel}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Квоты и находки PAN",
+      "description": "FR-2.6 и SEC-05. Ненулевой PAN при режиме наблюдения — это и есть то, ради чего режим наблюдения включают.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (channel, verdict) (rate(commhub_quota_breached_total{channel=~\"$channel\"}[15m]))",
+          "legendFormat": "quota {{channel}} {{verdict}}"
+        },
+        {
+          "expr": "sum by (channel, blocked) (rate(commhub_pan_detected_total{channel=~\"$channel\"}[15m]))",
+          "legendFormat": "PAN {{channel}} blocked={{blocked}}"
+        }
+      ]
+    }
+  ]
+}

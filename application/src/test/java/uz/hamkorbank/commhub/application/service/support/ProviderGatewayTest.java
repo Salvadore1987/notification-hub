@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import uz.hamkorbank.commhub.application.mapper.ProviderSubmissionMapperImpl;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
+import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.PushDeliveryLogPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsProviderPort;
@@ -50,6 +51,7 @@ class ProviderGatewayTest {
                 pushFanOut(clock),
                 new ProviderSubmissionMapperImpl(),
                 new ProviderMessageIdFactory(),
+                mock(MetricsPort.class),
                 clock);
     }
 
@@ -101,6 +103,7 @@ class ProviderGatewayTest {
                 pushFanOut(clock),
                 new ProviderSubmissionMapperImpl(),
                 new ProviderMessageIdFactory(),
+                mock(MetricsPort.class),
                 clock);
 
         // Act

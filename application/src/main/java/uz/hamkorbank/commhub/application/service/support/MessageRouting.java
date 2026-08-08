@@ -1,10 +1,13 @@
 package uz.hamkorbank.commhub.application.service.support;
 
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
 import uz.hamkorbank.commhub.domain.model.Message;
+import uz.hamkorbank.commhub.domain.model.Provider;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
@@ -55,6 +58,27 @@ public class MessageRouting {
         RoutingRequest request = new RoutingRequest(
                 message, segments, rotation.next(preferredChannel(message)), excluded == null ? Set.of() : excluded);
         return new RoutingOutcome(router.route(request, configuration), configuration, segments);
+    }
+
+    /**
+     * Routes a message onto one named provider, for the configuration test send of FR-7.4.
+     *
+     * <p>Expressed as an exclusion of every other provider of that channel rather than as a second routing
+     * path: the test send has to traverse the routing the real traffic traverses — the channel must be
+     * enabled, the provider must be selectable, its health must permit it — otherwise it proves nothing
+     * about the configuration it was run to verify. If the named provider is not selectable, the answer is
+     * the ordinary "no route", with the ordinary reason.
+     */
+    public RoutingOutcome routeTo(Message message, ProviderRef pinned) {
+        Guard.notNull(message, "message");
+        Guard.notNull(pinned, "pinned");
+        RoutingConfiguration configuration =
+                providerConfig.routingConfiguration(message.envelope().streamId());
+        Set<ProviderRef> excluded = configuration.providersFor(pinned.channel()).stream()
+                .map(Provider::ref)
+                .filter(candidate -> !candidate.id().equals(pinned.id()))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return route(message, excluded);
     }
 
     /** Segment count of the SMS content of the message, 0 when it carries none (MP-06, §18.3). */

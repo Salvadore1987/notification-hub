@@ -1,11 +1,13 @@
 package uz.hamkorbank.commhub.adapter.out.kafka;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +15,7 @@ import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.MicrometerProducerListener;
 import org.springframework.kafka.core.ProducerFactory;
 
 /**
@@ -37,6 +40,21 @@ public class KafkaProducerConfig {
 
     private static final int LINGER_MS = 5;
 
+    /**
+     * Producer metrics — batch size, record send rate, retries — come from the client (OBS-01).
+     *
+     * <p>Optional for the same reason the consumer's are: whether this deployment has a registry at all
+     * is decided in {@code bootstrap}, and the relay must publish with or without one.
+     */
+    private final ObjectProvider<MeterRegistry> meters;
+
+    private final KafkaSecurityConfigurer security;
+
+    public KafkaProducerConfig(ObjectProvider<MeterRegistry> meters, KafkaSecurityConfigurer security) {
+        this.meters = meters;
+        this.security = security;
+    }
+
     @Bean
     public ProducerFactory<String, String> statusProducerFactory(
             KafkaConnectionProperties connection, KafkaOutboundProperties outbound) {
@@ -53,7 +71,10 @@ public class KafkaProducerConfig {
         config.put(
                 ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG,
                 Math.max((int) outbound.sendTimeout().toMillis(), REQUEST_TIMEOUT_MS + LINGER_MS));
-        return new DefaultKafkaProducerFactory<>(config);
+        security.apply(config);
+        DefaultKafkaProducerFactory<String, String> producerFactory = new DefaultKafkaProducerFactory<>(config);
+        meters.ifAvailable(registry -> producerFactory.addListener(new MicrometerProducerListener<>(registry)));
+        return producerFactory;
     }
 
     @Bean
@@ -96,6 +117,16 @@ public class KafkaProducerConfig {
     @ConditionalOnProperty(prefix = "commhub.kafka.outbound", name = "create-topics", havingValue = "true")
     public NewTopic pushTokenTopic(KafkaOutboundProperties outbound) {
         return TopicBuilder.name(outbound.pushTokenTopic())
+                .partitions(outbound.partitions())
+                .replicas(outbound.replicationFactor())
+                .build();
+    }
+
+    /** Finished sends for the data mart (FR-6.4); keyed by stream, retained far longer than a status. */
+    @Bean
+    @ConditionalOnProperty(prefix = "commhub.kafka.outbound", name = "create-topics", havingValue = "true")
+    public NewTopic analyticsTopic(KafkaOutboundProperties outbound) {
+        return TopicBuilder.name(outbound.analyticsTopic())
                 .partitions(outbound.partitions())
                 .replicas(outbound.replicationFactor())
                 .build();

@@ -1,0 +1,101 @@
+{
+  "uid": "commhub-providers",
+  "title": "Notification Hub — провайдеры",
+  "description": "Состояние интеграций: вызовы, задержки, breaker'ы, переключения (OBS-05, PR-01, FR-6.3). Тестовые отправки здесь не фильтруются — проверка конфигурации провайдера и есть повод открыть этот дашборд.",
+  "tags": ["commhub", "providers"],
+  "timezone": "Asia/Tashkent",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "datasource", "type": "datasource", "query": "prometheus", "current": {} },
+      {
+        "name": "provider",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(commhub_provider_calls_seconds_count, provider)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "state-timeline",
+      "title": "Состояние circuit breaker'ов",
+      "description": "PR-01. OPEN означает, что провайдер не отвечает и трафик уже переключён; HALF_OPEN — идёт проба.",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "max by (provider, state) (commhub_provider_circuit_state{provider=~\"$provider\"})",
+          "legendFormat": "{{provider}} {{state}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Вызовы провайдеров по результату",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (provider, result) (rate(commhub_provider_calls_seconds_count{provider=~\"$provider\"}[5m]))",
+          "legendFormat": "{{provider}} {{result}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Задержка вызова провайдера",
+      "description": "Меряется вокруг ответа, который ждёт сага: включая ретраи каркаса, ожидание троттлинга и fan-out push'а по устройствам (PU-09).",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(commhub_provider_calls_seconds_bucket{provider=~\"$provider\"}[5m])))",
+          "legendFormat": "p95 {{provider}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, provider) (rate(commhub_provider_calls_seconds_bucket{provider=~\"$provider\"}[5m])))",
+          "legendFormat": "p99 {{provider}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Доля ошибок провайдера",
+      "description": "FR-6.3: порог проактивного обнаружения деградации. Отказы по контенту тоже считаются ошибкой вызова, но breaker они не открывают.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        {
+          "expr": "sum by (provider) (rate(commhub_provider_calls_seconds_count{result!=\"ACCEPTED\",provider=~\"$provider\"}[10m])) / clamp_min(sum by (provider) (rate(commhub_provider_calls_seconds_count{provider=~\"$provider\"}[10m])), 0.001)",
+          "legendFormat": "{{provider}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Failure rate скользящего окна breaker'а",
+      "description": "-1 означает, что окно ещё не заполнено, а не что ошибок нет.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "max by (provider) (commhub_provider_circuit_failure_rate{provider=~\"$provider\"})",
+          "legendFormat": "{{provider}}"
+        }
+      ]
+    }
+  ]
+}

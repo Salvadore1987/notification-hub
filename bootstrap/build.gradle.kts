@@ -9,6 +9,19 @@ dependencies {
     implementation(libs.spring.boot.starter)
     implementation(libs.spring.boot.starter.actuator)
 
+    // OBS-01: реестр Prometheus подключается на уровне развёртывания — код метрик знает только
+    // MeterRegistry, а какой это реестр, решает сборка приложения.
+    runtimeOnly(libs.micrometer.registry.prometheus)
+
+    // OBS-02: мост Micrometer -> OpenTelemetry и OTLP-экспортёр. Тоже runtime: адаптеры пишут
+    // против API Micrometer Tracing, а SDK подставляется здесь (Boot настраивает его сам).
+    runtimeOnly(libs.micrometer.tracing.bridge.otel)
+    runtimeOnly(libs.opentelemetry.exporter.otlp)
+
+    // NF-05: health-индикатор брокера спрашивает метаданные у того же продюсера, что и relay,
+    // поэтому bootstrap компилируется против клиента Kafka. Сами адаптеры остаются в adapter.
+    implementation(libs.spring.kafka)
+
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.spring.boot.testcontainers)
 

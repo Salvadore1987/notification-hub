@@ -115,8 +115,9 @@
 >
 > После Phase 4 закрыты порты персистентности и `ClockPort`, после Phase 5 — `StatusPublisherPort`, после Phase 7 —
 > `SecretResolverPort`, после Phase 8 — `ProviderStatsPort`, после Phase 10 — `FrequencyCounterPort` и
-> `CustomerPreferencePort` (заглушкой, как предписывает FR-8.2), после Phase 12 — `PushDeliveryLogPort`; контекст
-> всё ещё не стартует целиком — ждут своих фаз `MetricsPort` (Phase 13), `KillSwitchPort` (Phase 14) и
+> `CustomerPreferencePort` (заглушкой, как предписывает FR-8.2), после Phase 12 — `PushDeliveryLogPort`, после
+> Phase 13 — `MetricsPort`, `AuditQueryPort`, `EventExportRepository` и `AnalyticsPublisherPort`; контекст
+> всё ещё не стартует целиком — ждут своих фаз `KillSwitchPort` (Phase 14) и
 > `ProviderProbePort` (задел, для SMS реализации не будет).
 
 ### Phase 4. Персистентность (`adapter/out/persistence`) — PostgreSQL
@@ -572,20 +573,92 @@
 > и три интеграционных набора: `FcmPushAdapterIT` (9) и `ApnsPushAdapterIT` (10) на WireMock,
 > `PushDeliveryPersistenceIT` (4) на Testcontainers.
 
-### Phase 13. Наблюдаемость, безопасность, эксплуатация
+### Phase 13. Наблюдаемость, безопасность, эксплуатация ✅
 
-- [ ] Метрики Micrometer→Prometheus по канал/провайдер/поток/класс, латентности этапов, OTP e2e, лаги Kafka, состояние CB, квоты (OBS-01)
-- [ ] Distributed tracing OpenTelemetry, `correlationId` в baggage/логах (OBS-02, FR-8.6)
-- [ ] Structured JSON logs, MDC (messageId/streamId/batchId/correlationId), маскирование PII (OBS-03)
-- [ ] Алерты: SLA OTP, delivery rate, error rate, CB open, лаг консьюмера, DLQ, квоты, БД/Kafka (OBS-04)
-- [ ] Аутентификация источников: REST mTLS/OAuth2, Kafka SASL/SCRAM+ACL (SEC-01)
-- [ ] RBAC на API (метод×ресурс×скоуп), критичные операции с подтверждением+аудит (SEC-03)
-- [ ] Секрет-хранилище + ротация без простоя (SEC-04)
-- [ ] Аудит действий пользователей и доступа к ПДн, append-only, экспорт (FR-7.3, SEC-08)
-- [ ] Тестовая отправка с меткой TEST, без учёта в статистике (FR-7.4)
-- [ ] Выгрузка событий в витрину (Kafka-топик/batch) (FR-6.4)
-- [ ] K8s: liveness/readiness/startup, graceful shutdown с дообработкой in-flight (NF-05)
-- [ ] Grafana-дашборды + runbook (OBS-05, OBS-06)
+- ✅ Метрики Micrometer→Prometheus по канал/провайдер/поток/класс, латентности этапов, OTP e2e, лаги Kafka,
+  состояние CB, квоты (OBS-01) — `adapter/out/metrics`: `MicrometerMetricsAdapter` (реализация `MetricsPort`),
+  `CircuitBreakerMetrics` (состояние breaker'ов серией на состояние: `state="OPEN" == 1` читается в алерте, а
+  `state == 2` — нет) и `BacklogMetrics` (глубина outbox, **возраст старейшего неопубликованного события** и
+  глубина DLQ; счётчики описывают события, а затор — это состояние, его измеряют). Имена и метки — в
+  `MetricNames`: это операционный контракт, по нему написаны алерты и дашборды. Лаг консьюмеров и метрики
+  продюсера берутся у самих клиентов (`MicrometerConsumerListener`/`MicrometerProducerListener`), гистограммы —
+  вместо посчитанных на инстансе перцентилей: p99 по TC-01 считается по деплойменту, а такие перцентили не складываются
+- ✅ Distributed tracing OpenTelemetry, `correlationId` в baggage/логах (OBS-02, FR-8.6) — мост
+  `micrometer-tracing-bridge-otel` + OTLP подключены в `bootstrap` (runtime, sampling по умолчанию 0.0:
+  коллектор есть в контуре Банка, а не локально); `adapter/observability/CorrelationIdFilter` берёт
+  `X-Correlation-Id` у источника либо создаёт его, кладёт в MDC и в baggage и возвращает в ответе.
+  Заголовок побеждает поле `correlationId` тела IK-03 и не смешивается с ним: тело разбирается на сообщение,
+  а батч несёт их много, — заголовок же описывает вызов, о котором и говорят лог-строка и span
+- ✅ Structured JSON logs, MDC (messageId/streamId/batchId/correlationId), маскирование PII (OBS-03) —
+  структурные логи Boot'а (ECS, `COMMHUB_LOG_FORMAT`), `LogContext` как ресурс (закрытие возвращает прежние
+  значения, а не чистит: потоки переиспользуются), MDC открывается вокруг use case'а, а не вокруг лог-строк, —
+  тогда всё, что пишет конвейер, ищется по тому же потоку и батчу. `PiiMaskingJsonCustomizer` + `LogMasking` —
+  страховка под правилом «маскируем в месте записи»: MSISDN, e-mail (домен переживает: «всё на этот домен
+  отбивается» — то, ради чего читают лог bounce'ов) и PAN по Луну (проверка Луна не даёт превратить в звёздочки
+  идентификатор или сумму)
+- ✅ Алерты: SLA OTP, delivery rate, error rate, CB open, лаг консьюмера, DLQ, квоты, БД/Kafka (OBS-04) —
+  `deploy/observability/prometheus-alerts.yaml`, 12 правил с ссылками на разделы runbook'а. Бизнес-правила
+  фильтруют `test="false"` (FR-7.4): тестовая отправка не должна ни поднимать алерт, ни гасить его
+- ✅ Аутентификация источников: REST mTLS/OAuth2, Kafka SASL/SCRAM+ACL (SEC-01) —
+  `adapter/in/rest/security`: четыре цепочки (callback'и по SEC-07 внутри контроллера, management, `/api/v1`,
+  всё остальное — отказ, а не умолчание), OAuth2 client credentials и/или mTLS. Оба механизма выключены по
+  умолчанию (локально нет ни издателя, ни CA), и инстанс без единого включённого **пишет предупреждение на
+  старте** — умолчание «требовать токен» означало бы, что его выключает каждый разработчик, и в этом виде оно
+  и уедет в контур. `StreamAccessGuard` — «поток видит только свои данные»: у OAuth2-клиента список потоков
+  берётся из claim'а, у mTLS по соглашению CN сертификата **и есть** streamId; отказ — 403, а не 404 (просить
+  чужое, будучи аутентифицированным, — это не «не найдено»). Брокерская половина — `KafkaSecurityConfigurer`,
+  пароль ссылкой на секрет; читается один раз на старте, потому что клиент Kafka собирает JAAS при создании
+- ✅ RBAC на API (метод×ресурс×скоуп), критичные операции с подтверждением+аудит (SEC-03) — `Roles` (шесть
+  ролей `app_role` из §10.1), маппинг групп SSO → `ROLE_*` и scope'ов → `SCOPE_*` (это два разных семейства:
+  scope описывает, что можно машине, группа — кто такой человек), `@EnableMethodSecurity` для `@PreAuthorize`
+  в BFF (Phase 14); критичные операции уже пишут аудит — у kill switch, тестовой отправки и правок
+  конфигурации запись в журнал не опциональна
+- ✅ Секрет-хранилище + ротация без простоя (SEC-04) — сделано в Phase 7 (`adapter/out/secret`: схемы
+  `env:`/`file:`/`prop:`, TTL-кэш, поэтому ротация подхватывается без рестарта); в этой фазе добавлены только
+  брокерские креды Kafka (см. SEC-01) и монтирование каталога секретов в манифесте
+- ✅ Аудит действий пользователей и доступа к ПДн, append-only, экспорт (FR-7.3, SEC-08) —
+  `PersonalDataAccess` пишет запись при **чтении** сообщения оператором; опрос своего сообщения системой-
+  источником не пишет ничего (это штатный трафик §8.2, и строка на каждый опрос утопила бы журнал, который
+  читает аудитор). Читающая сторона — `GetAuditLog`/`AuditQueryService` над новым `AuditQueryPort` с фильтрами
+  по сущности, пользователю и периоду; экспорт — та же выборка, пройденная до конца (экспорт, который читает
+  иначе, чем экран, не сверить с тем, что видели). ⚠️ CSV-рендеринг выгрузки приезжает с админ-BFF в Phase 14:
+  формат — это представление, и писать его некуда, пока нет контроллера
+- ✅ Тестовая отправка с меткой TEST, без учёта в статистике (FR-7.4) — `SendTestMessage`/`TestSendService`:
+  делегирует обычному `SubmitMessage`, потому что проверять надо **конвейер** (квоты потока, фильтры канала,
+  креды провайдера, sandbox платформы), а не отдельный путь отправки. Отличаются три вещи: метка TEST
+  (она же включает sandbox APNs и `validate_only` FCM, PU-13), свежий dedup-ключ (повтор теста — не дубликат)
+  и закреплённый провайдер, если он назван: `MessagePipeline.routeTo` выражает это исключением остальных
+  провайдеров канала, поэтому непригодный провайдер даёт обычный `NO_ROUTE_AVAILABLE`, а не особый отказ.
+  «Без учёта в статистике» — это **метка, а не выброшенные данные**: `test` стал измерением метрик и полем
+  контракта витрины, и панели/алерты фильтруют по нему
+- ✅ Выгрузка событий в витрину (Kafka-топик/batch) (FR-6.4) — `ExportDeliveryEvents` + `comm.outbound.events.v1`
+  со своей схемой в `resources/schema`. Единица выгрузки — **сообщение, дошедшее до терминального статуса**, а
+  не переход: витрина считает объёмы, доставляемость и стоимость, а поток переходов уже публикуется в
+  `comm.outbound.status.v1`. Курсор (V13 `export_cursor`) идёт по паре `(terminal_at, id)` — в одну микросекунду
+  терминальными становятся несколько сообщений, и курсор по одному времени либо пропускал бы их, либо повторял
+  бесконечно; двигается только после подтверждения брокера (at-least-once, дедупликация у витрины по messageId).
+  Ни адреса, ни текста в контракте нет: в аналитический контур уходит что отправлено, а не кому (SEC-06)
+- ✅ K8s: liveness/readiness/startup, graceful shutdown с дообработкой in-flight (NF-05) — группы actuator'а
+  с **разным составом**: liveness — только состояние приложения (рестарт пода из-за недоступной БД меняет
+  аварию на crash loop во время неё), readiness — плюс БД (непринятая транзакция = непринятое сообщение),
+  startup — БД (пока идут миграции, liveness не должен убивать под). Брокер и провайдеры намеренно снаружи
+  групп: для того и существует outbox, а провайдер лежит одинаково на всех подах, — но их индикаторы
+  (`KafkaHealthIndicator`, `ProviderAvailabilityHealthIndicator` в `bootstrap/health`) публикуются и питают
+  алерты. Graceful shutdown: `server.shutdown=graceful`, дожидание прохода планировщиков, `Dockerfile` и
+  `deploy/k8s/deployment.yaml` (rolling update без просадки, PDB, непривилегированный контейнер, каталог секретов)
+- ✅ Grafana-дашборды + runbook (OBS-05, OBS-06) — `deploy/observability/grafana/`: обзорный, по-канальный,
+  по-провайдерный и инфраструктурный; `docs/RUNBOOK.md` — по разделу на симптом, с якорями, на которые ссылаются
+  аннотации алертов
+
+> Тесты: 25 unit-тестов (`MicrometerMetricsAdapterTest`, `LogMaskingTest`, `CorrelationIdFilterTest`,
+> `StreamAccessGuardTest`, `DeliveryEventCodecTest`, `TestSendServiceTest`, `ExportDeliveryEventsServiceTest`,
+> `AuditAccessTest`) и два интеграционных набора: `EventExportPersistenceIT` (5) и дополнения к
+> `AuditPersistenceIT` (2 теста на поиск и постраничность).
+>
+> ⚠️ Попутно починены integration-наборы, которые не запускались: контекст `AbstractPersistenceIT` поднимался
+> с JDK-прокси вместо CGLIB (и потому не мог собрать `CachingProviderConfigRepository`), `OutboxRelayIT` и
+> `InboundKafkaIT` не хватало бинов, а `AuditPersistenceIT` пытался очистить `audit_log`, который в БД
+> запрещает `DELETE`/`TRUNCATE` (V7) — тесты переписаны так, чтобы работать с append-only журналом, а не вокруг него.
 
 ### Phase 14. Admin REST BFF (backend для будущего frontend)
 

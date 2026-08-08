@@ -124,7 +124,7 @@ class KafkaStatusPublisherAdapterTest {
         // Arrange
         when(kafkaTemplate.send(anyRecord())).thenReturn(new CompletableFuture<>());
         KafkaStatusPublisherAdapter adapter =
-                adapter(new KafkaOutboundProperties(null, null, null, Duration.ofMillis(50), null, null, null));
+                adapter(new KafkaOutboundProperties(null, null, null, null, Duration.ofMillis(50), null, null, null));
         MessageStatusEvent event = statusEvent();
 
         // Act & Assert

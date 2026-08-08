@@ -41,6 +41,8 @@ import uz.hamkorbank.commhub.adapter.out.kafka.KafkaBroker;
 import uz.hamkorbank.commhub.adapter.out.kafka.KafkaConnectionProperties;
 import uz.hamkorbank.commhub.adapter.out.kafka.KafkaOutboundProperties;
 import uz.hamkorbank.commhub.adapter.out.kafka.KafkaProducerConfig;
+import uz.hamkorbank.commhub.adapter.out.kafka.KafkaSecurityConfigurer;
+import uz.hamkorbank.commhub.adapter.out.kafka.KafkaSecurityProperties;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
 import uz.hamkorbank.commhub.application.dto.BatchControlResult;
 import uz.hamkorbank.commhub.application.dto.BatchItemsResult;
@@ -56,6 +58,7 @@ import uz.hamkorbank.commhub.application.port.in.command.AddBatchItemsCommand;
 import uz.hamkorbank.commhub.application.port.in.command.BatchActionCommand;
 import uz.hamkorbank.commhub.application.port.in.command.CreateBatchCommand;
 import uz.hamkorbank.commhub.application.port.in.command.SubmitMessageCommand;
+import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
@@ -234,6 +237,28 @@ class InboundKafkaIT {
         @Bean
         KafkaConnectionProperties kafkaConnectionProperties() {
             return KafkaConnectionProperties.of(KafkaBroker.bootstrapServers());
+        }
+
+        /**
+         * The client-security configurer of SEC-01, configured with nothing.
+         *
+         * <p>The local broker takes no credentials, and a test that authenticated would test the broker's
+         * configuration instead of the Hub's. The configurer still has to exist: production wires it into
+         * both clients, and a test context without it would prove those clients can be built without it.
+         */
+        @Bean
+        KafkaSecurityConfigurer kafkaSecurityConfigurer() {
+            return new KafkaSecurityConfigurer(KafkaSecurityProperties.none(), new SecretResolverPort() {
+                @Override
+                public java.util.Optional<String> resolve(String secretRef) {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public String require(String secretRef) {
+                    throw new IllegalStateException("no secret store in the integration context");
+                }
+            });
         }
 
         @Bean

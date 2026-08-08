@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hamkorbank.uz/commhub/schema/comm.outbound.events.v1.json",
+  "title": "Notification Hub delivery event for the data mart",
+  "description": "Завершённая отправка для витрины данных Банка (SRS FR-6.4). Топик: comm.outbound.events.v1. Единица — сообщение, дошедшее до терминального статуса (§6.3), а не переход: витрина считает объёмы, доставляемость и стоимость, а поток переходов уже публикуется в comm.outbound.status.v1. Доставка at-least-once — дедупликация у потребителя по messageId (AD-03). Ни адреса получателя, ни текста в контракте нет: в аналитический контур уходит что отправлено, а не кому (SEC-06, DB-04). Совместимость субъекта в Schema Registry — BACKWARD (NF-08).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "messageId",
+    "streamId",
+    "batchId",
+    "trafficClass",
+    "channel",
+    "provider",
+    "status",
+    "reason",
+    "segments",
+    "costAmount",
+    "costCurrency",
+    "attempts",
+    "test",
+    "acceptedAt",
+    "terminalAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Версия контракта; растёт при изменении набора полей (NF-08).",
+      "const": "1.0"
+    },
+    "messageId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Идентификатор сообщения в Модуле; он же ключ дедупликации и джойна для тех, кому положено больше."
+    },
+    "streamId": {
+      "type": "string",
+      "description": "Поток-источник; он же ключ партиционирования записи."
+    },
+    "batchId": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Батч, если сообщение было его элементом (FR-1.6); null для одиночного."
+    },
+    "trafficClass": {
+      "type": "string",
+      "enum": ["CRITICAL_OTP", "TRANSACTIONAL", "NOTIFICATION"],
+      "description": "Класс трафика (TC-01)."
+    },
+    "channel": {
+      "type": ["string", "null"],
+      "enum": ["SMS", "EMAIL", "PUSH", null],
+      "description": "Канал, выбранный маршрутизацией; null, если сообщение отклонено до выбора канала."
+    },
+    "provider": {
+      "type": ["string", "null"],
+      "description": "Код провайдера последней попытки; null, если до провайдера не дошло."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "DELIVERED",
+        "UNDELIVERED",
+        "EXPIRED",
+        "REJECTED",
+        "DUPLICATE",
+        "CANCELLED",
+        "FAILED",
+        "SENT_TO_PROVIDER"
+      ],
+      "description": "Терминальный канонический статус (§6.3). SENT_TO_PROVIDER терминален для push: платформы не подтверждают доставку (PU-12)."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Каноническая причина недоставки (IR-01); null для доставленного."
+    },
+    "segments": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Число SMS-сегментов, за которые платит Банк (§18.3); 0 в остальных каналах."
+    },
+    "costAmount": {
+      "type": ["number", "null"],
+      "description": "Стоимость по тарифу провайдера (FR-6.2); null, если тариф не задан."
+    },
+    "costCurrency": {
+      "type": ["string", "null"],
+      "description": "Валюта стоимости, ISO-4217."
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Число попыток у провайдеров, включая переключения (PR-01)."
+    },
+    "test": {
+      "type": "boolean",
+      "description": "Признак тестовой отправки (FR-7.4): такие строки исключаются из бизнес-показателей."
+    },
+    "acceptedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Момент приёма сообщения Модулем, ISO-8601 в UTC."
+    },
+    "terminalAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Момент перехода в терминальный статус; он же порядок выгрузки. Разница с acceptedAt — сквозное время доставки (FR-6.1)."
+    }
+  }
+}

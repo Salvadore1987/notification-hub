@@ -43,6 +43,20 @@ resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", ver
 jakarta-mail-api = { module = "jakarta.mail:jakarta.mail-api" }
 angus-mail = { module = "org.eclipse.angus:angus-mail" }
 
+# Наблюдаемость (Phase 13). Micrometer идёт из actuator'а, но адаптер MetricsPort компилируется
+# против micrometer-core явно: он живёт в adapter/out/metrics, а не в bootstrap.
+micrometer-core = { module = "io.micrometer:micrometer-core" }
+micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+# OBS-02: трассировка. Мост Micrometer -> OpenTelemetry и OTLP-экспортёр; сам SDK тянется мостом.
+micrometer-tracing = { module = "io.micrometer:micrometer-tracing" }
+micrometer-tracing-bridge-otel = { module = "io.micrometer:micrometer-tracing-bridge-otel" }
+opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp" }
+
+# SEC-01/SEC-03: аутентификация систем-источников (OAuth2 client credentials / mTLS) и RBAC.
+spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security" }
+spring-boot-starter-oauth2-resource-server = { module = "org.springframework.boot:spring-boot-starter-oauth2-resource-server" }
+spring-security-test = { module = "org.springframework.security:spring-security-test" }
+
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }

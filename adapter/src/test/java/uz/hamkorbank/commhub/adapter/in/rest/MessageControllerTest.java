@@ -35,6 +35,9 @@ import uz.hamkorbank.commhub.adapter.in.rest.problem.ProblemFactory;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.RateLimitProperties;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamLimits;
 import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.StreamRateLimiter;
+import uz.hamkorbank.commhub.adapter.in.rest.security.AuthenticatedCaller;
+import uz.hamkorbank.commhub.adapter.in.rest.security.SecurityProperties;
+import uz.hamkorbank.commhub.adapter.in.rest.security.StreamAccessGuard;
 import uz.hamkorbank.commhub.application.dto.MessageView;
 import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
 import uz.hamkorbank.commhub.application.exception.NotFoundException;
@@ -227,8 +230,17 @@ class MessageControllerTest {
 
     private MockMvc mockMvcWith(StreamRateLimiter rateLimiter) {
         InboundMessageCodec codec = new InboundMessageCodec(new InboundJson(), new InboundPayloadMapperImpl());
-        MessageController controller =
-                new MessageController(codec, submitMessage, getMessage, rateLimiter, new RestResponseMapperImpl());
+        // Аутентификация в контуре теста выключена: SecurityProperties.disabled() означает
+        // «никто не аутентифицирован», и StreamAccessGuard пропускает любой поток (SEC-01).
+        AuthenticatedCaller caller = new AuthenticatedCaller(SecurityProperties.disabled());
+        MessageController controller = new MessageController(
+                codec,
+                submitMessage,
+                getMessage,
+                rateLimiter,
+                new StreamAccessGuard(caller),
+                caller,
+                new RestResponseMapperImpl());
         ProblemFactory problems = new ProblemFactory();
         return MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(

@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.adapter.in.contract.InboundMessageCodec;
+import uz.hamkorbank.commhub.adapter.observability.LogContext;
 import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
 import uz.hamkorbank.commhub.application.port.in.SubmitMessage;
 import uz.hamkorbank.commhub.application.port.in.command.SubmitMessageCommand;
@@ -65,9 +66,30 @@ public class InboundMessageListener {
         accept(document, TrafficClass.NOTIFICATION);
     }
 
+    /**
+     * The MDC is opened around the use case and not only around the log lines below (OBS-03).
+     *
+     * <p>Everything the pipeline writes while this message is being accepted — a filter refusing an
+     * address, a template that failed to render, a provider adapter's warning — is then searchable by the
+     * same stream, batch and correlation id, which is the whole point of correlating them.
+     */
     private void accept(String document, TrafficClass trafficClass) {
         SubmitMessageCommand command = codec.read(document, trafficClass);
-        SubmitMessageResult result = submitMessage.submit(command);
+        try (LogContext ignored = contextOf(command, trafficClass)) {
+            log(submitMessage.submit(command), command, trafficClass);
+        }
+    }
+
+    private static LogContext contextOf(SubmitMessageCommand command, TrafficClass trafficClass) {
+        return LogContext.of(LogContext.STREAM_ID, command.streamId().value())
+                .with(LogContext.TRAFFIC_CLASS, trafficClass.name())
+                .with(LogContext.BATCH_ID, command.batchId())
+                .with(
+                        LogContext.CORRELATION_ID,
+                        command.delivery().correlationIdOptional().orElse(null));
+    }
+
+    private static void log(SubmitMessageResult result, SubmitMessageCommand command, TrafficClass trafficClass) {
         if (result.isAccepted()) {
             LOG.debug(
                     "Accepted {} message {}/{} as {}",

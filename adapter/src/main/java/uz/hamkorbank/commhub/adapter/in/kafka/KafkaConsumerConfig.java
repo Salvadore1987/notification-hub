@@ -1,9 +1,11 @@
 package uz.hamkorbank.commhub.adapter.in.kafka;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,9 +13,11 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.MicrometerConsumerListener;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.ContainerProperties.AckMode;
 import uz.hamkorbank.commhub.adapter.out.kafka.KafkaConnectionProperties;
+import uz.hamkorbank.commhub.adapter.out.kafka.KafkaSecurityConfigurer;
 
 /**
  * The consumer side of the Kafka ingress: one container factory per traffic class (§8.1, TC-01, AD-05).
@@ -53,6 +57,21 @@ public class KafkaConsumerConfig {
     public static final String NOTIFICATION_FACTORY = "notificationListenerContainerFactory";
 
     public static final String BATCH_CONTROL_FACTORY = "batchControlListenerContainerFactory";
+
+    /**
+     * Consumer metrics, including the lag OBS-01 asks for, come from the client itself.
+     *
+     * <p>An {@code ObjectProvider} because the registry is a deployment decision: the adapter module is
+     * also exercised without one, and a missing registry must cost the metrics, never the consumers.
+     */
+    private final ObjectProvider<MeterRegistry> meters;
+
+    private final KafkaSecurityConfigurer security;
+
+    public KafkaConsumerConfig(ObjectProvider<MeterRegistry> meters, KafkaSecurityConfigurer security) {
+        this.meters = meters;
+        this.security = security;
+    }
 
     @Bean(CRITICAL_FACTORY)
     public ConcurrentKafkaListenerContainerFactory<String, String> criticalListenerContainerFactory(
@@ -98,7 +117,7 @@ public class KafkaConsumerConfig {
                 inbound.concurrency().batchControl());
     }
 
-    private static ConcurrentKafkaListenerContainerFactory<String, String> factory(
+    private ConcurrentKafkaListenerContainerFactory<String, String> factory(
             KafkaConnectionProperties connection,
             KafkaInboundProperties inbound,
             CommonErrorHandler errorHandler,
@@ -115,7 +134,7 @@ public class KafkaConsumerConfig {
         return factory;
     }
 
-    private static ConsumerFactory<String, String> consumerFactory(
+    private ConsumerFactory<String, String> consumerFactory(
             KafkaConnectionProperties connection, KafkaInboundProperties inbound, String group) {
         Map<String, Object> config = new LinkedHashMap<>();
         config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, connection.bootstrapServers());
@@ -127,6 +146,9 @@ public class KafkaConsumerConfig {
         config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, inbound.maxPollRecords());
-        return new DefaultKafkaConsumerFactory<>(config);
+        security.apply(config);
+        DefaultKafkaConsumerFactory<String, String> consumerFactory = new DefaultKafkaConsumerFactory<>(config);
+        meters.ifAvailable(registry -> consumerFactory.addListener(new MicrometerConsumerListener<>(registry)));
+        return consumerFactory;
     }
 }
