@@ -31,6 +31,7 @@ import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
 import uz.hamkorbank.commhub.application.mapper.MessageMapper;
 import uz.hamkorbank.commhub.application.mapper.MessageMapperImpl;
 import uz.hamkorbank.commhub.application.policy.DeduplicationPolicy;
+import uz.hamkorbank.commhub.application.policy.EmailPolicy;
 import uz.hamkorbank.commhub.application.policy.FrequencyCapPolicy;
 import uz.hamkorbank.commhub.application.policy.PanPolicy;
 import uz.hamkorbank.commhub.application.port.in.command.SubmitMessageCommand;
@@ -144,7 +145,7 @@ class SubmitMessageServiceTest {
         MessagePipeline pipeline = new MessagePipeline(
                 new DeduplicationService(dedupRegistry, DeduplicationPolicy.defaults()),
                 new TemplateApplier(templates),
-                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), metrics),
+                new MessageValidator(new PanDetector(), PanPolicy.rejecting(), EmailPolicy.defaults(), metrics),
                 new DeliveryFilters(
                         suppressions, preferences, frequencyCounters, FrequencyCapPolicy.defaults(), metrics),
                 new QuotaGuard(quotaCounters, metrics),

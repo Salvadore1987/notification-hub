@@ -24,6 +24,7 @@ import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Provider;
 import uz.hamkorbank.commhub.domain.model.Template;
 import uz.hamkorbank.commhub.domain.model.TemplateVersion;
+import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.TemplateCatalogStatus;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateId;
@@ -137,7 +138,8 @@ public class TemplateConfigService implements ManageTemplates {
             throw new ConfigurationConflictException("template %s is archived and cannot be edited"
                     .formatted(command.code().value()));
         }
-        TemplateVersion.Body body = new TemplateVersion.Body(command.subject(), command.text());
+        TemplateVersion.Body body = new TemplateVersion.Body(command.subject(), command.text(), command.htmlBody());
+        rejectHtmlOutsideEmail(template, body);
         rejectCardNumbers(body);
         String before = command.versionOptional()
                 .flatMap(number -> template.version(command.locale(), number))
@@ -272,9 +274,26 @@ public class TemplateConfigService implements ManageTemplates {
      * number belongs in a merge field, masked by whoever fills it — never in the wording.
      */
     private void rejectCardNumbers(TemplateVersion.Body body) {
-        if (panDetector.containsPan(body.text()) || panDetector.containsPan(body.subject())) {
+        if (panDetector.containsPan(body.text())
+                || panDetector.containsPan(body.subject())
+                || panDetector.containsPan(body.html())) {
             throw new ConfigurationConflictException(
                     "the template body contains a card number; a PAN must not be stored in a template (SEC-05)");
+        }
+    }
+
+    /**
+     * Only an email template may carry an HTML alternative (EM-01).
+     *
+     * <p>An SMS or a push has nowhere to put it: the adapter would send the plain text and the HTML would
+     * live on as a body nobody reads and everybody edits. Refusing it here is how the operator learns that
+     * the template they are writing is on the wrong channel.
+     */
+    private static void rejectHtmlOutsideEmail(Template template, TemplateVersion.Body body) {
+        if (body.hasHtml() && template.channel() != Channel.EMAIL) {
+            throw new ConfigurationConflictException(
+                    "an HTML body is only carried by an email template; %s is on channel %s (EM-01)"
+                            .formatted(template.code().value(), template.channel()));
         }
     }
 

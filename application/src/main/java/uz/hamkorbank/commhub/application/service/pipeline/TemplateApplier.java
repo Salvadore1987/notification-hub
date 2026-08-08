@@ -102,13 +102,27 @@ public class TemplateApplier {
         };
     }
 
+    /**
+     * Puts the rendered subject and both body alternatives into the email content (FR-4.3, EM-01).
+     *
+     * <p>The HTML of the template wins over the HTML of the submission, exactly as its text does: the
+     * template is what the message is being rendered from. What the submission keeps is everything the
+     * template has no opinion about — its attachments and its sender. A template without an HTML body
+     * leaves the submitted one in place rather than dropping it: a source system that sent HTML and named a
+     * plain-text template would otherwise silently lose the half of the message its customers actually see.
+     */
     private static EmailContent mergeEmail(EmailContent existing, TemplateVersion.Rendered rendered) {
         String subject =
                 rendered.subjectOptional().orElseGet(() -> existing == null ? rendered.text() : existing.subject());
         if (existing == null) {
-            return EmailContent.ofText(subject, rendered.text());
+            return new EmailContent(subject, rendered.html(), rendered.text(), List.of(), null);
         }
-        return new EmailContent(subject, null, rendered.text(), existing.attachments(), existing.from());
+        return new EmailContent(
+                subject,
+                rendered.htmlOptional().orElseGet(existing::htmlBody),
+                rendered.text(),
+                existing.attachments(),
+                existing.from());
     }
 
     private static PushContent mergePush(PushContent existing, TemplateVersion.Rendered rendered) {

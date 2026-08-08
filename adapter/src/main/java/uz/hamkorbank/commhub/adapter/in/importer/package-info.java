@@ -11,12 +11,14 @@
  * stay in the sheet:
  *
  * <pre>
- * code;channel;locale;subject;text;direction;owner
- * OTP_LOGIN;SMS;RU;;"Код подтверждения: {CODE}";Чакана;retail-team
- * OTP_LOGIN;SMS;UZ;;"Tasdiqlash kodi: {CODE}";Чакана;retail-team
+ * code;channel;locale;subject;text;html;direction;owner
+ * OTP_LOGIN;SMS;RU;;"Код подтверждения: {CODE}";;Чакана;retail-team
+ * OTP_LOGIN;SMS;UZ;;"Tasdiqlash kodi: {CODE}";;Чакана;retail-team
+ * STATEMENT;EMAIL;RU;"Выписка";"Выписка за {PERIOD}";"&lt;p&gt;Выписка за {PERIOD}&lt;/p&gt;";МСБ;sme-team
  * </pre>
  *
- * <p>Required: {@code code}, {@code channel}, {@code locale}, {@code text}. A field may be quoted with
+ * <p>Required: {@code code}, {@code channel}, {@code locale}, {@code text}. {@code html} is the HTML
+ * alternative of an email body and is refused on any other channel (EM-01). A field may be quoted with
  * {@code "} and then contain the delimiter, line breaks and {@code ""} for a literal quote — SMS texts wrap,
  * so that is the normal case rather than an edge one.
  *

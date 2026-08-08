@@ -19,10 +19,17 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  *
  * @param version version of the locale to rewrite; {@code null} creates the next one
  * @param subject email subject; {@code null} for SMS and for push titles carried in the text
- * @param text body with {@code {MERGE_FIELDS}} (FR-4.3)
+ * @param text body with {@code {MERGE_FIELDS}} (FR-4.3); for an email, its plain-text alternative
+ * @param htmlBody HTML alternative of an email body; {@code null} everywhere else (EM-01)
  */
 public record SaveTemplateVersionCommand(
-        Actor actor, TemplateCode code, ContentLocale locale, Integer version, String subject, String text) {
+        Actor actor,
+        TemplateCode code,
+        ContentLocale locale,
+        Integer version,
+        String subject,
+        String text,
+        String htmlBody) {
 
     public SaveTemplateVersionCommand {
         Guard.notNull(actor, "SaveTemplateVersionCommand.actor");

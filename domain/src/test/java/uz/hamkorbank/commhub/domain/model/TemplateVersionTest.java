@@ -199,7 +199,7 @@ class TemplateVersionTest {
                         TemplateVersion.Body.ofText("text"),
                         " "));
         assertThatExceptionOfType(DomainValidationException.class)
-                .isThrownBy(() -> new TemplateVersion.Rendered(null, " "));
+                .isThrownBy(() -> TemplateVersion.Rendered.ofText(" "));
     }
 
     @Test
@@ -236,6 +236,62 @@ class TemplateVersionTest {
         assertThat(version.missingVariables(Map.of("NAME", "ИВАН"))).containsExactly("CODE");
         assertThat(version.missingVariables(Map.of("NAME", "ИВАН", "CODE", "1234")))
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("EM-01: an email version renders both alternatives and declares the fields of each")
+    void rendersTheHtmlAlternative() {
+        // Arrange
+        TemplateVersion version = TemplateVersion.draft(
+                TemplateVersionId.newId(),
+                TEMPLATE_ID,
+                1,
+                ContentLocale.RU,
+                TemplateVersion.Body.ofEmail(
+                        "Выписка за {PERIOD}", "Итого {AMOUNT}", "<p>Итого {AMOUNT} за {PERIOD}</p>"),
+                "author");
+        version.submitForReview();
+        version.publish("reviewer", NOW);
+
+        // Act
+        TemplateVersion.Rendered rendered = version.render(Map.of("PERIOD", "июль", "AMOUNT", "120 000"), true);
+
+        // Assert
+        assertThat(rendered.subject()).isEqualTo("Выписка за июль");
+        assertThat(rendered.text()).isEqualTo("Итого 120 000");
+        assertThat(rendered.htmlOptional()).contains("<p>Итого 120 000 за июль</p>");
+        // Порядок объявления — порядок текста: оператор вычитывает поля в том же порядке (FR-4.4).
+        assertThat(version.declaredVariables()).containsExactly("PERIOD", "AMOUNT");
+    }
+
+    @Test
+    @DisplayName("FR-4.3: a merge field that only the HTML uses is still missing in strict mode")
+    void strictModeSeesTheHtmlFields() {
+        // Arrange
+        TemplateVersion version = TemplateVersion.draft(
+                TemplateVersionId.newId(),
+                TEMPLATE_ID,
+                1,
+                ContentLocale.RU,
+                TemplateVersion.Body.ofEmail("Выписка", "Готова", "<p>Готова, {NAME}</p>"),
+                "author");
+        version.submitForReview();
+        version.publish("reviewer", NOW);
+
+        // Act + Assert
+        assertThat(version.missingVariables(Map.of())).containsExactly("NAME");
+        assertThatExceptionOfType(DomainValidationException.class).isThrownBy(() -> version.render(Map.of(), true));
+    }
+
+    @Test
+    @DisplayName("EM-01: HTML never travels alone — the plain-text alternative is what a text client shows")
+    void htmlRequiresText() {
+        // Act + Assert
+        assertThatExceptionOfType(DomainValidationException.class)
+                .isThrownBy(() -> TemplateVersion.Body.ofEmail("Выписка", " ", "<p>Готова</p>"));
+        // Пустая строка HTML — это «нет HTML», а не «HTML из пробела».
+        assertThat(TemplateVersion.Body.ofEmail("Выписка", "Готова", "  ").hasHtml())
+                .isFalse();
     }
 
     private static TemplateVersion draft(String text) {

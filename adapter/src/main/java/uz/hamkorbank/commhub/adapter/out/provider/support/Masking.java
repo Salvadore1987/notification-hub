@@ -1,5 +1,6 @@
 package uz.hamkorbank.commhub.adapter.out.provider.support;
 
+import uz.hamkorbank.commhub.domain.model.vo.EmailAddress;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
 
 /**
@@ -34,6 +35,33 @@ public final class Masking {
             return REDACTED;
         }
         return trimmed.substring(0, 5) + REDACTED + trimmed.substring(trimmed.length() - 4);
+    }
+
+    /** Recipient email in the masked form of DB-04: {@code i***n@example.com} (EM-01, OBS-03). */
+    public static String email(EmailAddress email) {
+        return email == null ? "-" : email.masked();
+    }
+
+    /**
+     * Same for an address that has not been parsed into the value object yet, e.g. from a bounce report.
+     *
+     * <p>The domain survives masking on purpose: it is not personal data, and "everything to this domain is
+     * bouncing" is the one thing an operator reads a bounce log for.
+     */
+    public static String email(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "-";
+        }
+        String trimmed = raw.trim();
+        int at = trimmed.lastIndexOf('@');
+        if (at <= 0) {
+            return REDACTED;
+        }
+        String localPart = trimmed.substring(0, at);
+        String masked = localPart.length() <= 2
+                ? localPart.charAt(0) + REDACTED
+                : localPart.charAt(0) + REDACTED + localPart.charAt(localPart.length() - 1);
+        return masked + trimmed.substring(at);
     }
 
     /**

@@ -50,7 +50,7 @@ class TemplatePersistenceIT extends AbstractPersistenceIT {
                 template.id(),
                 1,
                 ContentLocale.RU,
-                new TemplateVersion.Body(null, "Код подтверждения: {CODE}"),
+                TemplateVersion.Body.ofText("Код подтверждения: {CODE}"),
                 "author-1");
         published.submitForReview();
         published.publish("reviewer-1", PUBLISHED_AT);
@@ -60,7 +60,7 @@ class TemplatePersistenceIT extends AbstractPersistenceIT {
                 template.id(),
                 2,
                 ContentLocale.RU,
-                new TemplateVersion.Body(null, "Ваш код: {CODE}"),
+                TemplateVersion.Body.ofText("Ваш код: {CODE}"),
                 "author-1"));
         template.mapToProviderTemplate(
                 new Template.ProviderMapping(ProviderCode.of("PLAYMOBILE"), "pm-otp-login", true));
@@ -98,7 +98,7 @@ class TemplatePersistenceIT extends AbstractPersistenceIT {
                 template.id(),
                 1,
                 ContentLocale.UZ,
-                new TemplateVersion.Body(null, "Chegirma {PERCENT}%"),
+                TemplateVersion.Body.ofText("Chegirma {PERCENT}%"),
                 "author-2");
         version.archive();
         template.addVersion(version);
@@ -124,7 +124,7 @@ class TemplatePersistenceIT extends AbstractPersistenceIT {
                 template.id(),
                 1,
                 ContentLocale.RU,
-                new TemplateVersion.Body(null, "Скидка {PERCENT}%"),
+                TemplateVersion.Body.ofText("Скидка {PERCENT}%"),
                 "author-3");
         published.submitForReview();
         published.publish("reviewer-3", PUBLISHED_AT);

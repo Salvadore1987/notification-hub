@@ -46,8 +46,7 @@ public interface TemplateMapper {
                 version.id(),
                 version.version(),
                 version.locale(),
-                version.body().subject(),
-                version.body().text(),
+                version.body(),
                 version.status(),
                 List.copyOf(version.declaredVariables()),
                 new TemplateVersionView.Review(

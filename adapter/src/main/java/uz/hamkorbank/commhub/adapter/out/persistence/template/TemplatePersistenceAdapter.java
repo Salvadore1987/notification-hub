@@ -53,20 +53,22 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
             """;
 
     private static final String SELECT_VERSIONS = """
-            SELECT id, template_id, version, locale, subject, body, status, created_by, reviewed_by, published_at
+            SELECT id, template_id, version, locale, subject, body, html_body, status, created_by, reviewed_by,
+                   published_at
             FROM template_version
             WHERE template_id = :templateId
             ORDER BY locale, version
             """;
 
     private static final String UPSERT_VERSION = """
-            INSERT INTO template_version (id, template_id, version, locale, subject, body, variables, status,
-                                          created_by, reviewed_by, published_at)
-            VALUES (:id, :templateId, :version, :locale, :subject, :body, CAST(:variables AS jsonb), :status,
-                    :createdBy, :reviewedBy, :publishedAt)
+            INSERT INTO template_version (id, template_id, version, locale, subject, body, html_body, variables,
+                                          status, created_by, reviewed_by, published_at)
+            VALUES (:id, :templateId, :version, :locale, :subject, :body, :htmlBody, CAST(:variables AS jsonb),
+                    :status, :createdBy, :reviewedBy, :publishedAt)
             ON CONFLICT (id) DO UPDATE SET
                 subject = EXCLUDED.subject,
                 body = EXCLUDED.body,
+                html_body = EXCLUDED.html_body,
                 variables = EXCLUDED.variables,
                 status = EXCLUDED.status,
                 reviewed_by = EXCLUDED.reviewed_by,
@@ -227,7 +229,7 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                     TemplateId.of(SqlValues.uuid(rs, "template_id")),
                     rs.getInt("version"),
                     SqlValues.enumValue(rs, "locale", ContentLocale.class),
-                    new TemplateVersion.Body(rs.getString("subject"), rs.getString("body")),
+                    new TemplateVersion.Body(rs.getString("subject"), rs.getString("body"), rs.getString("html_body")),
                     rs.getString("created_by"));
             replayWorkflow(version, rs);
             return version;
@@ -259,6 +261,7 @@ public class TemplatePersistenceAdapter implements TemplateRepository {
                 .param("locale", version.locale().name())
                 .param("subject", version.body().subject())
                 .param("body", version.body().text())
+                .param("htmlBody", version.body().html())
                 .param("variables", jsonCodec.write(List.copyOf(version.declaredVariables())))
                 .param("status", version.status().name())
                 .param("createdBy", version.createdBy())
