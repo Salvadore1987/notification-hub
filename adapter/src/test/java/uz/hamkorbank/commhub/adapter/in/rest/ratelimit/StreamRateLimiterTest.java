@@ -64,8 +64,8 @@ class StreamRateLimiterTest {
     void appliesPerStreamOverrides() {
         // Arrange
         RateLimitProperties properties =
-                new RateLimitProperties(true, 1.0, 1, Map.of("otp-processing", new StreamLimit(100.0, 50)));
-        StreamRateLimiter limiter = new StreamRateLimiter(properties);
+                new RateLimitProperties(true, 1.0, 1, Map.of("otp-processing", new StreamLimit(100.0, 50)), null);
+        StreamRateLimiter limiter = limiterOf(properties);
 
         // Act
         for (int permit = 0; permit < 50; permit++) {
@@ -80,7 +80,7 @@ class StreamRateLimiterTest {
     @DisplayName("Disabled means disabled: nothing is counted")
     void doesNothingWhenDisabled() {
         // Arrange
-        StreamRateLimiter limiter = new StreamRateLimiter(new RateLimitProperties(false, 1.0, 1, Map.of()));
+        StreamRateLimiter limiter = limiterOf(new RateLimitProperties(false, 1.0, 1, Map.of(), null));
 
         // Act + Assert
         assertThatCode(() -> {
@@ -102,6 +102,10 @@ class StreamRateLimiterTest {
     }
 
     private static StreamRateLimiter limiter(double permitsPerSecond, int burst) {
-        return new StreamRateLimiter(new RateLimitProperties(true, permitsPerSecond, burst, Map.of()));
+        return limiterOf(new RateLimitProperties(true, permitsPerSecond, burst, Map.of(), null));
+    }
+
+    private static StreamRateLimiter limiterOf(RateLimitProperties properties) {
+        return new StreamRateLimiter(properties, StreamLimits.configurationOnly(properties));
     }
 }

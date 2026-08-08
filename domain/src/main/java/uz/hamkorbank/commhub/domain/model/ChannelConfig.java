@@ -25,12 +25,14 @@ public final class ChannelConfig extends AggregateRoot<Channel> {
     private BalancingStrategy balancingStrategy;
     private List<ProviderRef> fallbackOrder;
     private QuietHours quietHours;
+    private QuotaConfig quota;
 
     private ChannelConfig(Channel channel, ChannelStatus status, BalancingStrategy balancingStrategy) {
         super(channel);
         this.status = Guard.notNull(status, "ChannelConfig.status");
         this.balancingStrategy = Guard.notNull(balancingStrategy, "ChannelConfig.balancingStrategy");
         this.fallbackOrder = List.of();
+        this.quota = QuotaConfig.unlimited();
     }
 
     /** Registers a channel with its balancing strategy; providers are attached afterwards. */
@@ -62,6 +64,11 @@ public final class ChannelConfig extends AggregateRoot<Channel> {
     /** Channel-level quiet hours; the stream-level window takes precedence when both exist (FR-5.3). */
     public void updateQuietHours(QuietHours newQuietHours) {
         this.quietHours = newQuietHours;
+    }
+
+    /** Count and cost quota of the whole channel, across every stream sending over it (FR-2.6). */
+    public void updateQuota(QuotaConfig newQuota) {
+        this.quota = Guard.notNull(newQuota, "newQuota");
     }
 
     public void activate() {
@@ -107,5 +114,9 @@ public final class ChannelConfig extends AggregateRoot<Channel> {
 
     public Optional<QuietHours> quietHours() {
         return Optional.ofNullable(quietHours);
+    }
+
+    public QuotaConfig quota() {
+        return quota;
     }
 }

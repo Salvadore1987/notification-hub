@@ -17,6 +17,7 @@ import uz.hamkorbank.commhub.application.port.out.StreamRepository;
 import uz.hamkorbank.commhub.application.service.pipeline.FilterVerdict;
 import uz.hamkorbank.commhub.application.service.pipeline.MessagePipeline;
 import uz.hamkorbank.commhub.application.service.pipeline.PipelineVerdict;
+import uz.hamkorbank.commhub.application.service.pipeline.QuotaSubject;
 import uz.hamkorbank.commhub.application.service.pipeline.TemplateOutcome;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.application.service.support.RoutingOutcome;
@@ -157,13 +158,14 @@ public class SubmitMessageService implements SubmitMessage {
 
         Optional<Money> cost = pipeline.costOf(outcome, routed.provider(), outcome.segments());
         long units = channel == Channel.SMS ? Math.max(1, outcome.segments()) : 1L;
-        PipelineVerdict quota = pipeline.checkQuota(stream, channel, units, cost.orElse(null), now);
+        QuotaSubject subject = pipeline.quotaSubjectOf(stream, channel, outcome, routed.provider());
+        PipelineVerdict quota = pipeline.checkQuota(subject, units, cost.orElse(null), now);
         if (quota.isRejected()) {
             return reject(message, quota.reason(), quota.detail(), now);
         }
 
         StatusChange change = applyRoute(message, outcome, routed, filter, cost.orElse(null), now);
-        pipeline.registerSend(message, channel, stream, units, cost.orElse(null), now);
+        pipeline.registerSend(message, subject, units, cost.orElse(null), now);
         messages.save(message);
         notifier.publish(message, change);
         notifier.recordAccepted(message);

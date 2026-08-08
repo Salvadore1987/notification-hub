@@ -88,12 +88,26 @@ commhub:
       enabled: ${REST_RATE_LIMIT_ENABLED:true}
       default-permits-per-second: ${REST_RATE_LIMIT_RPS:200}
       default-burst: ${REST_RATE_LIMIT_BURST:400}
-      # Переопределения на поток появятся в реестре потоков (Phase 8, AD-07); пример:
+      # С Phase 8 пер-стримовый лимит живёт в реестре потоков (stream.rate_limit_config) и
+      # правится из админ-панели без рестарта (AD-07); значения ниже — запасной вариант для
+      # потоков, у которых собственного лимита ещё нет. Пример:
       # streams:
       #   ibank-retail:
       #     permits-per-second: 500
       #     burst: 1000
       streams: {}
+      # Как долго переиспользуется лимит, прочитанный из реестра: лимитер работает на каждом
+      # принятом запросе, поэтому поход в БД на запрос недопустим (NF-07 ограничивает 30с).
+      registry-cache-ttl: ${REST_RATE_LIMIT_REGISTRY_TTL:10s}
+
+  # Конфигурация маршрутизации в БД (AD-07, NF-07). Снапшот каналов/провайдеров/политик держится
+  # в памяти и перечитывается по расписанию: маршрутизируется каждое сообщение, а конфигурация
+  # меняется несколько раз в месяц. Изменение с этого инстанса видно сразу (снапшот сбрасывается),
+  # с соседних — в пределах refresh-interval. Потолок 30с — это NF-07, он проверяется на старте.
+  config:
+    cache:
+      enabled: ${CONFIG_CACHE_ENABLED:true}
+      refresh-interval: ${CONFIG_CACHE_REFRESH_INTERVAL:10s}
 
   # Провайдерские callback'и статусов (PM-02, SEC-07). Ключи — коды провайдеров.
   # Секрет в проме приходит из секрет-хранилища Банка (SG-04) и в логах не появляется.
@@ -125,9 +139,19 @@ commhub:
     cache-ttl: ${SECRETS_CACHE_TTL:30s}
     values: {}
 
-  # Адаптеры провайдеров (§9, PR-01). Транспортные настройки переедут в provider.endpoint_config
-  # в Phase 8 (горячее применение, AD-07); креды не переедут никогда — они остаются ссылками.
+  # Адаптеры провайдеров (§9, PR-01). Значения ниже — умолчания деплоя: лимиты берутся из
+  # provider.rate_limit_config, а настройки отправки (originator/sender, приоритеты, веса, TTL) —
+  # из provider.endpoint_config, и применяются без рестарта (FR-2.5, AD-07). Не переезжают:
+  # креды (ссылки в секрет-хранилище, SEC-04) и параметры HTTP-клиента (base-url, таймауты,
+  # окна breaker'а) — это топология деплоя, её смена и есть деплой.
   provider:
+    # FR-6.3/PR-02: пассивный монитор здоровья провайдеров. Считает долю ошибок и таймаутов по
+    # delivery_attempt за окно, ставит DOWN (→ автоматический failover) и возвращает обратно.
+    health:
+      enabled: ${PROVIDER_HEALTH_ENABLED:true}
+      interval: ${PROVIDER_HEALTH_INTERVAL:30s}
+      initial-delay: ${PROVIDER_HEALTH_INITIAL_DELAY:60s}
+
     # Playmobile SMS-Broker — основной провайдер SMS (§9.1, §18.1).
     playmobile:
       enabled: ${PLAYMOBILE_ENABLED:false}

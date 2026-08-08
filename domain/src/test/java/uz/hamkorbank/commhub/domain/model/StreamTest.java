@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
+import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
 import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
@@ -78,7 +79,7 @@ class StreamTest {
                 STREAM_ID,
                 "Marketing",
                 IntegrationType.KAFKA,
-                new Stream.Defaults(Channel.SMS, null, TrafficClass.NOTIFICATION, Priority.LOW));
+                new Stream.Defaults(Channel.SMS, null, TrafficClass.NOTIFICATION, Priority.LOW, null));
 
         // Act + Assert
         assertThat(stream.effectivePriority(null, TrafficClass.NOTIFICATION)).isEqualTo(Priority.LOW);
@@ -151,9 +152,9 @@ class StreamTest {
 
         // Act + Assert
         assertThatExceptionOfType(DomainValidationException.class)
-                .isThrownBy(() -> new Stream.Defaults(Channel.SMS, pushProvider, null, null))
+                .isThrownBy(() -> new Stream.Defaults(Channel.SMS, pushProvider, null, null, null))
                 .withMessageContaining("does not serve default channel");
-        assertThat(new Stream.Defaults(Channel.PUSH, pushProvider, null, null).providerOptional())
+        assertThat(new Stream.Defaults(Channel.PUSH, pushProvider, null, null, null).providerOptional())
                 .contains(pushProvider);
     }
 
@@ -163,5 +164,26 @@ class StreamTest {
         // Act + Assert
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> Stream.register(STREAM_ID, " ", IntegrationType.KAFKA, Stream.Defaults.none()));
+    }
+
+    @Test
+    @DisplayName("IR-02, FR-2.3: a stream carries its own request limit and balancing strategy")
+    void streamLimitAndStrategyAreConfigurable() {
+        // Arrange
+        Stream stream = Stream.register(STREAM_ID, "iBank", IntegrationType.REST, Stream.Defaults.none());
+
+        // Act
+        stream.updateRateLimit(new RateLimit(500, 20_000, 0));
+        stream.updateDefaults(Stream.Defaults.none().withBalancingStrategy(BalancingStrategy.LEAST_COST));
+
+        // Assert
+        assertThat(stream.rateLimit().tps()).isEqualTo(500);
+        assertThat(stream.rateLimit().perMinute()).isEqualTo(20_000);
+        assertThat(stream.defaults().balancingStrategyOptional()).contains(BalancingStrategy.LEAST_COST);
+        assertThat(Stream.register(STREAM_ID, "CRM", IntegrationType.KAFKA, Stream.Defaults.none())
+                        .rateLimit()
+                        .isUnlimited())
+                .isTrue();
+        assertThatExceptionOfType(DomainValidationException.class).isThrownBy(() -> stream.updateRateLimit(null));
     }
 }

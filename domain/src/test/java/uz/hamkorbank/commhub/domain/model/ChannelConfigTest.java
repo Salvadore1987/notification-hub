@@ -12,6 +12,7 @@ import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ChannelStatus;
+import uz.hamkorbank.commhub.domain.model.type.QuotaExhaustionBehavior;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderId;
@@ -106,5 +107,23 @@ class ChannelConfigTest {
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> channel.updateFallbackOrder(List.of(sms, sms)))
                 .withMessageContaining("must be distinct");
+    }
+
+    @Test
+    @DisplayName("FR-2.6: a channel carries a quota of its own, unlimited until configured")
+    void channelQuotaIsConfigurable() {
+        // Arrange
+        ChannelConfig channel = ChannelConfig.of(Channel.SMS, BalancingStrategy.ROUND_ROBIN);
+
+        // Act
+        channel.updateQuota(QuotaConfig.ofCounts(500L, null, QuotaExhaustionBehavior.ALERT_ONLY));
+
+        // Assert
+        assertThat(ChannelConfig.of(Channel.EMAIL, BalancingStrategy.PRIMARY_ONLY)
+                        .quota()
+                        .isUnlimited())
+                .isTrue();
+        assertThat(channel.quota().dailyCountLimit()).contains(500L);
+        assertThatExceptionOfType(DomainValidationException.class).isThrownBy(() -> channel.updateQuota(null));
     }
 }

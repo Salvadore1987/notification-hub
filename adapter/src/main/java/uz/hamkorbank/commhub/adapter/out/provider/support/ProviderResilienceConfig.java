@@ -4,6 +4,10 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import uz.hamkorbank.commhub.adapter.out.persistence.config.ConfigurationCacheProperties;
+import uz.hamkorbank.commhub.application.port.out.ClockPort;
+import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
+import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 
 /**
  * The registries the provider adapters take their breakers and retries from (PR-01).
@@ -29,5 +33,30 @@ public class ProviderResilienceConfig {
     @Bean
     public RetryRegistry providerRetryRegistry() {
         return RetryRegistry.ofDefaults();
+    }
+
+    /**
+     * The runtime half of a provider profile: limits and endpoint settings from the database (FR-2.5,
+     * AD-07).
+     *
+     * <p>A bean here rather than a {@code @Component} so that the adapters keep one obvious place where
+     * everything shared between them is assembled.
+     */
+    /** The shared machinery handed to every provider adapter (PR-01, FR-2.5, SEC-04). */
+    @Bean
+    public ProviderSupport providerSupport(
+            ProviderCallExecutor executor,
+            ProviderThrottle throttle,
+            ProviderRuntimeSettings runtimeSettings,
+            SecretResolverPort secrets,
+            ClockPort clock,
+            ProviderRestClients clients) {
+        return new ProviderSupport(executor, throttle, runtimeSettings, secrets, clock, clients);
+    }
+
+    @Bean
+    public ProviderRuntimeSettings providerRuntimeSettings(
+            ProviderConfigRepository configuration, ConfigurationCacheProperties cacheProperties) {
+        return new ProviderRuntimeSettings(configuration, cacheProperties);
     }
 }

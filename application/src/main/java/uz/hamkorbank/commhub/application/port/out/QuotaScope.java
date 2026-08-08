@@ -27,6 +27,11 @@ public record QuotaScope(StreamId streamId, Channel channel, ProviderId provider
         return new QuotaScope(streamId, channel, null);
     }
 
+    /** Quota of a whole channel, across every stream sending over it (FR-2.6). */
+    public static QuotaScope ofChannel(Channel channel) {
+        return new QuotaScope(null, channel, null);
+    }
+
     public static QuotaScope ofProvider(Channel channel, ProviderId providerId) {
         return new QuotaScope(null, channel, providerId);
     }

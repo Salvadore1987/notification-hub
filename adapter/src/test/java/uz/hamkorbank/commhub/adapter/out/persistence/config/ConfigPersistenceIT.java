@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -159,7 +160,7 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
                 StreamId.of("mobile-app"),
                 "Mobile application",
                 IntegrationType.KAFKA,
-                new Stream.Defaults(Channel.SMS, provider.ref(), TrafficClass.TRANSACTIONAL, Priority.HIGH));
+                new Stream.Defaults(Channel.SMS, provider.ref(), TrafficClass.TRANSACTIONAL, Priority.HIGH, null));
         stream.updateQuota(QuotaConfig.ofCounts(1_000L, 20_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
         stream.updateQuietHours(QuietHours.rejecting(LocalTime.of(22, 0), LocalTime.of(7, 0)));
         stream.updateCredentialsRef("vault://streams/mobile-app");
@@ -239,6 +240,85 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
         // Assert
         assertThat(configuration.streamDefaults()).isEqualTo(Stream.Defaults.none());
         assertThat(configuration.providers()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("FR-2.6, PR-02: quota, endpoint config and health survive the round trip")
+    void providerKeepsQuotaEndpointConfigAndHealth() {
+        // Arrange
+        Provider provider = playmobile();
+        provider.updateQuota(QuotaConfig.ofCounts(5_000L, 100_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
+        providers.save(provider);
+        providers.saveEndpointConfig(provider.id(), Map.of("originator", "HAMKOR", "message-id-prefix", "HK"));
+
+        // Act
+        providers.updateHealth(
+                provider.id(), ProviderHealthStatus.DOWN, "errorRate=0.90", Instant.parse("2026-08-08T10:15:30Z"));
+        Provider restored = providers.findProvider(provider.id()).orElseThrow();
+
+        // Assert
+        assertThat(restored.quota().dailyCountLimit()).contains(5_000L);
+        assertThat(restored.quota().monthlyCountLimit()).contains(100_000L);
+        assertThat(restored.health()).isEqualTo(ProviderHealthStatus.DOWN);
+        assertThat(restored.isSelectable()).isFalse();
+        assertThat(restored.healthCheckedAt()).contains(Instant.parse("2026-08-08T10:15:30Z"));
+        assertThat(providers.endpointConfig(provider.id())).containsEntry("originator", "HAMKOR");
+    }
+
+    @Test
+    @DisplayName("FR-2.6: a channel keeps its own quota (FR-2.6)")
+    void channelKeepsQuota() {
+        // Arrange
+        Provider provider = providers.save(playmobile());
+        ChannelConfig channel = ChannelConfig.of(Channel.SMS, BalancingStrategy.ROUND_ROBIN);
+        channel.updateFallbackOrder(List.of(provider.ref()));
+        channel.updateQuota(QuotaConfig.ofCounts(null, 1_000_000L, QuotaExhaustionBehavior.ALERT_ONLY));
+
+        // Act
+        providers.save(channel);
+
+        // Assert
+        assertThat(providers.findChannel(Channel.SMS).orElseThrow().quota().monthlyCountLimit())
+                .contains(1_000_000L);
+        assertThat(providers.findChannels()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("FR-2.1, FR-8.9: a provider and a policy can be deleted, and lookups stop finding them")
+    void deletesProviderAndPolicy() {
+        // Arrange
+        Provider provider = providers.save(smsGate());
+        RoutingPolicy policy = providers.save(RoutingPolicy.of(
+                RoutingPolicyId.newId(), RoutingPolicy.Match.any(), RoutingPolicy.Action.toChannel(Channel.SMS), 5));
+
+        // Act
+        providers.deleteProvider(provider.id());
+        providers.deletePolicy(policy.id());
+
+        // Assert
+        assertThat(providers.findProvider(provider.id())).isEmpty();
+        assertThat(providers.findAllProviders()).isEmpty();
+        assertThat(providers.findPolicy(policy.id())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("IR-02, FR-2.3: a stream keeps its request limit and balancing strategy")
+    void streamKeepsLimitAndStrategy() {
+        // Arrange
+        Stream stream = Stream.register(
+                StreamId.of("ibank-retail"),
+                "iBank retail",
+                IntegrationType.REST,
+                Stream.Defaults.none().withBalancingStrategy(BalancingStrategy.LEAST_COST));
+        stream.updateRateLimit(new RateLimit(500, 20_000, 0));
+
+        // Act
+        streams.save(stream);
+        Stream restored = streams.findById(StreamId.of("ibank-retail")).orElseThrow();
+
+        // Assert
+        assertThat(restored.rateLimit()).isEqualTo(new RateLimit(500, 20_000, 0));
+        assertThat(restored.defaults().balancingStrategyOptional()).contains(BalancingStrategy.LEAST_COST);
     }
 
     private Provider playmobile() {

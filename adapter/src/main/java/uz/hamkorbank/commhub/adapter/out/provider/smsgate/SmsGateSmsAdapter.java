@@ -18,6 +18,8 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
+import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
@@ -70,23 +72,19 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
     private final ProviderThrottle throttle;
     private final SecretResolverPort secrets;
     private final ClockPort clock;
+    private final ProviderRuntimeSettings runtimeSettings;
     private final RestClient client;
 
-    public SmsGateSmsAdapter(
-            SmsGateProperties properties,
-            SmsGateSendCodec codec,
-            ProviderCallExecutor executor,
-            ProviderThrottle throttle,
-            SecretResolverPort secrets,
-            ClockPort clock,
-            ProviderRestClients clients) {
+    public SmsGateSmsAdapter(SmsGateProperties properties, SmsGateSendCodec codec, ProviderSupport support) {
         this.properties = Guard.notNull(properties, "properties");
         this.codec = Guard.notNull(codec, "codec");
-        this.executor = Guard.notNull(executor, "executor");
-        this.throttle = Guard.notNull(throttle, "throttle");
-        this.secrets = Guard.notNull(secrets, "secrets");
-        this.clock = Guard.notNull(clock, "clock");
-        this.client = Guard.notNull(clients, "clients").create(properties.http());
+        Guard.notNull(support, "support");
+        this.executor = support.executor();
+        this.throttle = support.throttle();
+        this.secrets = support.secrets();
+        this.clock = support.clock();
+        this.runtimeSettings = support.runtimeSettings();
+        this.client = support.clients().create(properties.http());
     }
 
     @Override
@@ -101,7 +99,7 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
         if (held.isPresent()) {
             return held.get();
         }
-        String document = codec.encodeSend(credentials(), submission, properties.sending());
+        String document = codec.encodeSend(credentials(), submission, sending());
         return executor.execute(properties.providerCode(), properties.resilience(), () -> callSend(document));
     }
 
@@ -130,7 +128,7 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
         if (sendable.isEmpty()) {
             return List.copyOf(acks);
         }
-        String document = codec.encodeSendBatch(credentials(), sendable, properties.sending());
+        String document = codec.encodeSendBatch(credentials(), sendable, sending());
         List<ProviderAck> sent = executor.executeBatch(
                 properties.providerCode(),
                 properties.resilience(),
@@ -226,13 +224,23 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
     private Optional<ProviderAck> throttleVerdict(SmsSubmission submission) {
         Optional<String> refusal = throttle.acquire(
                 properties.providerCode(),
-                properties.rateLimit(),
+                runtimeSettings.rateLimitOf(properties.providerCode(), properties.rateLimit()),
                 submission.recipient().value());
         if (refusal.isEmpty()) {
             return Optional.empty();
         }
         LOG.info("SMS Gate send held back for {}: {}", Masking.msisdn(submission.recipient()), refusal.get());
         return Optional.of(ProviderAck.failed(THROTTLED_CODE, ErrorClass.RETRYABLE, refusal.get(), clock.now()));
+    }
+
+    /**
+     * Sending settings with the {@code provider.endpoint_config} of this provider applied (AD-07).
+     *
+     * <p>Resolved per call so that a changed sender name or weight applies within the configuration
+     * refresh window rather than at the next restart (NF-07).
+     */
+    private SmsGateProperties.Sending sending() {
+        return properties.sending().overlay(runtimeSettings.endpointConfigOf(properties.providerCode()));
     }
 
     /** {@code login} and {@code key}, resolved per call so a rotation applies without a restart (SG-04). */

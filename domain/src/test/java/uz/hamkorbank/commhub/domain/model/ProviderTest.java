@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ProviderHealthStatus;
+import uz.hamkorbank.commhub.domain.model.type.QuotaExhaustionBehavior;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
@@ -35,6 +36,22 @@ class ProviderTest {
         assertThat(provider.tariff()).isEmpty();
         assertThat(provider.credentialsRef()).isEmpty();
         assertThat(provider.weight()).isEqualTo(Provider.DEFAULT_WEIGHT);
+    }
+
+    @Test
+    @DisplayName("FR-2.6: a provider carries its own quota, unlimited until one is configured")
+    void providerQuotaIsConfigurable() {
+        // Arrange
+        Provider provider = newProvider();
+
+        // Act
+        provider.updateQuota(QuotaConfig.ofCounts(1_000L, 20_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
+
+        // Assert
+        assertThat(newProvider().quota().isUnlimited()).isTrue();
+        assertThat(provider.quota().dailyCountLimit()).contains(1_000L);
+        assertThat(provider.quota().monthlyCountLimit()).contains(20_000L);
+        assertThatExceptionOfType(DomainValidationException.class).isThrownBy(() -> provider.updateQuota(null));
     }
 
     @Test

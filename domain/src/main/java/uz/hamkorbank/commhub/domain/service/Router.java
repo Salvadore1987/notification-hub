@@ -67,13 +67,27 @@ public final class Router {
         if (candidates.isEmpty()) {
             return RoutingResult.NoRoute.of("no selectable provider for channel " + channel.get());
         }
-        BalancingStrategy strategy = policy.flatMap(matched -> matched.action().balancingStrategyOptional())
-                .orElseGet(() -> channelConfig.get().balancingStrategy());
+        BalancingStrategy strategy = strategyOf(configuration, channelConfig.get(), policy);
         ProviderRef primary = select(strategy, candidates, configuration, request);
         List<ProviderRef> fallbacks = candidates.stream()
                 .filter(candidate -> !candidate.equals(primary))
                 .toList();
         return new RoutingResult.Routed(channel.get(), primary, fallbacks, strategy);
+    }
+
+    /**
+     * Balancing strategy of a decision (FR-2.3).
+     *
+     * <p>Most specific configuration wins: a matching policy first, then the default of the submitting
+     * stream, then the strategy of the channel. A stream that has no opinion inherits the channel's,
+     * which is what makes "settable on the channel and/or on the stream" a single ordering rather than
+     * two competing settings.
+     */
+    private static BalancingStrategy strategyOf(
+            RoutingConfiguration configuration, ChannelConfig channelConfig, Optional<RoutingPolicy> policy) {
+        return policy.flatMap(matched -> matched.action().balancingStrategyOptional())
+                .or(() -> configuration.streamDefaults().balancingStrategyOptional())
+                .orElseGet(channelConfig::balancingStrategy);
     }
 
     /** Channel a message will be delivered over (FR-2.4, MP-03). */

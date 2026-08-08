@@ -3,6 +3,7 @@ package uz.hamkorbank.commhub.domain.model;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
 import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
@@ -35,6 +36,7 @@ public final class Stream extends AggregateRoot<StreamId> {
 
     private Defaults defaults;
     private QuotaConfig quota;
+    private RateLimit rateLimit;
     private QuietHours quietHours;
     private StreamStatus status;
     private String credentialsRef;
@@ -46,6 +48,7 @@ public final class Stream extends AggregateRoot<StreamId> {
         this.integrationType = Guard.notNull(integrationType, "Stream.integrationType");
         this.defaults = Guard.notNull(defaults, "Stream.defaults");
         this.quota = QuotaConfig.unlimited();
+        this.rateLimit = RateLimit.unlimited();
         this.status = StreamStatus.ACTIVE;
     }
 
@@ -73,6 +76,16 @@ public final class Stream extends AggregateRoot<StreamId> {
 
     public void updateQuota(QuotaConfig newQuota) {
         this.quota = Guard.notNull(newQuota, "newQuota");
+    }
+
+    /**
+     * Request rate this source system may submit at (IR-02).
+     *
+     * <p>Counted in requests rather than messages — a batch chunk is one request — and enforced by the
+     * synchronous API adapter; a Kafka stream is paced by its partitions and its consumer group.
+     */
+    public void updateRateLimit(RateLimit newRateLimit) {
+        this.rateLimit = Guard.notNull(newRateLimit, "newRateLimit");
     }
 
     public void updateQuietHours(QuietHours newQuietHours) {
@@ -159,6 +172,10 @@ public final class Stream extends AggregateRoot<StreamId> {
         return quota;
     }
 
+    public RateLimit rateLimit() {
+        return rateLimit;
+    }
+
     public Optional<QuietHours> quietHours() {
         return Optional.ofNullable(quietHours);
     }
@@ -176,11 +193,18 @@ public final class Stream extends AggregateRoot<StreamId> {
     }
 
     /**
-     * Defaults applied to submissions of this stream (FR-2.4, TC-02); every field is optional.
+     * Defaults applied to submissions of this stream (FR-2.4, FR-2.3, TC-02); every field is optional.
      *
      * @param provider default provider; {@code null} leaves the choice to the router
+     * @param balancingStrategy strategy this stream's traffic is balanced with; {@code null} keeps the
+     *     strategy of the channel (FR-2.3)
      */
-    public record Defaults(Channel channel, ProviderRef provider, TrafficClass trafficClass, Priority priority) {
+    public record Defaults(
+            Channel channel,
+            ProviderRef provider,
+            TrafficClass trafficClass,
+            Priority priority,
+            BalancingStrategy balancingStrategy) {
 
         public Defaults {
             if (channel != null && provider != null) {
@@ -191,11 +215,11 @@ public final class Stream extends AggregateRoot<StreamId> {
         }
 
         public static Defaults none() {
-            return new Defaults(null, null, null, null);
+            return new Defaults(null, null, null, null, null);
         }
 
         public static Defaults of(Channel channel, TrafficClass trafficClass) {
-            return new Defaults(channel, null, trafficClass, null);
+            return new Defaults(channel, null, trafficClass, null, null);
         }
 
         public Optional<Channel> channelOptional() {
@@ -204,6 +228,15 @@ public final class Stream extends AggregateRoot<StreamId> {
 
         public Optional<ProviderRef> providerOptional() {
             return Optional.ofNullable(provider);
+        }
+
+        /** Strategy override of the stream; empty leaves the channel strategy in charge (FR-2.3). */
+        public Optional<BalancingStrategy> balancingStrategyOptional() {
+            return Optional.ofNullable(balancingStrategy);
+        }
+
+        public Defaults withBalancingStrategy(BalancingStrategy strategy) {
+            return new Defaults(channel, provider, trafficClass, priority, strategy);
         }
     }
 }

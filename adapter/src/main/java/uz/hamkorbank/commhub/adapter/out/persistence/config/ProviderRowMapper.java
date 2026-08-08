@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.adapter.out.persistence.json.QuotaConfigJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.RateLimitJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.TariffJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.JsonCodec;
@@ -48,7 +49,11 @@ public class ProviderRowMapper implements RowMapper<Provider> {
         if (rs.getBoolean("maintenance")) {
             provider.enterMaintenance();
         }
-        provider.markHealth(SqlValues.enumValue(rs, "health_status", ProviderHealthStatus.class));
+        provider.updateQuota(
+                QuotaConfigJson.toDomain(jsonCodec.read(rs.getString("quota_config"), QuotaConfigJson.class)));
+        provider.markHealth(
+                SqlValues.enumValue(rs, "health_status", ProviderHealthStatus.class),
+                SqlValues.instant(rs, "health_checked_at"));
         return provider;
     }
 }

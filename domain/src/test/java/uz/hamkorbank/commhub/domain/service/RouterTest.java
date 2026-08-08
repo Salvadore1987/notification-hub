@@ -348,6 +348,51 @@ class RouterTest {
                 .isThrownBy(() -> RoutingRequest.of(smsMessage(), -1, 0L));
     }
 
+    @Test
+    @DisplayName("FR-2.3: the stream strategy overrides the channel strategy")
+    void streamStrategyOverridesTheChannel() {
+        // Arrange
+        Provider expensive = smsProvider("PLAYMOBILE", 10, uzs("30"));
+        Provider cheap = smsProvider("SMSGATE", 1, uzs("20"));
+        RoutingConfiguration configuration = routingConfiguration(
+                        BalancingStrategy.PRIMARY_ONLY, List.of(expensive, cheap), List.of())
+                .withStreamDefaults(Stream.Defaults.none().withBalancingStrategy(BalancingStrategy.LEAST_COST));
+
+        // Act
+        RoutingResult.Routed routed = router.route(RoutingRequest.of(smsMessage(), 1, 0L), configuration)
+                .routed()
+                .orElseThrow();
+
+        // Assert
+        assertThat(routed.strategy()).isEqualTo(BalancingStrategy.LEAST_COST);
+        assertThat(routed.provider()).isEqualTo(cheap.ref());
+    }
+
+    @Test
+    @DisplayName("FR-2.3: a matching policy still outranks the strategy of the stream")
+    void policyStrategyOutranksTheStream() {
+        // Arrange
+        Provider first = smsProvider("PLAYMOBILE", 10, uzs("30"));
+        Provider second = smsProvider("SMSGATE", 1, uzs("20"));
+        RoutingPolicy policy = RoutingPolicy.of(
+                RoutingPolicyId.newId(),
+                RoutingPolicy.Match.any(),
+                new RoutingPolicy.Action(null, List.of(), BalancingStrategy.PRIMARY_ONLY),
+                10);
+        RoutingConfiguration configuration = routingConfiguration(
+                        BalancingStrategy.ROUND_ROBIN, List.of(first, second), List.of(policy))
+                .withStreamDefaults(Stream.Defaults.none().withBalancingStrategy(BalancingStrategy.LEAST_COST));
+
+        // Act
+        RoutingResult.Routed routed = router.route(RoutingRequest.of(smsMessage(), 1, 0L), configuration)
+                .routed()
+                .orElseThrow();
+
+        // Assert
+        assertThat(routed.strategy()).isEqualTo(BalancingStrategy.PRIMARY_ONLY);
+        assertThat(routed.provider()).isEqualTo(first.ref());
+    }
+
     private ProviderRef chosen(RoutingConfiguration configuration, long rotation) {
         return router.route(RoutingRequest.of(smsMessage(), 1, rotation), configuration)
                 .routed()

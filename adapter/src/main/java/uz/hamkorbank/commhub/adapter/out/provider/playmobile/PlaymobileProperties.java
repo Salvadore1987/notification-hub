@@ -14,10 +14,13 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 /**
  * Everything the Playmobile integration needs that is not in the message (§9.1, PM-01, PM-03).
  *
- * <p>Configuration and not database rows for this phase. The {@code provider} table already has an
- * {@code endpoint_config} column reserved for it, and Phase 8 moves the transport settings there so an
- * operator can change them without a restart (AD-07, NF-07). Credentials never make that move: they
- * stay references resolved through {@code SecretResolverPort} (SEC-04).
+ * <p>The values here are the deployment's defaults. Since Phase 8 the settings an operator changes
+ * between deploys — the alpha-name, the {@code message-id} prefix, the default TTL and the priority
+ * mapping — are overlaid from {@code provider.endpoint_config} through
+ * {@link uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings}, so changing them
+ * needs no restart (AD-07, NF-07). Credentials never make that move: they stay references resolved
+ * through {@code SecretResolverPort} (SEC-04), and neither do base URL, timeouts or breaker windows,
+ * which decide how the HTTP client itself is built.
  *
  * @param enabled whether the adapter is deployed at all; off leaves the bean uncreated and the router
  *     without a Playmobile adapter, which the sending saga reports as "no adapter" rather than failing
@@ -104,6 +107,45 @@ public record PlaymobileProperties(
 
         public static Sending defaults() {
             return new Sending(null, null, null, null);
+        }
+
+        /**
+         * These settings with {@code provider.endpoint_config} applied on top (AD-07, §10.1).
+         *
+         * <p>Keys: {@code originator}, {@code message-id-prefix}, {@code default-ttl} (ISO-8601) and
+         * {@code priority.<traffic-class>}. An absent or unparsable key leaves the configured value in
+         * place — a typo in the admin panel must not stop SMS from going out, and the field it would
+         * have changed is visible to the operator either way.
+         */
+        public Sending overlay(Map<String, String> endpointConfig) {
+            if (endpointConfig == null || endpointConfig.isEmpty()) {
+                return this;
+            }
+            Map<TrafficClass, String> overlaid = new EnumMap<>(priorities);
+            for (TrafficClass trafficClass : TrafficClass.values()) {
+                String key = "priority."
+                        + trafficClass.name().toLowerCase(Locale.ROOT).replace('_', '-');
+                String word = endpointConfig.get(key);
+                if (word != null && RANKS.containsKey(word)) {
+                    overlaid.put(trafficClass, word);
+                }
+            }
+            return new Sending(
+                    endpointConfig.getOrDefault("originator", originator),
+                    endpointConfig.getOrDefault("message-id-prefix", organisationPrefix),
+                    duration(endpointConfig.get("default-ttl"), defaultTtl),
+                    overlaid);
+        }
+
+        private static Duration duration(String value, Duration fallback) {
+            if (value == null || value.isBlank()) {
+                return fallback;
+            }
+            try {
+                return Duration.parse(value);
+            } catch (java.time.format.DateTimeParseException e) {
+                return fallback;
+            }
         }
 
         /**
