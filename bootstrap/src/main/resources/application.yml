@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: notification-hub
+
+  # AR-07: массовый I/O к провайдерам — на виртуальных потоках (Java 25 Loom).
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/commhub}
+    username: ${DB_USER:commhub}
+    password: ${DB_PASSWORD:commhub}
+    hikari:
+      pool-name: commhub-pool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN:5}
+
+  # DB-01: схема воспроизводима с нуля только через миграции.
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: comm_hub
+    default-schema: comm_hub
+    baseline-on-migrate: false
+    validate-on-migrate: true
+    clean-disabled: true
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+  # NF-05: graceful shutdown с дообработкой in-flight
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    uz.hamkorbank.commhub: DEBUG

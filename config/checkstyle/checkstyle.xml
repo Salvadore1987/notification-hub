@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Checkstyle-конфигурация Notification Hub.
+  Форматирование (отступы, переносы, порядок импортов) обеспечивает Spotless / palantir-java-format,
+  поэтому здесь остаются только смысловые правила и правила проекта.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+    <property name="fileExtensions" value="java"/>
+
+    <module name="SuppressionFilter">
+        <property name="file" value="${config_loc}/suppressions.xml"/>
+    </module>
+
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+    <module name="NewlineAtEndOfFile"/>
+    <module name="LineLength">
+        <property name="max" value="120"/>
+        <property name="ignorePattern" value="^\s*(//|\*) .*https?://"/>
+    </module>
+
+    <module name="TreeWalker">
+        <!-- Правило проекта: запрет `var` — типы переменных указываются явно. -->
+        <module name="MatchXpath">
+            <property name="query" value="//VARIABLE_DEF/TYPE/IDENT[@text='var']"/>
+            <message key="matchxpath.match"
+                     value="Использование 'var' запрещено правилами проекта: указывайте тип явно."/>
+        </module>
+
+        <!-- Правило проекта: только constructor injection, поле-инъекция запрещена. -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="^\s*@(Autowired|Inject|Resource)\s*$"/>
+            <property name="message"
+                      value="Только constructor injection: @Autowired/@Inject/@Resource на полях и сеттерах запрещены."/>
+        </module>
+
+        <!-- Импорты -->
+        <module name="AvoidStarImport"/>
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="sun,com.sun,jdk.internal,org.junit.Assert"/>
+        </module>
+
+        <!-- Именование -->
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+        </module>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="ParameterName"/>
+        <module name="LocalVariableName"/>
+        <module name="MemberName"/>
+        <module name="ConstantName"/>
+        <module name="RecordComponentName"/>
+
+        <!-- Размеры -->
+        <module name="MethodLength">
+            <property name="max" value="80"/>
+        </module>
+        <module name="ParameterNumber">
+            <property name="max" value="8"/>
+        </module>
+
+        <!-- Кодовые дефекты -->
+        <module name="EqualsHashCode"/>
+        <module name="CovariantEquals"/>
+        <module name="StringLiteralEquality"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="MissingSwitchDefault"/>
+        <module name="FallThrough"/>
+        <module name="EmptyStatement"/>
+        <module name="IllegalCatch">
+            <property name="illegalClassNames" value="java.lang.Throwable,java.lang.Error"/>
+        </module>
+        <module name="IllegalThrows"/>
+        <module name="NeedBraces"/>
+        <module name="OneStatementPerLine"/>
+        <module name="MultipleVariableDeclarations"/>
+        <module name="ModifierOrder"/>
+        <module name="RedundantModifier"/>
+        <module name="FinalClass"/>
+        <module name="HideUtilityClassConstructor"/>
+        <module name="VisibilityModifier">
+            <property name="protectedAllowed" value="false"/>
+        </module>
+        <module name="DefaultComesLast"/>
+        <module name="UpperEll"/>
+        <module name="ArrayTypeStyle"/>
+
+        <!-- Логи и PII: запрет System.out/err (structured JSON logs — OBS-03) -->
+        <module name="Regexp">
+            <property name="format" value="System\.(out|err)\.print"/>
+            <property name="illegalPattern" value="true"/>
+            <property name="message" value="Используйте логгер (structured JSON logs), а не System.out/System.err."/>
+        </module>
+
+        <module name="SuppressWarningsHolder"/>
+    </module>
+
+    <module name="SuppressWarningsFilter"/>
+</module>

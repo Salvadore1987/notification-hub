@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!-- Главный класс Spring Boot регистрируется как конфигурационный бин и не может иметь private-конструктор. -->
+    <suppress checks="HideUtilityClassConstructor" files=".*Application\.java"/>
+
+    <!-- Тесты: длинные наглядные сценарии и фикстуры допустимы. -->
+    <suppress checks="MethodLength" files="[\\/]src[\\/]test[\\/]"/>
+    <suppress checks="MagicNumber" files="[\\/]src[\\/]test[\\/]"/>
+</suppressions>

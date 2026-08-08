@@ -11,18 +11,30 @@
 
 ## ЧАСТЬ A. BACKEND
 
-### A0. Каркас проекта и инфраструктура разработки
+### Phase 1. Каркас проекта и инфраструктура разработки ✅
 
-- [ ] Инициализировать Gradle multi-module (`domain`, `application`, `adapter`, `bootstrap`) — AR-01
-- [ ] Настроить Java 25 toolchain, Spring Boot 4.x BOM, включить preview/Loom при необходимости
-- [ ] Подключить MapStruct (`mapstruct` + `mapstruct-processor`) во все модули с мапперами — правило проекта
-- [ ] Настроить форматирование/линт (Spotless), Checkstyle, запрет `var` (правило проекта)
-- [ ] `docker-compose` для локали: PostgreSQL 16, Kafka + Schema Registry, WireMock, MailHog/GreenMail
-- [ ] Базовый CI-пайплайн: build + unit + ArchUnit + integration (Testcontainers) + SAST/dependency-scan (SEC-09)
-- [ ] Настроить Flyway, каталог миграций, воспроизведение схемы с нуля (DB-01)
-- [ ] Git-репозиторий, ветвление, PR-шаблон
+- ✅ Инициализировать Gradle multi-module (`domain`, `application`, `adapter`, `bootstrap`) — AR-01
+  — Gradle wrapper 9.7.0, базовый пакет `uz.hamkorbank.commhub`, зависимости `bootstrap → adapter → application → domain`
+- ✅ Настроить Java 25 toolchain, Spring Boot 4.x BOM, включить preview/Loom при необходимости
+  — toolchain Java 25 (+ foojay-resolver для автозагрузки JDK), BOM Spring Boot 4.1.0, `spring.threads.virtual.enabled=true`;
+  preview-флаги не нужны — Virtual Threads в Java 25 GA (AR-07)
+- ✅ Подключить MapStruct (`mapstruct` + `mapstruct-processor`) во все модули с мапперами — правило проекта
+  — подключён в `application` и `adapter`, генерация `componentModel = "spring"` проверена
+- ✅ Настроить форматирование/линт (Spotless), Checkstyle, запрет `var` (правило проекта)
+  — Spotless + palantir-java-format, `config/checkstyle/checkstyle.xml` (запрет `var` через MatchXpath,
+  запрет field injection, запрет `System.out/err`), suppressions-файл; входит в `./gradlew build`
+- ✅ `docker-compose` для локали: PostgreSQL 16, Kafka + Schema Registry, WireMock, MailHog/GreenMail
+  — `docker-compose.yml`: postgres:16, apache/kafka:4.2.1 (KRaft), cp-schema-registry (BACKWARD), wiremock, greenmail
+- ✅ Базовый CI-пайплайн: build + unit + ArchUnit + integration (Testcontainers) + SAST/dependency-scan (SEC-09)
+  — `.github/workflows/ci.yml`: jobs `build` / `integration-test` / `security-scan` (CodeQL + dependency review)
+- ✅ Настроить Flyway, каталог миграций, воспроизведение схемы с нуля (DB-01)
+  — `adapter/src/main/resources/db/migration/V1__baseline.sql`, схема `comm_hub`, тест `FlywayMigrationIT`
+- ✅ Git-репозиторий, ветвление, PR-шаблон
+  — `.gitignore`, `CONTRIBUTING.md` (trunk-based, Conventional Commits), `.github/pull_request_template.md`
 
-### A1. Домен (`domain/`) — чистая Java, без Spring/JPA/Kafka/Jackson (AR-02)
+> Каркас ArchUnit-теста (`HexagonalArchitectureTest`: AR-02/AR-03) заведён уже сейчас; полный набор правил — Phase 15.
+
+### Phase 2. Домен (`domain/`) — чистая Java, без Spring/JPA/Kafka/Jackson (AR-02)
 
 - [ ] Value objects и идентификаторы: `MessageId` (UUIDv7), `ExternalMessageId`, `StreamId`, `BatchId`, `DedupKey`, `CorrelationId`, `Recipient`, `EmailAddress`, `Msisdn`
 - [ ] Enum'ы: `TrafficClass`, `Priority`, `Channel`, `MessageStatus` (§6.3), `TemplateStatus`, `BatchStatus`
@@ -36,7 +48,7 @@
 - [ ] Доменный сервис `FallbackChain` (порядок резерва) — FR-2.2
 - [ ] Unit-тесты домена ≥80% строк, ≥90% критической логики (QA-01, AAA-паттерн)
 
-### A2. Порты приложения (`application/port`) и use cases
+### Phase 3. Порты приложения (`application/port`) и use cases
 
 - [ ] Input-порты (интерфейсы use case) с Command/Query records (AR-06): `SubmitMessage`, `SubmitBatch`, `PauseBatch`/`ResumeBatch`/`StopBatch`, `ResendDlq`, `ProcessProviderStatus`, `KillSwitch`
 - [ ] Output-порты: `MessageRepository`, `BatchRepository`, `StreamRepository`, `ProviderConfigRepository`, `TemplateRepository`, `SuppressionRepository`, `DedupRegistryPort`, `OutboxPort`, `StatusPublisherPort`, `SmsProviderPort`, `EmailProviderPort`, `PushProviderPort`, `ClockPort`, `MetricsPort`, `AuditPort`, `SecretResolverPort`
@@ -54,7 +66,7 @@
 - [ ] DTO (records) в `dto/` + MapStruct-мапперы в `mapper/` для конвертаций (правило проекта)
 - [ ] Unit-тесты use cases (моки портов), тесты идемпотентности и статусной машины
 
-### A3. Персистентность (`adapter/out/persistence`) — PostgreSQL
+### Phase 4. Персистентность (`adapter/out/persistence`) — PostgreSQL
 
 - [ ] Flyway-миграции таблиц (§10.1): `stream`, `channel`, `provider`, `routing_policy`, `template`, `template_version`, `batch`, `message`, `message_status_history`, `delivery_attempt`, `outbox_event`, `dlq_entry`, `suppression_list`, `dedup_registry`, `quota_counter`, `audit_log`, `app_user`/`app_role`/`user_role`
 - [ ] Партиционирование по времени `message`, `message_status_history`, `delivery_attempt`, `outbox_event` + авто-создание/отсоединение партиций (DB-02)
@@ -65,7 +77,7 @@
 - [ ] Retention/архивация (конфигурируемый срок ≥12 мес) (DB-03)
 - [ ] Интеграционные тесты с Testcontainers PostgreSQL (QA-03)
 
-### A4. Transactional Outbox + Kafka (гарантии доставки)
+### Phase 5. Transactional Outbox + Kafka (гарантии доставки)
 
 - [ ] Запись `outbox_event` в одной транзакции с бизнес-изменением (AD-03)
 - [ ] Outbox relay (polling publisher) → Kafka, идемпотентная публикация, at-least-once
@@ -73,7 +85,7 @@
 - [ ] Формат исходящего статуса §6.4, сериализация Avro/JSON в Schema Registry (BACKWARD) (NF-08)
 - [ ] Тест chaos: падение инстанса в процессе отправки → нет потерь/дублей (QA-06, AD-03)
 
-### A5. Входящие адаптеры (`adapter/in`)
+### Phase 6. Входящие адаптеры (`adapter/in`)
 
 - [ ] Kafka-консьюмеры входящих топиков по классам: `critical`/`transactional`/`notification`/`batch-control` (IK-01, AD-05)
 - [ ] Раздельные пулы/конкурентность на класс трафика, изоляция OTP (TC-01)
@@ -87,7 +99,7 @@
 - [ ] OpenAPI 3.1 генерация из кода (IR-03)
 - [ ] `@RestControllerAdvice` в `rest/handlers/` — валидация, домен-ошибки, fallback (правило проекта)
 
-### A6. Адаптеры провайдеров — SMS (этап MVP, §16 этап 2)
+### Phase 7. Адаптеры провайдеров — SMS (этап MVP, §16 этап 2)
 
 - [ ] Общий каркас адаптеров: таймауты, retry+backoff+jitter, circuit breaker (Resilience4j), Virtual Threads (PR-01, AR-07)
 - [ ] Секреты только из `SecretResolverPort` (Vault/K8s), маскирование в логах (SEC-04, SG-04, PR-03)
@@ -100,7 +112,7 @@
 - [ ] (Опция) SMPP-адаптер — за флагом конфигурации, в MVP выключен (PM-04)
 - [ ] Contract-тесты на WireMock-стабах из документации провайдеров (QA-04, PR-04)
 
-### A7. Маршрутизация, каналы, провайдеры, квоты (конфигурация в БД)
+### Phase 8. Маршрутизация, каналы, провайдеры, квоты (конфигурация в БД)
 
 - [ ] CRUD провайдеров/каналов, основной+резервные, порядок fallback (FR-2.1, FR-2.2)
 - [ ] Балансировка round-robin/вес/least-cost на уровне канала/потока (FR-2.3)
@@ -111,7 +123,7 @@
 - [ ] Декларативные `routing_policy` (match/action/priority); dry-run «какой маршрут получит сообщение X» (FR-8.9 задел)
 - [ ] Health-check провайдеров + авто failover/failback (PR-02, FR-6.3)
 
-### A8. Шаблоны и persoнализация
+### Phase 9. Шаблоны и persoнализация
 
 - [ ] CRUD шаблонов, версии, локали RU/UZ/EN, статусы DRAFT→ON_REVIEW→PUBLISHED→ARCHIVED (FR-4.1)
 - [ ] Maker/checker: автор не публикует свой шаблон (FR-4.2)
@@ -120,7 +132,7 @@
 - [ ] Маппинг на провайдерские шаблоны (Playmobile `template-id`), статус согласования (FR-4.5)
 - [ ] Миграция существующей базы (~470 шаблонов) — скрипт импорта (FR-4.6)
 
-### A9. Фильтрация и compliance
+### Phase 10. Фильтрация и compliance
 
 - [ ] Suppression list: проверка перед отправкой, причины, API+админка, результат `REJECTED/SUPPRESSED` (FR-5.1)
 - [ ] Учёт opt-in/opt-out для нетранзакционных классов (FR-5.2)
@@ -129,7 +141,7 @@
 - [ ] PCI: детектор PAN по Луну, reject/alert, запрет PAN в SMS (SEC-05)
 - [ ] Email hard bounce → авто-добавление в suppression (EM-02)
 
-### A10. Email (§16 этап 3)
+### Phase 11. Email (§16 этап 3)
 
 - [ ] `EmailProviderPort` → SMTP-адаптер: STARTTLS/TLS, пул соединений, лимит скорости (EM-01)
 - [ ] HTML+plain (multipart/alternative), вложения с лимитом, заголовок `X-Comm-Message-Id` (EM-01)
@@ -137,7 +149,7 @@
 - [ ] DKIM-подпись при необходимости (конфиг) (EM-03)
 - [ ] Email-шаблоны, интеграционные тесты (GreenMail) (QA-03)
 
-### A11. Push (§16 этап 4)
+### Phase 12. Push (§16 этап 4)
 
 - [ ] `PushProviderPort`, выбор адаптера по платформе токена (§9.4)
 - [ ] **FCM** адаптер HTTP v1, OAuth2 service account, автообновление токена (PU-01, PU-02)
@@ -151,7 +163,7 @@
 - [ ] Push-статус ограничен `SENT_TO_PROVIDER`; `DELIVERED` — фаза 2 по событию приложения (PU-12)
 - [ ] Sandbox/тестовые токены для тестовой отправки (PU-13)
 
-### A12. Наблюдаемость, безопасность, эксплуатация
+### Phase 13. Наблюдаемость, безопасность, эксплуатация
 
 - [ ] Метрики Micrometer→Prometheus по канал/провайдер/поток/класс, латентности этапов, OTP e2e, лаги Kafka, состояние CB, квоты (OBS-01)
 - [ ] Distributed tracing OpenTelemetry, `correlationId` в baggage/логах (OBS-02, FR-8.6)
@@ -166,7 +178,7 @@
 - [ ] K8s: liveness/readiness/startup, graceful shutdown с дообработкой in-flight (NF-05)
 - [ ] Grafana-дашборды + runbook (OBS-05, OBS-06)
 
-### A13. Admin REST BFF (backend для будущего frontend)
+### Phase 14. Admin REST BFF (backend для будущего frontend)
 
 - [ ] BFF-эндпоинты под все разделы админки (§11.2): дашборд, батчи, сообщения, DLQ, потоки, каналы/провайдеры, маршрутизация, шаблоны, suppression, статистика, аудит, администрирование
 - [ ] OIDC-интеграция (Keycloak/AD), проверка ролей на backend (UI-02, SEC-02, FR-7.2)
@@ -174,7 +186,7 @@
 - [ ] SSE/polling для дашбордов (UI-03)
 - [ ] Kill switch, системные параметры (§11.2 Администрирование)
 
-### A14. Тестирование и приёмка backend
+### Phase 15. Тестирование и приёмка backend
 
 - [ ] ArchUnit: правила гексагона AR-02/AR-03 (QA-02)
 - [ ] Integration Testcontainers: PostgreSQL, Kafka, WireMock (Playmobile/SMS Gate/FCM/APNs), GreenMail (QA-03)
@@ -187,9 +199,9 @@
 
 ## ЧАСТЬ B. FRONTEND (React SPA админ-панель)
 
-Начинается после готовности backend Admin BFF (A13) и стабилизации контрактов.
+Начинается после готовности backend Admin BFF (Phase 14) и стабилизации контрактов.
 
-### B0. Каркас
+### Phase 16. Каркас
 
 - [ ] Vite + React 18 + TypeScript, структура проекта, ESLint/Prettier (UI-01)
 - [ ] UI-kit (Ant Design или MUI — согласовать с Банком) (UI-01)
@@ -199,7 +211,7 @@
 - [ ] API-клиент к Admin BFF (типы из OpenAPI), обработка ошибок/`Retry-After`
 - [ ] Общие компоненты: серверные таблицы (пагинация/сортировка/фильтр), виртуализация, маскирование PII (UI-03, DB-04)
 
-### B1. Разделы (по §11.2)
+### Phase 17. Разделы (по §11.2)
 
 - [ ] Дашборд: объёмы по каналам, delivery rate, латентность OTP, health провайдеров, активные батчи, алерты; автообновление (все роли)
 - [ ] Рассылки (батчи): список/карточка, прогресс, стоимость, пауза/возобновление/стоп, drill-down (OPERATOR+)
@@ -214,7 +226,7 @@
 - [ ] Аудит: журнал, фильтры, экспорт (SECURITY_AUDITOR/ADMIN)
 - [ ] Администрирование: пользователи/роли (или маппинг SSO-групп), системные параметры, kill switch (ADMIN)
 
-### B2. Тестирование frontend
+### Phase 18. Тестирование frontend
 
 - [ ] Unit/компонентные тесты (Vitest/RTL) ключевых компонентов
 - [ ] E2E Playwright критических сценариев: пауза батча, повтор из DLQ, публикация шаблона, тестовая отправка (QA-07)
@@ -224,11 +236,11 @@
 
 ## Порядок и вехи
 
-1. **A0–A2** — каркас + домен + use cases (ядро).
-2. **A3–A5** — персистентность, outbox/Kafka, входящие адаптеры.
-3. **A6–A9** — SMS-провайдеры, маршрутизация, шаблоны, фильтры → **MVP SMS готов** (SRS этап 2).
-4. **A10** Email → **A11** Push (SRS этапы 3–4).
-5. **A12–A14** — наблюдаемость/безопасность/тесты (сквозные, ведутся параллельно, финализируются здесь).
-6. **B0–B2** — frontend после стабилизации Admin BFF.
+1. **Phase 1–3** — каркас + домен + use cases (ядро).
+2. **Phase 4–6** — персистентность, outbox/Kafka, входящие адаптеры.
+3. **Phase 7–10** — SMS-провайдеры, маршрутизация, шаблоны, фильтры → **MVP SMS готов** (SRS этап 2).
+4. **Phase 11** Email → **Phase 12** Push (SRS этапы 3–4).
+5. **Phase 13–15** — наблюдаемость/безопасность/тесты (сквозные, ведутся параллельно, финализируются здесь).
+6. **Phase 16–18** — frontend после стабилизации Admin BFF.
 
 > После завершения каждого пункта — отмечать ✅ (не `[x]`).
