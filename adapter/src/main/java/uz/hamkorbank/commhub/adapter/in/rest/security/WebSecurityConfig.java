@@ -23,21 +23,23 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import uz.hamkorbank.commhub.adapter.in.admin.AdminApi;
 import uz.hamkorbank.commhub.adapter.in.callback.CallbackProperties;
 import uz.hamkorbank.commhub.adapter.in.rest.ApiV1;
 
 /**
  * Who may reach which endpoint (SEC-01, SEC-02, SEC-03, SEC-07).
  *
- * <p>Four chains, ordered, because the four kinds of caller have nothing in common. Provider callbacks
+ * <p>Five chains, ordered, because the kinds of caller have nothing in common. Provider callbacks
  * authenticate themselves against a shared secret and an address allowlist inside the controller
  * (SEC-07) — an OAuth2 token from Playmobile is not a thing that exists. The management endpoints are
- * scraped by the platform. Source systems present a client-credentials token or a client certificate.
- * Everything else is refused rather than left to a default nobody reviewed.
+ * scraped by the platform. The admin BFF takes an OIDC token carrying SSO groups and checks a role at
+ * every endpoint (SEC-02, SEC-03). Source systems present a client-credentials token or a client
+ * certificate. Everything else is refused rather than left to a default nobody reviewed.
  *
  * <p>All chains are stateless and have CSRF disabled: there is no browser session here — the admin SPA
- * of Phase 16 authenticates with a bearer token of its own — and a CSRF token would only be a header
- * every source system has to be told to send.
+ * authenticates with a bearer token of its own, which is not a credential a browser attaches
+ * automatically and therefore not something a cross-site request can borrow.
  *
  * <p><strong>Authentication is not on by default.</strong> The local stack has no issuer and no CA, and
  * a default that requires a token would mean every developer switching it off — the state in which it
@@ -50,6 +52,14 @@ import uz.hamkorbank.commhub.adapter.in.rest.ApiV1;
 public class WebSecurityConfig {
 
     private static final Logger LOG = LoggerFactory.getLogger(WebSecurityConfig.class);
+
+    /**
+     * Base path of the admin BFF, taken from its own constant rather than repeated here.
+     *
+     * <p>A security matcher written as a literal is a security matcher that stops matching the day
+     * somebody renames the path — quietly, and in the direction that leaves endpoints unprotected.
+     */
+    private static final String ADMIN_BASE_PATH = AdminApi.BASE;
 
     public WebSecurityConfig(SecurityProperties properties) {
         if (!properties.isAuthenticationRequired()) {
@@ -93,9 +103,41 @@ public class WebSecurityConfig {
         return applyAuthentication(http, properties).build();
     }
 
-    /** The API of the source systems: token or certificate, and the stream check of SEC-01 on top. */
+    /**
+     * The admin BFF: a bearer token from the corporate SSO, and RBAC on top (SEC-02, SEC-03, UI-02).
+     *
+     * <p>Its own chain rather than a share of the source-system one, because the two callers have
+     * nothing in common. A source system presents client credentials and is entitled to its streams; a
+     * person presents an OIDC token carrying SSO groups, which map onto the roles of §10.1 and are what
+     * the {@code @PreAuthorize} of each endpoint checks. mTLS is deliberately not offered here: a
+     * certificate identifies a machine, and the panel needs to know which employee is looking.
+     *
+     * <p>Authenticated at the chain and authorised at the method, and both are needed. The chain answers
+     * 401 to a caller with no token at all; the method answers 403 to one whose roles do not cover the
+     * endpoint. Collapsing them would make "who are you" and "may you" the same answer, which is the
+     * difference between a login prompt and a permissions request.
+     *
+     * <p>With no issuer configured this chain permits everything and the roles cannot be evaluated —
+     * {@code AdminAccess} logs a warning saying so at startup, the same stance SEC-01 takes for source
+     * systems.
+     */
     @Bean
     @Order(3)
+    public SecurityFilterChain adminSecurityFilterChain(HttpSecurity http, SecurityProperties properties)
+            throws Exception {
+        stateless(http.securityMatcher(ADMIN_BASE_PATH + "/**")).authorizeHttpRequests(requests -> {
+            if (properties.oauth2Enabled()) {
+                requests.anyRequest().authenticated();
+            } else {
+                requests.anyRequest().permitAll();
+            }
+        });
+        return applyAuthentication(http, properties).build();
+    }
+
+    /** The API of the source systems: token or certificate, and the stream check of SEC-01 on top. */
+    @Bean
+    @Order(4)
     public SecurityFilterChain sourceSystemSecurityFilterChain(HttpSecurity http, SecurityProperties properties)
             throws Exception {
         stateless(http.securityMatcher(ApiV1.BASE + "/**")).authorizeHttpRequests(requests -> {
@@ -110,7 +152,7 @@ public class WebSecurityConfig {
 
     /** Nothing else is published; a request that reaches here is refused rather than defaulted. */
     @Bean
-    @Order(4)
+    @Order(5)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http, SecurityProperties properties)
             throws Exception {
         stateless(http).authorizeHttpRequests(requests -> {

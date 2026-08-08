@@ -3,7 +3,6 @@ package uz.hamkorbank.commhub.adapter.in.importer;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,7 +33,6 @@ import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
 @Component
 public class TemplateCsvCodec {
 
-    private static final char QUOTE = '"';
     private static final String CODE = "code";
     private static final String CHANNEL = "channel";
     private static final String LOCALE = "locale";
@@ -45,11 +43,8 @@ public class TemplateCsvCodec {
     private static final String OWNER = "owner";
     private static final List<String> REQUIRED = List.of(CODE, CHANNEL, LOCALE, TEXT);
 
-    /** Byte-order mark Excel puts in front of a UTF-8 file; it is not part of the first column name. */
-    private static final char BOM = '﻿';
-
     public Parsed parse(Reader reader, char delimiter) throws IOException {
-        List<List<String>> records = readRecords(reader, delimiter);
+        List<List<String>> records = records(reader, delimiter);
         if (records.isEmpty()) {
             throw new TemplateImportException("the template file is empty");
         }
@@ -91,33 +86,17 @@ public class TemplateCsvCodec {
         }
     }
 
-    /** Column name → position, lower-cased and trimmed; a missing required column fails the file. */
+    /** Column name → position; a missing required column fails the whole file rather than a row. */
     private static Map<String, Integer> header(List<String> record) {
-        Map<String, Integer> columns = new LinkedHashMap<>();
-        for (int index = 0; index < record.size(); index++) {
-            String name = record.get(index).trim();
-            if (!name.isEmpty() && name.charAt(0) == BOM) {
-                name = name.substring(1);
-            }
-            columns.putIfAbsent(name.toLowerCase(Locale.ROOT), index);
+        try {
+            return CsvRecords.header(record, REQUIRED);
+        } catch (IllegalArgumentException e) {
+            throw new TemplateImportException("the template " + e.getMessage(), e);
         }
-        List<String> missing = REQUIRED.stream()
-                .filter(required -> !columns.containsKey(required))
-                .toList();
-        if (!missing.isEmpty()) {
-            throw new TemplateImportException("the template file has no %s column(s); header was %s"
-                    .formatted(String.join(", ", missing), columns.keySet()));
-        }
-        return columns;
     }
 
     private static String value(List<String> record, Map<String, Integer> columns, String column) {
-        Integer index = columns.get(column);
-        if (index == null || index >= record.size()) {
-            return null;
-        }
-        String value = record.get(index).trim();
-        return value.isEmpty() ? null : value;
+        return CsvRecords.value(record, columns, column);
     }
 
     private static <E extends Enum<E>> E enumValue(Class<E> type, String value, String column) {
@@ -132,70 +111,15 @@ public class TemplateCsvCodec {
     }
 
     private static boolean isBlank(List<String> record) {
-        return record.stream().allMatch(field -> field == null || field.isBlank());
+        return CsvRecords.isBlank(record);
     }
 
-    /**
-     * Splits the whole file into records, honouring quoted fields (RFC 4180).
-     *
-     * <p>Written out rather than pulled in as a dependency: this reads one operator-supplied file once, and
-     * the whole of the format it needs is "a quote starts a literal, two quotes are one quote".
-     */
-    private static List<List<String>> readRecords(Reader reader, char delimiter) throws IOException {
-        String content = readAll(reader);
-        List<List<String>> records = new ArrayList<>();
-        List<String> record = new ArrayList<>();
-        StringBuilder field = new StringBuilder();
-        boolean quoted = false;
-        int index = 0;
-        while (index < content.length()) {
-            char character = content.charAt(index++);
-            if (quoted) {
-                if (character != QUOTE) {
-                    field.append(character);
-                } else if (index < content.length() && content.charAt(index) == QUOTE) {
-                    field.append(QUOTE);
-                    index++;
-                } else {
-                    quoted = false;
-                }
-                continue;
-            }
-            if (character == QUOTE && field.isEmpty()) {
-                quoted = true;
-            } else if (character == delimiter) {
-                record.add(field.toString());
-                field.setLength(0);
-            } else if (character == '\n' || character == '\r') {
-                if (character == '\r' && index < content.length() && content.charAt(index) == '\n') {
-                    index++;
-                }
-                record.add(field.toString());
-                field.setLength(0);
-                records.add(record);
-                record = new ArrayList<>();
-            } else {
-                field.append(character);
-            }
+    private static List<List<String>> records(Reader reader, char delimiter) throws IOException {
+        try {
+            return CsvRecords.read(reader, delimiter);
+        } catch (IllegalArgumentException e) {
+            throw new TemplateImportException("the template " + e.getMessage(), e);
         }
-        if (quoted) {
-            throw new TemplateImportException("the template file ends inside a quoted field");
-        }
-        if (!field.isEmpty() || !record.isEmpty()) {
-            record.add(field.toString());
-            records.add(record);
-        }
-        return records;
-    }
-
-    private static String readAll(Reader reader) throws IOException {
-        StringBuilder content = new StringBuilder();
-        char[] buffer = new char[8192];
-        int read;
-        while ((read = reader.read(buffer)) != -1) {
-            content.append(buffer, 0, read);
-        }
-        return content.toString();
     }
 
     /**

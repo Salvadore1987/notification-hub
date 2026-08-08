@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.adapter.out.persistence.json.TimingJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.JsonCodec;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
+import uz.hamkorbank.commhub.application.port.in.query.BatchListQuery;
 import uz.hamkorbank.commhub.application.port.out.BatchRepository;
 import uz.hamkorbank.commhub.domain.model.Batch;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
@@ -24,6 +25,21 @@ public class BatchPersistenceAdapter implements BatchRepository {
             SELECT id, stream_id, channel, status, total, processed, sent, delivered, failed,
                    cost_estimate, cost_currency, timing, created_at
             FROM batch
+            """;
+
+    /**
+     * Filters of the batch list, written once so the page and its count cannot disagree (UI-03).
+     *
+     * <p>"Active" is spelled out here as "not terminal" rather than as a list of statuses, so a status
+     * added to {@code BatchStatus} later does not silently drop out of the dashboard.
+     */
+    private static final String WHERE = """
+             WHERE created_at >= :from
+               AND created_at < :to
+               AND (CAST(:streamId AS varchar) IS NULL OR stream_id = :streamId)
+               AND (CAST(:channel AS varchar) IS NULL OR channel = :channel)
+               AND (CAST(:status AS varchar) IS NULL OR status = :status)
+               AND (NOT CAST(:activeOnly AS boolean) OR status NOT IN ('STOPPED', 'COMPLETED'))
             """;
 
     private static final String UPSERT = """
@@ -95,6 +111,36 @@ public class BatchPersistenceAdapter implements BatchRepository {
                 .param("limit", limit)
                 .query(rowMapper())
                 .list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Batch> search(BatchListQuery query) {
+        return bind(jdbcClient.sql(SELECT + WHERE + " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"), query)
+                .param("limit", query.limit())
+                .param("offset", query.offset())
+                .query(rowMapper())
+                .list();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long count(BatchListQuery query) {
+        return bind(jdbcClient.sql("SELECT count(*) FROM batch" + WHERE), query)
+                .query(Long.class)
+                .single();
+    }
+
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement, BatchListQuery query) {
+        return statement
+                .param("from", SqlValues.timestamp(query.from()))
+                .param("to", SqlValues.timestamp(query.to()))
+                .param(
+                        "streamId",
+                        query.streamId() == null ? null : query.streamId().value())
+                .param("channel", SqlValues.nameOf(query.channel()))
+                .param("status", SqlValues.nameOf(query.status()))
+                .param("activeOnly", query.activeOnly());
     }
 
     private RowMapper<Batch> rowMapper() {
