@@ -60,20 +60,6 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     archiveFileName.set("notification-hub.jar")
 }
 
-// DB-04: ключ шифрования контента обязателен и умолчания не имеет — инстанс без него не стартует,
-// и в развёртывании это правильно: тихого отката на хранение контента открытым текстом быть не должно.
-// Но bootRun — это локальный запуск разработчика, и требование «сначала экспортируй ключ» он
-// выполняет один раз, а потом открывает новый терминал и видит отказ старта, который не имеет
-// отношения к тому, чем он занят. Поэтому здесь — и только здесь — подставляется локальный ключ:
-// шифрование остаётся включённым (проверяется тот же код), а jar и образ по-прежнему требуют
-// настоящий ключ из секрет-хранилища. Экспортированный CONTENT_ENCRYPTION_KEY побеждает.
-//
-// Значение — не секрет: это base64 строки "commhub-local-development-key!!!", он защищает
-// локальную одноразовую базу и не должен встречаться нигде, кроме ноутбука.
-tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-    environment(
-        "CONTENT_ENCRYPTION_KEY",
-        providers.environmentVariable("CONTENT_ENCRYPTION_KEY")
-            .getOrElse("Y29tbWh1Yi1sb2NhbC1kZXZlbG9wbWVudC1rZXkhISE="),
-    )
-}
+// Ключ шифрования контента (DB-04) для локального запуска не задаётся здесь: он лежит в
+// bootstrap/config/application.yml, который Spring Boot читает из рабочего каталога сам — так его
+// видят одинаково и bootRun, и запуск main-класса из IDE в обход Gradle. Подробности — в том файле.
