@@ -1,0 +1,481 @@
+/**
+ * Notification Hub — модель C4 (LikeC4).
+ *
+ * Уровень 1 (Context)   — акторы, Модуль, внешние системы.
+ * Уровень 2 (Container) — SPA, backend-приложение, PostgreSQL (Kafka — корпоративная, внешняя).
+ * Уровень 3 (Component) — компоненты backend: один компонент = один Gradle-модуль (AR-01, AR-04).
+ *
+ * Ссылки в описаниях — на разделы SRS docs/sms-notification-hub-spec.md.
+ */
+model {
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Акторы (§2.3)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  sourceSystem = actor 'Системы-источники' {
+    description '''
+      Мобильное приложение ФЛ, ДБО ЮЛ, iABS, Эквайринг, Creatio, Сайт, TIETO, EVAM,
+      R-Style, AutoPayment, AgentTelecom, HR, Маркетинг, Ундирув, СРМ.
+      Передают уже сформированные сообщения и батчи (§1.3): Модуль не строит аудитории и контент.
+    '''
+  }
+
+  operator = actor 'Оператор / Саппорт' {
+    description 'Рассылки, сообщения, DLQ, suppression list. Роль OPERATOR (FR-7.2)'
+  }
+
+  admin = actor 'Администратор' {
+    description 'Потоки, каналы, провайдеры, маршрутизация, системные параметры, kill switch. Роль ADMIN (FR-7.2)'
+  }
+
+  templateManager = actor 'Менеджер шаблонов' {
+    description 'Шаблоны, версии, локали; ревью и публикация — второй ролью (FR-4.2)'
+  }
+
+  analyst = actor 'Аналитик / Оперблок' {
+    description 'Дашборд, статистика, отчёты и выгрузки. Роли ANALYST и VIEWER (FR-7.2)'
+  }
+
+  securityAuditor = actor 'Офицер ИБ' {
+    description 'Журнал аудита и доступа к ПДн. Роль SECURITY_AUDITOR (FR-7.3, SEC-08)'
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Внешние системы (§2.3, §9)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  esb = externalSystem 'ESB Банка (WSO2)' {
+    #external
+    description 'Существующие потоки OTP (Humo, Uzcard, Telecom Antifraud) ходят в Модуль по тем же контрактам §8.2 — ESB здесь обычный клиент (§8.3)'
+  }
+
+  kafka = broker 'Apache Kafka (кластер Банка)' {
+    #external
+    technology 'Kafka, Schema Registry, SASL/mTLS + ACL'
+    description '''
+      Входящие: comm.inbound.{critical,transactional,notification,batch-control}.v1 (IK-01).
+      Исходящие: comm.outbound.status.v1, comm.outbound.dlq.v1,
+      comm.outbound.push-token.invalidated.v1, comm.outbound.events.v1 (витрина),
+      comm.inbound.parse-error.v1 (IK-02, IK-04).
+    '''
+  }
+
+  playmobile = externalSystem 'Playmobile SMS-Broker' {
+    #external
+    technology 'HTTP/JSON, Basic auth'
+    description 'Основной SMS-провайдер (§9.1). Отправка POST /send, статусы — DLR-callback на Модуль'
+  }
+
+  smsGate = externalSystem 'SMS Gate v4.3 (smsgw.vas.uz)' {
+    #external
+    technology 'HTTP, login и key в каждом запросе'
+    description 'Резервный SMS-провайдер (§9.2). DLR — FEEDBACK-callback, реконсиляция через /api/v2/search (SG-03)'
+  }
+
+  mailRelay = externalSystem 'Корпоративный почтовый сервер' {
+    #external
+    technology 'SMTP (STARTTLS/TLS), IMAP'
+    description 'Отправка Email (EM-01) и почтовый ящик возвратов, который Модуль опрашивает по IMAP (EM-02): callback у почты нет'
+  }
+
+  fcm = externalSystem 'Firebase Cloud Messaging' {
+    #external
+    technology 'FCM HTTP v1, OAuth2 service account'
+    description 'Push для Android и опционально iOS (PU-01, PU-05)'
+  }
+
+  apns = externalSystem 'Apple Push Notification service' {
+    #external
+    technology 'APNs Provider API поверх HTTP/2, JWT ES256'
+    description 'Push для iOS (PU-06). Sandbox выбирается на сообщение по метке TEST (PU-13)'
+  }
+
+  sso = externalSystem 'Корпоративный SSO (OIDC)' {
+    #external
+    technology 'Keycloak / AD, OIDC'
+    description 'Аутентификация админ-панели и, опционально, систем-источников; группы SSO отображаются в роли §10.1 (SEC-01, SEC-02)'
+  }
+
+  secretStore = externalSystem 'Секрет-хранилище Банка' {
+    #external
+    technology 'Vault / K8s secrets'
+    description 'Учётные данные провайдеров. Модуль не ходит в Vault сам: он читает смонтированные значения по ссылкам env:, file:, prop: (SEC-04)'
+  }
+
+  dataMart = externalSystem 'Витрина данных (BigData)' {
+    #external
+    description 'Потребитель выгрузки завершённых отправок: одна строка на сообщение, без адресов и без контента (FR-6.4)'
+  }
+
+  monitoring = externalSystem 'Prometheus / Grafana / ELK' {
+    #external
+    technology 'Prometheus, Grafana, OpenTelemetry, ELK или Loki'
+    description 'Метрики, дашборды, алерты и централизованные логи (OBS-01…OBS-05)'
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Модуль
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  hub = system 'Коммуникационный модуль (Notification Hub)' {
+    description '''
+      Транспортно-оркестрирующий слой Банка для SMS, Email и Push (§1.1):
+      приём → дедупликация → шаблонизация → валидация → маршрутизация → фильтры → квоты →
+      отправка через адаптеры провайдеров → агрегация статусов → ретраи, DLQ, статистика.
+    '''
+
+    // ── Уровень 2: контейнеры ────────────────────────────────────────────────
+
+    adminSpa = spa 'Админ-панель (SPA)' {
+      technology 'React 18, TypeScript, Vite, Ant Design 5, oidc-client-ts'
+      description '''
+        Двенадцать разделов §11.2. Конфигурация развёртывания читается до первого рендера
+        (public/config.json), типы API генерируются из OpenAPI админ-контракта.
+        Решение панели никогда не является решением о доступе — им остаётся @PreAuthorize на backend (UI-02).
+      '''
+    }
+
+    db = database 'PostgreSQL' {
+      technology 'PostgreSQL 16+, Flyway, помесячные range-партиции'
+      description '''
+        Состояние сообщений, конфигурация маршрутизации, шаблоны, outbox, аудит (§10).
+        message, message_status_history, delivery_attempt, outbox_event и push_delivery
+        партиционированы по времени (DB-02); контент зашифрован на уровне приложения (DB-04).
+      '''
+    }
+
+    app = container 'Notification Hub (backend)' {
+      technology 'Java 25, Spring Boot 4, виртуальные потоки, Resilience4j'
+      description 'Единый stateless-деплой: гексагональное ядро и все адаптеры в одном образе (AR-01, NF-05)'
+
+      // ── Уровень 3: driving-адаптеры ───────────────────────────────────────
+
+      restApi = component 'REST API систем-источников' {
+        #driving
+        technology 'Spring Web MVC, :adapter:in:rest'
+        description '''
+          /api/v1 — опубликованный контракт §8.2: messages, batches, actions, чтение статусов.
+          Ошибки — RFC 9457 problem+json (IR-01), лимиты на поток и Retry-After (IR-02).
+          OpenAPI 3.1 написан руками и проверяется тестом (IR-03).
+        '''
+        style {
+          color blue
+        }
+      }
+
+      adminApi = component 'Admin BFF' {
+        #driving
+        technology 'Spring Web MVC, :adapter:in:admin'
+        description '''
+          /api/admin/v1 — backend одной SPA, один контроллер на раздел §11.2.
+          Здесь и только здесь: @PreAuthorize по ролям, маскирование адресов на выходе,
+          период по умолчанию 24 часа и потолок 92 дня, CSV-экспорты (SEC-03, SEC-08).
+        '''
+        style {
+          color blue
+        }
+      }
+
+      kafkaIn = component 'Kafka-консьюмеры' {
+        #driving
+        technology 'Spring for Apache Kafka, :adapter:in:kafka'
+        description '''
+          По контейнер-фактори и пулу потоков на класс трафика — изоляция TC-01 строится из топиков.
+          Класс трафика берётся из топика и переопределяет документ; непарсируемое уходит
+          в comm.inbound.parse-error.v1 (IK-04).
+        '''
+        style {
+          color blue
+        }
+      }
+
+      callbackApi = component 'Callback провайдеров' {
+        #driving
+        technology 'Spring Web MVC, :adapter:in:callback'
+        description 'Приём DLR: endpoint провайдеро-независим, словарь статусов живёт в модуле провайдера (AR-04). Защита — allowlist IP и секрет (SEC-07)'
+        style {
+          color blue
+        }
+      }
+
+      inboundContract = component 'Разбор контракта IK-03' {
+        #driving
+        technology ':adapter:in:contract'
+        description 'Тело REST-запроса и есть сообщение Kafka (§8.2), поэтому парсер один на два транспорта: dto, InboundMessageCodec, InboundBatchCodec, MapStruct-маппер'
+        style {
+          color blue
+        }
+      }
+
+      importer = component 'CSV-импорт' {
+        #driving
+        technology ':adapter:in:importer'
+        description 'Импорт шаблонов (FR-4.6) и suppression list; один RFC 4180-парсер на оба (CsvRecords)'
+        style {
+          color blue
+        }
+      }
+
+      scheduler = component 'Планировщики' {
+        #driving
+        technology 'Spring Scheduling, :adapter:in:scheduler'
+        description '''
+          Тики use case-ов: релей outbox, обновление кэша конфигурации, health провайдеров,
+          выгрузка в витрину, чистка ретенций, обслуживание партиций.
+          Диспетчер отправки и истечение TTL пока не подключены — см. FR.md, известные долги.
+        '''
+        style {
+          color blue
+        }
+      }
+
+      securityShared = component 'Аутентификация и доступ' {
+        #driving
+        technology ':adapter:in:security'
+        description '''
+          Общий для rest и admin слой: AuthenticatedCaller (человек против системы),
+          роли §10.1, StreamAccessGuard (SEC-01) — поток видит только свои данные.
+        '''
+        style {
+          color blue
+        }
+      }
+
+      // ── Уровень 3: ядро ───────────────────────────────────────────────────
+
+      application = component 'Application: use cases, pipeline, порты' {
+        #core
+        technology 'Java 25, spring-context, spring-tx, MapStruct'
+        description '''
+          Входные порты (SubmitMessage, DispatchMessage, ProcessProviderStatus, Manage*),
+          выходные порты (репозитории, провайдеры, паблишеры, часы, метрики),
+          единая MessagePipeline (дедуп → шаблон → валидация → маршрут → фильтры → квоты)
+          и сага отправки. Логгера в слое нет намеренно: всё отчётное уходит через MetricsPort.
+        '''
+        style {
+          color primary
+        }
+      }
+
+      domain = component 'Domain: модель и доменные сервисы' {
+        #core
+        technology 'Чистая Java (JDK и java.time)'
+        description '''
+          Message и sealed-иерархия контента, Batch, Stream, ChannelConfig, Provider, RoutingPolicy,
+          Template, SuppressionEntry, DeliveryAttempt, DlqEntry; сервисы Router, FallbackChain,
+          SegmentCalculator. Ноль зависимостей на Spring, JPA, Kafka, Jackson (AR-02); часы не читает.
+        '''
+        style {
+          color primary
+        }
+      }
+
+      // ── Уровень 3: driven-адаптеры ────────────────────────────────────────
+
+      persistence = component 'PostgreSQL-адаптер' {
+        #driven
+        technology 'Spring JdbcClient, Flyway, :adapter:out:persistence'
+        description '''
+          Реализация репозиториев, outbox, dedup-реестра, аудита, экспорта, админ-запросов.
+          Рукописные row-мапперы: домен не носит persistence-аннотаций (AR-02).
+          Шифрование контента AES-256-GCM на уровне приложения (DB-04).
+        '''
+      }
+
+      kafkaOut = component 'Kafka-продюсер' {
+        #driven
+        technology 'Kafka producer (acks=all, идемпотентный), :adapter:out:kafka'
+        description 'Публикация статусов §6.4, DLQ-событий, инвалидированных push-токенов и выгрузки в витрину; кодеки и JSON-схемы лежат рядом (NF-08)'
+      }
+
+      providerSupport = component 'Каркас провайдерных адаптеров' {
+        #driven
+        technology 'JDK HttpClient на виртуальных потоках, Resilience4j, :adapter:out:provider:support'
+        description '''
+          Общее для всех провайдеров: таймауты, retry с backoff и jitter, circuit breaker,
+          троттлинг по TPS и по получателю, маскирование в логах (PR-01, PR-03).
+          Контракт: ответ провайдера — это ProviderAck, отсутствие ответа — исключение.
+        '''
+      }
+
+      playmobileAdapter = component 'Адаптер Playmobile' {
+        #driven
+        technology ':adapter:out:provider:playmobile'
+        description 'SmsProviderPort, таблица ошибок §18.1 и перевод DLR в канонические статусы. message-id генерирует Модуль, поэтому повтор внутри попытки безопасен (PM-01…PM-03)'
+      }
+
+      smsGateAdapter = component 'Адаптер SMS Gate' {
+        #driven
+        technology ':adapter:out:provider:smsgate'
+        description 'Тот же SmsProviderPort, коды §18.2 и реконсиляция статусов (SG-01…SG-03). Повтора внутри попытки нет: /api/v2/send не принимает клиентский id, повтор равен второй SMS'
+      }
+
+      smtpAdapter = component 'Адаптер SMTP' {
+        #driven
+        technology 'Jakarta Mail, :adapter:out:provider:smtp'
+        description '''
+          EmailProviderPort: пул соединений (он же лимит параллелизма канала), DKIM по конфигурации,
+          Message-ID пишет Модуль. Опрос почтового ящика возвратов кормит ProcessProviderStatus (EM-01…EM-03).
+        '''
+      }
+
+      fcmAdapter = component 'Адаптер FCM' {
+        #driven
+        technology ':adapter:out:provider:fcm'
+        description 'PushProviderPort для Android; UNREGISTERED и NOT_FOUND ретируют токен, validate_only — тестовая отправка (PU-01…PU-05)'
+      }
+
+      apnsAdapter = component 'Адаптер APNs' {
+        #driven
+        technology ':adapter:out:provider:apns'
+        description 'PushProviderPort для iOS: HTTP/2-мультиплексирование, JWT ES256, 410 и DeviceTokenNotForTopic ретируют токен (PU-06…PU-08)'
+      }
+
+      metrics = component 'Метрики' {
+        #driven
+        technology 'Micrometer, :adapter:out:metrics'
+        description 'Единственная реализация MetricsPort плюс то, о чём ядру знать незачем: состояние circuit breaker-ов и возраст самой старой неопубликованной строки outbox (OBS-01)'
+      }
+
+      secretAdapter = component 'Резолвер секретов' {
+        #driven
+        technology ':adapter:out:secret'
+        description 'Схемы env:, file:, prop:; без схемы — файл в смонтированном каталоге. Кэш с TTL, чтобы ротация применялась без рестарта (SEC-04)'
+      }
+
+      complianceAdapter = component 'Политики compliance' {
+        #driven
+        technology ':adapter:out:compliance'
+        description 'Собирает политики фильтрации и детектора PAN из commhub.compliance; quiet hours сознательно остаются в БД на поток и канал (FR-5.3, SEC-05)'
+      }
+
+      policyAdapter = component 'Политики отправки' {
+        #driven
+        technology ':adapter:out:policy'
+        description 'Окно дедупликации, бюджет отправки, пороги здоровья провайдера — из настроек развёртывания в записи политик ядра'
+      }
+
+      timeAdapter = component 'Часы' {
+        #driven
+        technology ':adapter:out:time'
+        description 'Реализация ClockPort: «сейчас» приходит в домен параметром, домен часов не читает'
+      }
+
+      observability = component 'Correlation ID, MDC, маскирование' {
+        #neither
+        technology ':adapter:observability'
+        description '''
+          Ни driving, ни driven: correlation id — не use case. Заголовок FR-8.6 побеждает поле тела
+          (тело разбирается на сообщение, а батч несёт много), MDC открывается вокруг use case,
+          маскирование PII в логах — страховка под правилом «маскируем там, где пишем» (OBS-02, OBS-03).
+        '''
+        style {
+          color amber
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Связи: контекст
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  sourceSystem -[sync]-> hub.app.restApi 'Единичные сообщения, батчи, чтение статусов' {
+    technology 'HTTPS/JSON, mTLS или OAuth2 client credentials'
+  }
+  sourceSystem -[async]-> kafka 'Публикует рассылки в топик своего класса трафика' {
+    technology 'comm.inbound.*.v1'
+  }
+  esb -[sync]-> hub.app.restApi 'Потоки OTP внешних процессингов — по тем же контрактам (§8.3)'
+  kafka -[async]-> hub.app.kafkaIn 'Входящие рассылки'
+  kafka -[async]-> sourceSystem 'Статусы доставки в едином формате §6.4'
+  kafka -[async]-> dataMart 'Выгрузка завершённых отправок (FR-6.4)'
+
+  operator -[sync]-> hub.adminSpa 'Рассылки, сообщения, DLQ, suppression'
+  admin -[sync]-> hub.adminSpa 'Потоки, провайдеры, маршрутизация, kill switch'
+  templateManager -[sync]-> hub.adminSpa 'Шаблоны и публикация'
+  analyst -[sync]-> hub.adminSpa 'Дашборд, статистика, отчёты'
+  securityAuditor -[sync]-> hub.adminSpa 'Журнал аудита'
+
+  hub.adminSpa -[sync]-> sso 'Вход Code + PKCE, тихое продление' {
+    technology 'OIDC'
+  }
+  hub.adminSpa -[sync]-> hub.app.adminApi 'Запросы панели' {
+    technology 'HTTPS/JSON, Bearer'
+  }
+
+  hub.app.securityShared -[sync]-> sso 'Проверка токена, группы SSO в роли'
+
+  playmobile -[sync]-> hub.app.callbackApi 'DLR-статусы (PM-02)'
+  smsGate -[sync]-> hub.app.callbackApi 'FEEDBACK-статусы (§18.2)'
+
+  hub.app.metrics -[sync]-> monitoring 'Метрики Prometheus'
+  hub.app.observability -[sync]-> monitoring 'Structured JSON logs и трассировка'
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Связи: контейнеры
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  hub.app.persistence -[sync]-> hub.db 'Чтение и запись состояния, outbox в той же транзакции' {
+    technology 'JDBC'
+  }
+  hub.app.kafkaOut -[async]-> kafka 'Статусы, DLQ, инвалидация токенов, выгрузка' {
+    technology 'acks=all, идемпотентный продюсер'
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Связи: компоненты
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  hub.app.restApi -[sync]-> hub.app.inboundContract 'Разбор тела IK-03'
+  hub.app.kafkaIn -[sync]-> hub.app.inboundContract 'Разбор события IK-03'
+  hub.app.restApi -[sync]-> hub.app.securityShared 'Кто вызвал и его поток (SEC-01)'
+  hub.app.adminApi -[sync]-> hub.app.securityShared 'Кто вызвал и его роли'
+
+  hub.app.restApi -[sync]-> hub.app.application 'SubmitMessage, SubmitBatch, управление батчем, чтение'
+  hub.app.kafkaIn -[sync]-> hub.app.application 'SubmitMessage, SubmitBatch, команды батча'
+  hub.app.adminApi -[sync]-> hub.app.application 'Use cases разделов §11.2'
+  hub.app.callbackApi -[sync]-> hub.app.application 'ProcessProviderStatus'
+  hub.app.importer -[sync]-> hub.app.application 'ImportTemplates, ManageSuppressions'
+  hub.app.scheduler -[sync]-> hub.app.application 'PublishOutboxEvents, CheckProviderHealth, ExportDeliveryEvents'
+
+  hub.app.application -[sync]-> hub.app.domain 'Агрегаты, инварианты, Router, FallbackChain, SegmentCalculator'
+
+  hub.app.application -[sync]-> hub.app.persistence 'MessageRepository, OutboxPort, конфигурация, аудит'
+  hub.app.application -[sync]-> hub.app.metrics 'MetricsPort — единственный способ ядра что-то сообщить'
+  hub.app.application -[sync]-> hub.app.timeAdapter 'ClockPort'
+  hub.app.application -[sync]-> hub.app.complianceAdapter 'Политики фильтрации и PAN'
+  hub.app.application -[sync]-> hub.app.policyAdapter 'Окно дедупликации, бюджет, пороги здоровья'
+  hub.app.application -[sync]-> hub.app.kafkaOut 'StatusPublisherPort — только из релея outbox (AD-03)'
+
+  hub.app.application -[sync]-> hub.app.playmobileAdapter 'SmsProviderPort'
+  hub.app.application -[sync]-> hub.app.smsGateAdapter 'SmsProviderPort (резерв)'
+  hub.app.application -[sync]-> hub.app.smtpAdapter 'EmailProviderPort'
+  hub.app.application -[sync]-> hub.app.fcmAdapter 'PushProviderPort (Android)'
+  hub.app.application -[sync]-> hub.app.apnsAdapter 'PushProviderPort (iOS)'
+
+  hub.app.playmobileAdapter -[sync]-> hub.app.providerSupport 'Таймауты, retry, breaker, троттлинг'
+  hub.app.smsGateAdapter -[sync]-> hub.app.providerSupport 'То же'
+  hub.app.smtpAdapter -[sync]-> hub.app.providerSupport 'То же'
+  hub.app.fcmAdapter -[sync]-> hub.app.providerSupport 'То же'
+  hub.app.apnsAdapter -[sync]-> hub.app.providerSupport 'То же'
+  hub.app.providerSupport -[sync]-> hub.app.secretAdapter 'Учётные данные по ссылке (SEC-04)'
+  hub.app.secretAdapter -[sync]-> secretStore 'Читает смонтированные значения'
+
+  hub.app.playmobileAdapter -[sync]-> playmobile 'POST /send' {
+    technology 'HTTP/JSON, Basic auth'
+  }
+  hub.app.smsGateAdapter -[sync]-> smsGate 'POST /api/v2/send и /api/v2/search' {
+    technology 'HTTP, login и key'
+  }
+  hub.app.smtpAdapter -[sync]-> mailRelay 'Отправка писем и опрос ящика возвратов' {
+    technology 'SMTP, IMAP'
+  }
+  hub.app.fcmAdapter -[sync]-> fcm 'messages:send' {
+    technology 'HTTP v1, OAuth2'
+  }
+  hub.app.apnsAdapter -[sync]-> apns 'POST /3/device/{token}' {
+    technology 'HTTP/2, JWT'
+  }
+}

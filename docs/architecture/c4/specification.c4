@@ -1,0 +1,89 @@
+/**
+ * Notification Hub — спецификация модели C4 (LikeC4).
+ *
+ * Здесь объявляются только виды элементов, теги и виды связей.
+ * Сама модель — в model.c4, представления — в views.c4.
+ *
+ * Соглашения:
+ *   - идентификаторы элементов — на английском (как в коде), заголовки и описания — на русском
+ *     (правило проекта: документация RU, код и контракты EN);
+ *   - каждый элемент несёт ссылку на требование SRS (docs/sms-notification-hub-spec.md),
+ *     по которому он существует.
+ */
+specification {
+
+  // ── Уровень 1: контекст ──────────────────────────────────────────────────
+  element actor {
+    style {
+      shape person
+      color green
+    }
+  }
+
+  element system {
+    style {
+      color primary
+    }
+  }
+
+  element externalSystem {
+    style {
+      color secondary
+    }
+  }
+
+  // ── Уровень 2: контейнеры ────────────────────────────────────────────────
+  element container {
+    style {
+      color primary
+    }
+  }
+
+  element spa {
+    style {
+      shape browser
+      color primary
+    }
+  }
+
+  element database {
+    style {
+      shape cylinder
+      color secondary
+    }
+  }
+
+  element broker {
+    style {
+      shape queue
+      color secondary
+    }
+  }
+
+  // ── Уровень 3: компоненты (в этом проекте компонент = Gradle-модуль) ──────
+  element component {
+    style {
+      color muted
+    }
+  }
+
+  // Роль компонента в гексагоне (AR-01, AR-03).
+  tag driving // driving adapter: транспорт зовёт ядро
+  tag core // domain + application: владелец портов
+  tag driven // driven adapter: ядро зовёт внешний мир
+  tag neither // ни то ни другое (correlation id, MDC, маскирование)
+
+  // Прочие пометки.
+  tag external // вне контура разработки Модуля
+  tag outOfScope // спроектировано, но сознательно не реализовано
+  tag debt // известный незакрытый долг (см. FR.md)
+
+  // Вид связи: синхронный вызов против сообщения в брокере.
+  relationship sync {
+    line solid
+  }
+
+  relationship async {
+    line dashed
+  }
+}
