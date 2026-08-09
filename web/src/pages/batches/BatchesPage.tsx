@@ -21,6 +21,7 @@ import { PeriodFilter, type Period } from '../../shared/components/PeriodFilter'
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { ServerTable, type PageQuery } from '../../shared/components/ServerTable';
 import { describeError } from '../../shared/errors';
+import { reasonHeader } from '../../shared/reason';
 import {
   BATCH_STATUSES,
   CHANNELS,
@@ -119,7 +120,7 @@ export function BatchesPage() {
       await api().POST('/batches/{batchId}/actions/{action}', {
         params: {
           path: { batchId: batch.batchId ?? '', action },
-          header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+          header: reasonHeader(reason),
         },
       });
       void message.success(t('common.done'));
@@ -146,6 +147,7 @@ export function BatchesPage() {
         <Select
           allowClear
           placeholder={t('dashboard.channel')}
+          aria-label={t('dashboard.channel')}
           value={channel}
           onChange={setChannel}
           options={enumOptions(CHANNELS)}
@@ -154,6 +156,7 @@ export function BatchesPage() {
         <Select
           allowClear
           placeholder={t('batches.status')}
+          aria-label={t('batches.status')}
           value={status}
           onChange={setStatus}
           options={enumOptions(BATCH_STATUSES)}
@@ -182,7 +185,11 @@ export function BatchesPage() {
             title: t('batches.progress'),
             width: 200,
             render: (_, row) => (
-              <Progress percent={Math.round(row.progress?.completionPercent ?? 0)} size="small" />
+              <Progress
+                aria-label={t('batches.progress')}
+                percent={Math.round(row.progress?.completionPercent ?? 0)}
+                size="small"
+              />
             ),
           },
           { title: t('batches.cost'), dataIndex: 'costEstimate' },
@@ -226,7 +233,10 @@ export function BatchesPage() {
                 {formatDateTime(selected.createdAt)}
               </Descriptions.Item>
             </Descriptions>
-            <Progress percent={Math.round(progress?.completionPercent ?? 0)} />
+            <Progress
+              aria-label={t('batches.progress')}
+              percent={Math.round(progress?.completionPercent ?? 0)}
+            />
             <Space wrap>
               {canOperate &&
                 availableActions(selected.status).map((action) => (

@@ -7,6 +7,7 @@ import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
 import { healthColor, type ProviderHealth } from '../../shared/labels';
+import { reasonHeader } from '../../shared/reason';
 import { ProviderFormModal, type ProviderRequest } from './ProviderFormModal';
 
 type Provider = components['schemas']['Provider'];
@@ -73,7 +74,7 @@ export function ProvidersTab() {
       await api().POST('/providers/{providerId}/state/{state}', {
         params: {
           path: { providerId: provider.providerId ?? '', state },
-          header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+          header: reasonHeader(reason),
         },
       });
       void message.success(t('common.done'));
@@ -92,7 +93,7 @@ export function ProvidersTab() {
       await api().DELETE('/providers/{providerId}', {
         params: {
           path: { providerId: provider.providerId ?? '' },
-          header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+          header: reasonHeader(reason),
         },
       });
       void message.success(t('common.done'));

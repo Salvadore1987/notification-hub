@@ -8,6 +8,7 @@ import { PeriodFilter, type Period } from '../../shared/components/PeriodFilter'
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
 import { REJECTION_REASONS, enumOptions } from '../../shared/labels';
+import { reasonHeader } from '../../shared/reason';
 import { formatDateTime } from '../../shared/time';
 
 type DlqEntry = components['schemas']['DlqEntry'];
@@ -100,7 +101,7 @@ export function DlqPage() {
     }
     try {
       const result = await api().POST('/dlq/archive', {
-        params: { header: reasonText ? { 'X-Commhub-Reason': reasonText } : undefined },
+        params: { header: reasonHeader(reasonText) },
         body: { messageIds: [...messageIds] },
       });
       reportResult(result.data?.applied ?? [], result.data?.skipped ?? []);
@@ -117,6 +118,7 @@ export function DlqPage() {
         <Select
           allowClear
           placeholder={t('dlq.reason')}
+          aria-label={t('dlq.reason')}
           value={reason}
           onChange={setReason}
           options={enumOptions(REJECTION_REASONS)}
@@ -150,7 +152,11 @@ export function DlqPage() {
         rowSelection={{
           selectedRowKeys: [...selectedIds],
           onChange: (keys) => setSelectedIds(keys.map(String)),
-          getCheckboxProps: (row) => ({ disabled: !row.retryable && !!row.archived }),
+          getCheckboxProps: (row) => ({
+            disabled: !row.retryable && !!row.archived,
+            // Чекбокс строки называет сообщение, иначе диктор читает подряд «флажок, флажок».
+            'aria-label': row.messageId,
+          }),
         }}
         pagination={{
           current: page,

@@ -1320,7 +1320,9 @@ components:
     ReasonHeader:
       name: X-Commhub-Reason
       in: header
-      description: Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03)
+      description: >
+        Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded
+        UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски.
       schema: { type: string }
 
   responses:

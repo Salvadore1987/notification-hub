@@ -19,6 +19,7 @@ import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
 import { BALANCING_STRATEGIES, enumOptions } from '../../shared/labels';
+import { reasonHeader } from '../../shared/reason';
 
 type ChannelConfig = components['schemas']['ChannelConfig'];
 type ChannelRequest = components['schemas']['ChannelRequest'];
@@ -95,7 +96,7 @@ export function ChannelsTab() {
       await api().POST('/channels/{channel}/state/{status}', {
         params: {
           path: { channel: channel.channel ?? 'SMS', status },
-          header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+          header: reasonHeader(reason),
         },
       });
       void message.success(t('common.done'));

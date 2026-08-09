@@ -106,6 +106,7 @@ export function TemplatesPage() {
         <Select
           allowClear
           placeholder={t('dashboard.channel')}
+          aria-label={t('dashboard.channel')}
           value={channel}
           onChange={setChannel}
           options={enumOptions(CHANNELS)}
@@ -121,6 +122,7 @@ export function TemplatesPage() {
         <Select
           allowClear
           placeholder={t('templates.catalogStatus')}
+          aria-label={t('templates.catalogStatus')}
           value={catalogStatus}
           onChange={setCatalogStatus}
           options={enumOptions(['ACTIVE', 'ARCHIVED'])}

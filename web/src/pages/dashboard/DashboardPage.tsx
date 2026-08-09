@@ -192,6 +192,7 @@ export function DashboardPage() {
               width: 220,
               render: (_, row) => (
                 <Progress
+                  aria-label={t('batches.progress')}
                   percent={Math.round(row.completionPercent ?? 0)}
                   size="small"
                   status={row.status === 'STOPPED' ? 'exception' : undefined}

@@ -101,6 +101,7 @@ export function StatisticsPage() {
         <Select
           allowClear
           placeholder={t('dashboard.channel')}
+          aria-label={t('dashboard.channel')}
           value={channel}
           onChange={setChannel}
           options={enumOptions(CHANNELS)}

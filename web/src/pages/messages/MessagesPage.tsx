@@ -129,6 +129,7 @@ export function MessagesPage() {
         <Select
           allowClear
           placeholder={t('messages.status')}
+          aria-label={t('messages.status')}
           value={status}
           onChange={setStatus}
           options={enumOptions(MESSAGE_STATUSES)}

@@ -24,6 +24,7 @@ const DAYJS_LOCALES: Record<Language, string> = { ru: 'ru', uz: 'uz-latn', en: '
 export function setLanguage(language: Language): void {
   localStorage.setItem(STORAGE_KEY, language);
   dayjs.locale(DAYJS_LOCALES[language]);
+  document.documentElement.lang = language;
   void i18next.changeLanguage(language);
 }
 
@@ -39,5 +40,9 @@ void i18next.use(initReactI18next).init({
 });
 
 dayjs.locale(DAYJS_LOCALES[storedLanguage()]);
+
+// Язык документа — не украшение: экранный диктор выбирает по нему правила чтения, поэтому
+// он живёт вместе с выбранным языком панели, а не остаётся тем, что записано в index.html.
+document.documentElement.lang = storedLanguage();
 
 export default i18next;
