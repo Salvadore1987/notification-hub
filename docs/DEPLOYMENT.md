@@ -64,16 +64,17 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, WireMock
 ./gradlew :bootstrap:bootRun     # запускается без предварительной настройки
 ```
 
-Из IDE — обычная Spring Boot run configuration на `NotificationHubApplication`, тоже без настройки
-(рабочий каталог — каталог модуля `bootstrap`, у IntelliJ это `$MODULE_WORKING_DIR$` по умолчанию).
+Из IDE — Spring Boot run configuration на `NotificationHubApplication`, тоже без настройки;
+в репозитории лежит готовая `.run/Notification Hub (local).run.xml`, IntelliJ показывает её
+в списке сам.
 
 Единственная обязательная переменная без значения по умолчанию — ключ шифрования контента (DB-04):
 без него контекст не поднимется, тихого отката на хранение открытым текстом нет. Локально ключ
-подставляет **`bootstrap/config/application.yml`** — Spring Boot читает `./config/application.yml`
-из рабочего каталога сам, поэтому это работает одинаково для Gradle и для IDE. Шифрование при этом
-включено, просто ключ известный и годится только для одноразовой локальной базы. В поставке этого
-файла нет (не каталог ресурсов; Dockerfile копирует только `bootstrap/src`), поэтому запуск из jar
-и из образа ключ по-прежнему требует — проверять деплой нужно так:
+подставляет **`config/application.yml`** в корне репозитория (плюс `bootstrap/config/application.yml`,
+который его импортирует — рабочий каталог у Gradle и у IDE разный). Шифрование при этом включено,
+просто ключ известный и годится только для одноразовой локальной базы. В поставке этих файлов нет
+(`config/` — не каталог ресурсов, runtime-стадия Dockerfile копирует только jar), поэтому образ
+и запуск jar'а вне дерева исходников ключ по-прежнему требуют — проверять деплой нужно так:
 
 ```bash
 export CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)   # AES-256, 32 байта в base64

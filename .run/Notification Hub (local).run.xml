@@ -1,0 +1,27 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    Локальный запуск Hub'а из IDE. Каталог .run/ IntelliJ читает сам, поэтому конфигурация
+    появляется в списке у всех и живёт в репозитории, а не в чьём-то workspace.xml.
+
+    Отличий от конфигурации, которую IDE создаёт сама, два, и оба намеренные: явный рабочий
+    каталог (корень проекта — там лежит config/application.yml с локальным ключом) и
+    CONTENT_ENCRYPTION_KEY в окружении. Ключ здесь дублирует то, что и так подставит
+    config/application.yml, — это подстраховка на случай, если рабочий каталог окажется
+    третьим: запуск не должен падать на DB-04 из-за настройки IDE.
+
+    Ключ секретом не является: это base64 строки "commhub-local-development-key!!!" для
+    одноразовой базы из docker compose. Перед запуском: docker compose up -d
+  -->
+  <configuration name="Notification Hub (local)" type="SpringBootApplicationConfigurationType"
+                 factoryName="Spring Boot" nameIsGenerated="false">
+    <module name="notification-hub.bootstrap.main" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="uz.hamkorbank.commhub.bootstrap.NotificationHubApplication" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <envs>
+      <env name="CONTENT_ENCRYPTION_KEY" value="Y29tbWh1Yi1sb2NhbC1kZXZlbG9wbWVudC1rZXkhISE=" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
