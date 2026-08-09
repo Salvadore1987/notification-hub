@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Notification Hub",
+    "subtitle": "Админ-панель"
+  },
+  "nav": {
+    "dashboard": "Дашборд",
+    "batches": "Рассылки",
+    "messages": "Сообщения",
+    "dlq": "DLQ",
+    "streams": "Входящие потоки",
+    "providers": "Каналы и провайдеры",
+    "routing": "Маршрутизация",
+    "templates": "Шаблоны",
+    "suppressions": "Suppression list",
+    "statistics": "Статистика",
+    "audit": "Аудит",
+    "administration": "Администрирование"
+  },
+  "auth": {
+    "signIn": "Войти",
+    "signOut": "Выйти",
+    "signingIn": "Вход…",
+    "redirecting": "Перенаправление на SSO…",
+    "forbidden": "У вас нет роли для этого раздела",
+    "error": "Не удалось выполнить вход",
+    "openMode": "SSO не настроен — панель работает без аутентификации"
+  },
+  "errors": {
+    "request": "Запрос не выполнен",
+    "notFound": "Не найдено",
+    "conflict": "Конфликт: конфигурация изменилась или противоречива",
+    "rateLimited": "Слишком много запросов",
+    "retryIn": "Повторите через {{seconds}} с",
+    "unknown": "Непредвиденная ошибка"
+  },
+  "table": {
+    "total": "Всего: {{total}}",
+    "empty": "Нет данных",
+    "retry": "Повторить"
+  },
+  "placeholder": {
+    "title": "Раздел в разработке",
+    "text": "Экран появится в фазе 17 (см. docs/IMPLEMENTATION-PLAN.md)"
+  },
+  "notFound": {
+    "title": "Страница не найдена",
+    "back": "На дашборд"
+  }
+}
