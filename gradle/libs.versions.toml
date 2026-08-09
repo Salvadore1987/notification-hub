@@ -16,6 +16,11 @@ spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies"
 
 spring-context = { module = "org.springframework:spring-context" }
 spring-tx = { module = "org.springframework:spring-tx" }
+# Модулям адаптеров, которым нужен HTTP-клиент/утилиты, но не встроенный сервер (out/provider/*).
+spring-web = { module = "org.springframework:spring-web" }
+# Jackson 3 (tools.jackson) для модулей с собственными кодеками (contract, persistence, kafka-out,
+# провайдеры) — раньше приезжал транзитивно через starter-web единого модуля adapter.
+jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter" }
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }

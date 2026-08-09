@@ -102,7 +102,7 @@ export PLAYMOBILE_STUB_USER=stub PLAYMOBILE_STUB_PASSWORD=stub
 
 ```bash
 jq -Rs '{schemaType:"JSON", schema:.}' \
-  adapter/src/main/resources/schema/comm.outbound.status.v1.json \
+  adapter/out/kafka/src/main/resources/schema/comm.outbound.status.v1.json \
   | curl -s -X POST -H 'Content-Type: application/vnd.schemaregistry.v1+json' -d @- \
     http://localhost:8081/subjects/comm.outbound.status.v1-value/versions
 ```

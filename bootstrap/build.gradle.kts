@@ -5,9 +5,35 @@ plugins {
 // bootstrap: Spring Boot приложение, конфигурация и wiring всех адаптеров (AR-01).
 
 dependencies {
-    implementation(project(":adapter"))
+    implementation(project(":adapter-in-admin"))
+    implementation(project(":adapter-out-provider-apns"))
+    implementation(project(":adapter-in-callback"))
+    implementation(project(":adapter-out-compliance"))
+    implementation(project(":adapter-in-contract"))
+    implementation(project(":adapter-out-provider-fcm"))
+    implementation(project(":adapter-in-importer"))
+    implementation(project(":adapter-in-kafka"))
+    implementation(project(":adapter-out-kafka"))
+    implementation(project(":adapter-out-metrics"))
+    implementation(project(":adapter-observability"))
+    implementation(project(":adapter-out-persistence"))
+    implementation(project(":adapter-out-provider-playmobile"))
+    implementation(project(":adapter-out-policy"))
+    implementation(project(":adapter-out-provider-support"))
+    implementation(project(":adapter-in-rest"))
+    implementation(project(":adapter-in-scheduler"))
+    implementation(project(":adapter-out-secret"))
+    implementation(project(":adapter-in-security"))
+    implementation(project(":adapter-out-provider-smsgate"))
+    implementation(project(":adapter-out-provider-smtp"))
+    implementation(project(":adapter-out-time"))
     implementation(libs.spring.boot.starter)
     implementation(libs.spring.boot.starter.actuator)
+
+    // WebSecurityConfig переехал сюда из adapter/in/rest/security: он собирает цепочки
+    // rest + admin + callback разом — это wiring композиционного корня, а не адаптер.
+    implementation(libs.spring.boot.starter.security)
+    implementation(libs.spring.boot.starter.oauth2.resource.server)
 
     // OBS-01: реестр Prometheus подключается на уровне развёртывания — код метрик знает только
     // MeterRegistry, а какой это реестр, решает сборка приложения.
@@ -30,6 +56,10 @@ dependencies {
     // Приёмочные сценарии ходят в Модуль по HTTP, как система-источник: RestClient, а не MockMvc —
     // §8.2 обещан по сети, и сериализация с кодами ответов входят в обещание (QA-08).
     testImplementation(libs.spring.boot.starter.web)
+
+    // Кросс-модульные тесты провайдеров (ProviderDocumentationContractTest,
+    // ProviderRuntimeSettingsTest) живут здесь: они видят сразу несколько адаптеров.
+    testImplementation(testFixtures(project(":adapter-out-provider-support")))
 
     // ArchUnit видит классы всех слоёв через runtime classpath (AR-03, QA-02)
     testImplementation(libs.archunit)

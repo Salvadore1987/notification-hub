@@ -49,7 +49,7 @@ docker compose down -v    # останов с удалением данных
 
 ```bash
 jq -Rs '{schemaType:"JSON", schema:.}' \
-  adapter/src/main/resources/schema/comm.outbound.status.v1.json \
+  adapter/out/kafka/src/main/resources/schema/comm.outbound.status.v1.json \
   | curl -s -X POST -H 'Content-Type: application/vnd.schemaregistry.v1+json' -d @- \
     http://localhost:8081/subjects/comm.outbound.status.v1-value/versions
 ```
@@ -76,12 +76,19 @@ export CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)   # AES-256, 32 бай�
 ```
 domain/       — чистая Java: модель и доменные сервисы. Без Spring/JPA/Kafka/Jackson (AR-02)
 application/  — port/in (use cases), port/out (репозитории, провайдеры, паблишеры), оркестрация, saga
-adapter/      — in: rest, kafka, admin, callback; out: persistence, kafka, provider/*, notification
-                (здесь же Flyway-миграции: adapter/src/main/resources/db/migration)
-bootstrap/    — Spring Boot приложение, конфигурация, wiring, ArchUnit- и интеграционные тесты
+adapter/      — каждый адаптер — отдельный Gradle-модуль (:adapter-in-*, :adapter-out-*):
+                in/{rest,admin,kafka,callback,importer,scheduler,contract,security}
+                out/{persistence,kafka,metrics,time,secret,compliance,policy,provider/*}
+                observability/ — ни driving, ни driven
+                (Flyway-миграции: adapter/out/persistence/src/main/resources/db/migration)
+bootstrap/    — Spring Boot приложение, конфигурация, wiring (в т.ч. WebSecurityConfig),
+                ArchUnit- и интеграционные тесты
 ```
 
-Направление зависимостей — только внутрь: `adapter → application → domain` (AR-03).
+Направление зависимостей — только внутрь: `adapter → application → domain` (AR-03); связи между
+модулями адаптеров держит Gradle (например, провайдеры видят `adapter-in-callback` только ради
+интерфейса `ProviderCallbackTranslator`). Один модуль гоняется адресно:
+`./gradlew :adapter-out-persistence:test`.
 
 ## Правила кода
 

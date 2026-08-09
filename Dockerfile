@@ -15,14 +15,37 @@ COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle gradle
 COPY domain/build.gradle.kts domain/
 COPY application/build.gradle.kts application/
-COPY adapter/build.gradle.kts adapter/
 COPY bootstrap/build.gradle.kts bootstrap/
+COPY adapter/in/admin/build.gradle.kts adapter/in/admin/
+COPY adapter/in/callback/build.gradle.kts adapter/in/callback/
+COPY adapter/in/contract/build.gradle.kts adapter/in/contract/
+COPY adapter/in/importer/build.gradle.kts adapter/in/importer/
+COPY adapter/in/kafka/build.gradle.kts adapter/in/kafka/
+COPY adapter/in/rest/build.gradle.kts adapter/in/rest/
+COPY adapter/in/scheduler/build.gradle.kts adapter/in/scheduler/
+COPY adapter/in/security/build.gradle.kts adapter/in/security/
+COPY adapter/out/compliance/build.gradle.kts adapter/out/compliance/
+COPY adapter/out/kafka/build.gradle.kts adapter/out/kafka/
+COPY adapter/out/metrics/build.gradle.kts adapter/out/metrics/
+COPY adapter/out/persistence/build.gradle.kts adapter/out/persistence/
+COPY adapter/out/policy/build.gradle.kts adapter/out/policy/
+COPY adapter/out/provider/apns/build.gradle.kts adapter/out/provider/apns/
+COPY adapter/out/provider/fcm/build.gradle.kts adapter/out/provider/fcm/
+COPY adapter/out/provider/playmobile/build.gradle.kts adapter/out/provider/playmobile/
+COPY adapter/out/provider/smsgate/build.gradle.kts adapter/out/provider/smsgate/
+COPY adapter/out/provider/smtp/build.gradle.kts adapter/out/provider/smtp/
+COPY adapter/out/provider/support/build.gradle.kts adapter/out/provider/support/
+COPY adapter/out/secret/build.gradle.kts adapter/out/secret/
+COPY adapter/out/time/build.gradle.kts adapter/out/time/
+COPY adapter/observability/build.gradle.kts adapter/observability/
 RUN ./gradlew --no-daemon dependencies --configuration runtimeClasspath || true
 
 COPY config config
 COPY domain/src domain/src
 COPY application/src application/src
-COPY adapter/src adapter/src
+# Каталог adapter копируется целиком: build-файлы модулей не изменились с прошлого слоя,
+# поэтому кэш зависимостей выше не инвалидируется.
+COPY adapter adapter
 COPY bootstrap/src bootstrap/src
 # Тесты в образе не гоняются: их гоняет пайплайн Банка, включая SAST и проверку зависимостей (SEC-09).
 RUN ./gradlew --no-daemon :bootstrap:bootJar -x test

@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "generate:api": "openapi-typescript ../adapter/src/main/resources/openapi/comm-hub-admin-v1.yaml -o src/api/generated/admin-schema.ts"
+    "generate:api": "openapi-typescript ../adapter/in/admin/src/main/resources/openapi/comm-hub-admin-v1.yaml -o src/api/generated/admin-schema.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",

@@ -29,7 +29,7 @@
   — пайплайн в репозитории не держим: сборка запускается локально, SAST/анализ зависимостей (SEC-09)
   подключаются корпоративным конвейером Банка (Jenkins/GitLab CI, SonarQube, Nexus IQ)
 - ✅ Настроить Flyway, каталог миграций, воспроизведение схемы с нуля (DB-01)
-  — `adapter/src/main/resources/db/migration/V1__baseline.sql`, схема `comm_hub`, тест `FlywayMigrationIT`
+  — `adapter/out/persistence/src/main/resources/db/migration/V1__baseline.sql`, схема `comm_hub`, тест `FlywayMigrationIT`
 - ✅ Git-репозиторий, ветвление, PR-шаблон
   — `.gitignore`, `CONTRIBUTING.md` (trunk-based, Conventional Commits), `.github/pull_request_template.md`
 
@@ -160,7 +160,7 @@
 - ✅ Топики: продюсер `comm.outbound.status.v1`, `comm.outbound.dlq.v1` (§8.1) — `KafkaOutboundProperties`,
   ключ партиционирования — `messageId`, заголовки `commhub-event-id`/`-event-type`/`-stream-id`/`-schema-version`
 - ✅ Формат исходящего статуса §6.4 — `StatusEventCodec` (JSON, поля §6.4 + `schemaVersion`, отсутствующие
-  значения как явные `null`), схема `adapter/src/main/resources/schema/comm.outbound.status.v1.json`
+  значения как явные `null`), схема `adapter/out/kafka/src/main/resources/schema/comm.outbound.status.v1.json`
   — ⚠️ регистрация субъекта в Schema Registry (BACKWARD, NF-08) остаётся операционным шагом: сериализатор
   намеренно не ходит в реестр, иначе реестр окажется на пути отправки каждого статуса. Avro не берём —
   контракт JSON, как у входящего IK-03. Команда регистрации — в `CONTRIBUTING.md`
@@ -209,7 +209,7 @@
 - ✅ Трансляция транспортных DTO → Command (AR-06), обработчики ошибок в `handlers/` — `adapter/in/contract`
   (общий для REST и Kafka: §8.2 говорит «тело = IK-03», поэтому парсер один) + MapStruct-мапперы
   `InboundPayloadMapper` и `RestResponseMapper`
-- ✅ OpenAPI 3.1 (IR-03) — `adapter/src/main/resources/openapi/comm-hub-api-v1.yaml`, отдаётся по
+- ✅ OpenAPI 3.1 (IR-03) — `adapter/in/rest/src/main/resources/openapi/comm-hub-api-v1.yaml`, отдаётся по
   `GET /api/v1/openapi.yaml`. ⚠️ Не генерируется springdoc'ом: его актуальная ветка 2.8.x собрана под Spring 6 и
   Jackson 2, релиза под Boot 4 нет. Вместо генерации — `OpenApiContractTest`: обходит `@RequestMapping`
   контроллеров и валит сборку, если эндпоинт не описан в документе. Заменить на генерацию, когда springdoc
