@@ -862,13 +862,32 @@
 
 ### Phase 16. Каркас
 
-- [ ] Vite + React 18 + TypeScript, структура проекта, ESLint/Prettier (UI-01)
-- [ ] UI-kit (Ant Design или MUI — согласовать с Банком) (UI-01)
-- [ ] i18n RU/UZ/EN (минимум RU), формат дат Asia/Tashkent, хранение UTC (UI-01, UI-04)
-- [ ] OIDC-аутентификация (Authorization Code + PKCE), хранение токена, refresh (UI-02, SEC-02)
-- [ ] Гейтинг по ролям RBAC на клиенте (дублирует backend) (FR-7.2)
-- [ ] API-клиент к Admin BFF (типы из OpenAPI), обработка ошибок/`Retry-After`
-- [ ] Общие компоненты: серверные таблицы (пагинация/сортировка/фильтр), виртуализация, маскирование PII (UI-03, DB-04)
+- ✅ Vite + React 18 + TypeScript, структура проекта, ESLint/Prettier (UI-01)
+- ✅ UI-kit (Ant Design или MUI — согласовать с Банком) (UI-01)
+- ✅ i18n RU/UZ/EN (минимум RU), формат дат Asia/Tashkent, хранение UTC (UI-01, UI-04)
+- ✅ OIDC-аутентификация (Authorization Code + PKCE), хранение токена, refresh (UI-02, SEC-02)
+- ✅ Гейтинг по ролям RBAC на клиенте (дублирует backend) (FR-7.2)
+- ✅ API-клиент к Admin BFF (типы из OpenAPI), обработка ошибок/`Retry-After`
+- ✅ Общие компоненты: серверные таблицы (пагинация/сортировка/фильтр), виртуализация, маскирование PII (UI-03, DB-04)
+
+> **Заметки по реализации (Phase 16).** Модуль — `web/` (npm, вне Gradle: фронтенд собирается своим
+> конвейером). UI-kit — **Ant Design 5** (согласовано 09.08.2026). Конфигурация развёртывания —
+> `public/config.json`, читается до первого рендера: issuer/clientId OIDC, `rolesClaim` (зеркало
+> `commhub.security.roles-claim`, по умолчанию `groups`) и маппинг SSO-группа → роль §10.1. Пустой
+> issuer — open mode со всеми ролями и предупреждением в шапке, та же позиция, что
+> `@adminAccess.open()` на backend. Аутентификация — `oidc-client-ts`/`react-oidc-context`
+> (Code + PKCE, токены в `sessionStorage`, silent renew); роли считаются из claim'а профиля или
+> payload access-токена и гейтят меню и маршруты (`src/auth/roles.ts` — клиентское зеркало
+> `AdminAuthority`, разделы §11.2 объявлены один раз в `src/layout/navigation.tsx`). Типы API
+> генерируются `openapi-typescript` из `comm-hub-admin-v1.yaml` (`npm run generate:api`,
+> результат закоммичен), клиент — `openapi-fetch`: любой не-2xx становится `ApiError` с
+> problem+json и разобранным `Retry-After` в одном месте (middleware). Попутно в контракте
+> исправлены две строки невалидного YAML (неэкранированное `: ` в description) — джексоновскому
+> парсеру контрактного теста они не мешали, стороннему генератору мешали. `ServerTable` —
+> серверная пагинация/сортировка + виртуализация по высоте; фильтры принадлежат экрану и
+> замыкаются в `fetchPage`. Маскирование PII (`maskMsisdn`/`maskEmail`) зеркалит `Masking.java` —
+> для значений, введённых оператором; что видно роли, решает backend (`AdminMasking`). Экраны
+> разделов — заглушки: маршруты, меню и гейтинг настоящие, содержимое приходит в Phase 17.
 
 ### Phase 17. Разделы (по §11.2)
 

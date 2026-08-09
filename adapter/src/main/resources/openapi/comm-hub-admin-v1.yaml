@@ -351,7 +351,7 @@ paths:
     put:
       tags: [streams]
       summary: Изменить дефолты, квоты и лимиты потока
-      description: ADMIN. `null` означает «не трогать»; снять quiet hours — `clearQuietHours: true`.
+      description: "ADMIN. `null` означает «не трогать»; снять quiet hours — `clearQuietHours: true`."
       parameters:
         - $ref: '#/components/parameters/StreamIdPath'
       requestBody:
@@ -611,7 +611,7 @@ paths:
     put:
       tags: [routing]
       summary: Заменить политику целиком
-      description: ADMIN. Целиком, а не патчем: половина правила — это не правило.
+      description: "ADMIN. Целиком, а не патчем: половина правила — это не правило."
       parameters:
         - $ref: '#/components/parameters/PolicyIdPath'
       requestBody:

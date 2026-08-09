@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Notification Hub",
+    "subtitle": "Admin panel"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "batches": "Batches",
+    "messages": "Messages",
+    "dlq": "DLQ",
+    "streams": "Inbound streams",
+    "providers": "Channels & providers",
+    "routing": "Routing",
+    "templates": "Templates",
+    "suppressions": "Suppression list",
+    "statistics": "Statistics",
+    "audit": "Audit",
+    "administration": "Administration"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "signingIn": "Signing in…",
+    "redirecting": "Redirecting to SSO…",
+    "forbidden": "You have no role for this section",
+    "error": "Sign-in failed",
+    "openMode": "SSO is not configured — the panel runs unauthenticated"
+  },
+  "errors": {
+    "request": "Request failed",
+    "notFound": "Not found",
+    "conflict": "Conflict: configuration changed or contradicts itself",
+    "rateLimited": "Too many requests",
+    "retryIn": "Retry in {{seconds}} s",
+    "unknown": "Unexpected error"
+  },
+  "table": {
+    "total": "Total: {{total}}",
+    "empty": "No data",
+    "retry": "Retry"
+  },
+  "placeholder": {
+    "title": "Section under construction",
+    "text": "The screen arrives in phase 17 (see docs/IMPLEMENTATION-PLAN.md)"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "back": "To the dashboard"
+  }
+}

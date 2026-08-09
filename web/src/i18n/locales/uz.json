@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Notification Hub",
+    "subtitle": "Administrator paneli"
+  },
+  "nav": {
+    "dashboard": "Boshqaruv paneli",
+    "batches": "Ommaviy yuborishlar",
+    "messages": "Xabarlar",
+    "dlq": "DLQ",
+    "streams": "Kiruvchi oqimlar",
+    "providers": "Kanallar va provayderlar",
+    "routing": "Marshrutlash",
+    "templates": "Shablonlar",
+    "suppressions": "Suppression list",
+    "statistics": "Statistika",
+    "audit": "Audit",
+    "administration": "Administratsiya"
+  },
+  "auth": {
+    "signIn": "Kirish",
+    "signOut": "Chiqish",
+    "signingIn": "Kirilmoqda…",
+    "redirecting": "SSO sahifasiga yoʻnaltirilmoqda…",
+    "forbidden": "Bu boʻlim uchun rolingiz yoʻq",
+    "error": "Kirish amalga oshmadi",
+    "openMode": "SSO sozlanmagan — panel autentifikatsiyasiz ishlamoqda"
+  },
+  "errors": {
+    "request": "Soʻrov bajarilmadi",
+    "notFound": "Topilmadi",
+    "conflict": "Ziddiyat: konfiguratsiya oʻzgargan yoki qarama-qarshi",
+    "rateLimited": "Soʻrovlar juda koʻp",
+    "retryIn": "{{seconds}} soniyadan soʻng qayta urinib koʻring",
+    "unknown": "Kutilmagan xato"
+  },
+  "table": {
+    "total": "Jami: {{total}}",
+    "empty": "Maʼlumot yoʻq",
+    "retry": "Qayta urinish"
+  },
+  "placeholder": {
+    "title": "Boʻlim ishlab chiqilmoqda",
+    "text": "Ekran 17-fazada paydo boʻladi (docs/IMPLEMENTATION-PLAN.md)"
+  },
+  "notFound": {
+    "title": "Sahifa topilmadi",
+    "back": "Boshqaruv paneliga"
+  }
+}

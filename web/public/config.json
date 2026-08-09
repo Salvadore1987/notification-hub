@@ -1,0 +1,10 @@
+{
+  "apiBaseUrl": "/api/admin/v1",
+  "oidc": {
+    "authority": "",
+    "clientId": "commhub-admin",
+    "scope": "openid profile offline_access"
+  },
+  "rolesClaim": "groups",
+  "groupRoles": {}
+}
