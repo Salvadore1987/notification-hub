@@ -38,7 +38,11 @@ export function TestSendTab() {
   const [sentTo, setSentTo] = useState('');
 
   const send = async () => {
-    const values = await form.validateFields();
+    // Незаполненную форму подсвечивает сама Form; наружу это не ошибка отправки, а её отсутствие.
+    const values = await form.validateFields().catch(() => null);
+    if (!values) {
+      return;
+    }
     setSending(true);
     try {
       const result = await api().POST('/providers/test-send', {

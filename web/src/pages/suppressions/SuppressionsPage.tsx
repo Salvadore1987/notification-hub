@@ -26,6 +26,7 @@ import { readFileText } from '../../shared/download';
 import { describeError } from '../../shared/errors';
 import { CHANNELS, SUPPRESSION_REASONS, enumOptions, type Channel } from '../../shared/labels';
 import { maskAddress } from '../../shared/masking';
+import { reasonHeader } from '../../shared/reason';
 import { formatDateTime, toApiInstant } from '../../shared/time';
 
 type Suppression = components['schemas']['Suppression'];
@@ -113,7 +114,7 @@ export function SuppressionsPage() {
       await api().DELETE('/suppressions/{entryId}', {
         params: {
           path: { entryId: entry.entryId ?? '' },
-          header: reasonText ? { 'X-Commhub-Reason': reasonText } : undefined,
+          header: reasonHeader(reasonText),
         },
       });
       void message.success(t('common.done'));
@@ -204,6 +205,7 @@ export function SuppressionsPage() {
         <Select
           allowClear
           placeholder={t('dashboard.channel')}
+          aria-label={t('dashboard.channel')}
           value={channel}
           onChange={setChannel}
           options={enumOptions(CHANNELS)}
@@ -212,6 +214,7 @@ export function SuppressionsPage() {
         <Select
           allowClear
           placeholder={t('dlq.reason')}
+          aria-label={t('dlq.reason')}
           value={reason}
           onChange={setReason}
           options={enumOptions(SUPPRESSION_REASONS)}

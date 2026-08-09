@@ -6,6 +6,7 @@ import { api } from '../../api/client';
 import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
+import { reasonHeader } from '../../shared/reason';
 import { formatDateTime } from '../../shared/time';
 import { StreamFormModal, type StreamRequest } from './StreamFormModal';
 
@@ -73,7 +74,7 @@ export function StreamsPage() {
       await api().POST(suspend ? '/streams/{streamId}/suspend' : '/streams/{streamId}/resume', {
         params: {
           path: { streamId: stream.streamId ?? '' },
-          header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+          header: reasonHeader(reason),
         },
       });
       void message.success(t('common.done'));

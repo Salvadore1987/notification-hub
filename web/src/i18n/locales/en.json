@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "Notification Hub",
-    "subtitle": "Admin panel"
+    "subtitle": "Admin panel",
+    "language": "Interface language"
   },
   "nav": {
     "dashboard": "Dashboard",

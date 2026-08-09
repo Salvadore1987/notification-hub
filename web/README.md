@@ -13,7 +13,28 @@ npm run build          # tsc -b + vite build → dist/
 npm run lint           # ESLint (flat config)
 npm run format         # Prettier
 npm run generate:api   # типы из ../adapter/src/main/resources/openapi/comm-hub-admin-v1.yaml
+npm test               # unit/компонентные тесты (Vitest + Testing Library, jsdom)
+npm run test:coverage  # то же с покрытием
+npm run test:e2e       # Playwright: сценарии QA-07 и проверка доступности (нужен chromium)
 ```
+
+Перед первым `npm run test:e2e` — `npx playwright install chromium` (браузер качается один раз).
+
+## Тесты
+
+- **Unit/компонентные** (`src/**/*.test.ts(x)`, Vitest + Testing Library): чистые модули
+  (маскирование, время, ошибки, роли, конфигурация, словари) и ключевые компоненты
+  (`ServerTable`, `useReasonPrompt`, `RequireSection`, меню, DLQ, тестовая отправка). BFF
+  подменяется заглушкой `src/test/api.ts` — маршрут объявляется как «GET /dlq», проверяется
+  и что ушло на сервер, и что увидел оператор.
+- **E2E** (`e2e/*.spec.ts`, Playwright): сценарии QA-07 — пауза рассылки, повтор из DLQ,
+  публикация шаблона, тестовая отправка. Backend не поднимается: Admin BFF подменяется на
+  уровне сети (`e2e/fixtures/adminApi.ts`, состояние живое — пауза меняет статус в карточке),
+  панель работает в open mode. Плюс `accessibility.spec.ts`: axe-core (WCAG 2.1 A/AA, кроме
+  контраста — это тема Ant Design) на пяти экранах и язык документа при переключении языка.
+- Словари RU/UZ/EN сверяются между собой и с ключами, которые просят экраны
+  (`src/i18n/locales.test.ts`), а списки перечислений в `shared/labels.ts` — со
+  сгенерированной схемой контракта (`src/shared/labels.test.ts`).
 
 `src/api/generated/admin-schema.ts` сгенерирован и закоммичен; после правки контракта
 запускать `npm run generate:api` — расхождение с контроллерами ловит AdminOpenApiContractTest
@@ -43,6 +64,9 @@ npm run generate:api   # типы из ../adapter/src/main/resources/openapi/com
 - i18n: RU (основной и fallback), UZ, EN (`src/i18n`, UI-01).
 - PII: адреса маскирует backend по роли; клиентские `maskMsisdn`/`maskEmail` — для значений,
   введённых оператором (DB-04).
+- Обоснование действия (FR-7.3) уходит заголовком `X-Commhub-Reason` percent-encoded
+  (`src/shared/reason.ts`): значение HTTP-заголовка байтовое, русский текст без кодирования
+  браузер отправить отказывается. Декодирует его `ReasonHeaderFilter` на стороне BFF.
 - Списки: `ServerTable` — серверная пагинация/сортировка, виртуализация по высоте (UI-03);
   фильтры принадлежат экрану и замыкаются в `fetchPage`.
 - Разделы §11.2 объявляются один раз в `src/layout/navigation.tsx` (путь + перевод + секция ролей).

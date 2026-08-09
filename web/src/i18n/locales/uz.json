@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "Notification Hub",
-    "subtitle": "Administrator paneli"
+    "subtitle": "Administrator paneli",
+    "language": "Interfeys tili"
   },
   "nav": {
     "dashboard": "Boshqaruv paneli",

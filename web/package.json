@@ -11,6 +11,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "generate:api": "openapi-typescript ../adapter/src/main/resources/openapi/comm-hub-admin-v1.yaml -o src/api/generated/admin-schema.ts"
   },
   "dependencies": {
@@ -27,19 +31,28 @@
     "react-router-dom": "^6.30.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.18.0",
+    "@playwright/test": "^1.62.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
+    "@types/node": "^26.2.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.18",
     "globals": "^15.14.0",
+    "jsdom": "^30.0.1",
     "openapi-typescript": "^7.6.0",
     "prettier": "^3.4.2",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.21.0",
-    "vite": "^6.0.11"
+    "vite": "^6.0.11",
+    "vitest": "^3.2.7"
   }
 }

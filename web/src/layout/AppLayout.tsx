@@ -54,6 +54,7 @@ export function AppLayout() {
           <Typography.Text strong>{t('app.subtitle')}</Typography.Text>
           <Space size="middle">
             <Select<Language>
+              aria-label={t('app.language')}
               size="small"
               value={(i18n.language as Language) ?? 'ru'}
               onChange={setLanguage}

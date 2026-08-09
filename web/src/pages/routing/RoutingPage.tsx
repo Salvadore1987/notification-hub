@@ -266,6 +266,7 @@ export function RoutingPage() {
             <Select
               allowClear
               placeholder={t('dashboard.channel')}
+              aria-label={t('dashboard.channel')}
               options={enumOptions(CHANNELS)}
               style={{ width: 120 }}
             />
@@ -274,6 +275,7 @@ export function RoutingPage() {
             <Select
               allowClear
               placeholder={t('streams.trafficClass')}
+              aria-label={t('streams.trafficClass')}
               options={enumOptions(TRAFFIC_CLASSES)}
               style={{ width: 170 }}
             />
@@ -282,6 +284,7 @@ export function RoutingPage() {
             <Select
               allowClear
               placeholder={t('streams.priority')}
+              aria-label={t('streams.priority')}
               options={enumOptions(PRIORITIES)}
               style={{ width: 130 }}
             />

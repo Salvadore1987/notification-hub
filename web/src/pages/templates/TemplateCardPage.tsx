@@ -22,6 +22,7 @@ import { api } from '../../api/client';
 import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
+import { reasonHeader } from '../../shared/reason';
 import {
   CONTENT_LOCALES,
   enumOptions,
@@ -117,14 +118,14 @@ export function TemplateCardPage() {
         await api().DELETE('/templates/{code}', {
           params: {
             path: { code },
-            header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+            header: reasonHeader(reason),
           },
         });
       } else {
         await api().POST('/templates/{code}/restore', {
           params: {
             path: { code },
-            header: reason ? { 'X-Commhub-Reason': reason } : undefined,
+            header: reasonHeader(reason),
           },
         });
       }
