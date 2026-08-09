@@ -3,15 +3,15 @@
 
 dependencies {
     api(project(":application"))
-    implementation(project(":adapter-in-contract"))
-    implementation(project(":adapter-out-kafka"))
-    implementation(project(":adapter-observability"))
+    implementation(project(":adapter:in:contract"))
+    implementation(project(":adapter:out:kafka"))
+    implementation(project(":adapter:observability"))
 
     implementation(libs.spring.boot.starter)
     implementation(libs.spring.kafka)
     implementation(libs.micrometer.core)
 
-    testImplementation(testFixtures(project(":adapter-out-kafka")))
+    testImplementation(testFixtures(project(":adapter:out:kafka")))
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.kafka)

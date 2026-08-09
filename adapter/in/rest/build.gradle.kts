@@ -3,8 +3,8 @@
 
 dependencies {
     api(project(":application"))
-    implementation(project(":adapter-in-contract"))
-    implementation(project(":adapter-in-security"))
+    implementation(project(":adapter:in:contract"))
+    implementation(project(":adapter:in:security"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

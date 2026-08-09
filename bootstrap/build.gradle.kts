@@ -5,28 +5,9 @@ plugins {
 // bootstrap: Spring Boot приложение, конфигурация и wiring всех адаптеров (AR-01).
 
 dependencies {
-    implementation(project(":adapter-in-admin"))
-    implementation(project(":adapter-out-provider-apns"))
-    implementation(project(":adapter-in-callback"))
-    implementation(project(":adapter-out-compliance"))
-    implementation(project(":adapter-in-contract"))
-    implementation(project(":adapter-out-provider-fcm"))
-    implementation(project(":adapter-in-importer"))
-    implementation(project(":adapter-in-kafka"))
-    implementation(project(":adapter-out-kafka"))
-    implementation(project(":adapter-out-metrics"))
-    implementation(project(":adapter-observability"))
-    implementation(project(":adapter-out-persistence"))
-    implementation(project(":adapter-out-provider-playmobile"))
-    implementation(project(":adapter-out-policy"))
-    implementation(project(":adapter-out-provider-support"))
-    implementation(project(":adapter-in-rest"))
-    implementation(project(":adapter-in-scheduler"))
-    implementation(project(":adapter-out-secret"))
-    implementation(project(":adapter-in-security"))
-    implementation(project(":adapter-out-provider-smsgate"))
-    implementation(project(":adapter-out-provider-smtp"))
-    implementation(project(":adapter-out-time"))
+    // Слой adapter целиком, одной строкой: композиционному корню нужны все адаптеры сразу,
+    // а какие именно они есть — знает :adapter (агрегатор). Новый адаптер объявляется там.
+    implementation(project(":adapter"))
     implementation(libs.spring.boot.starter)
     implementation(libs.spring.boot.starter.actuator)
 
@@ -59,7 +40,7 @@ dependencies {
 
     // Кросс-модульные тесты провайдеров (ProviderDocumentationContractTest,
     // ProviderRuntimeSettingsTest) живут здесь: они видят сразу несколько адаптеров.
-    testImplementation(testFixtures(project(":adapter-out-provider-support")))
+    testImplementation(testFixtures(project(":adapter:out:provider:support")))
 
     // ArchUnit видит классы всех слоёв через runtime classpath (AR-03, QA-02)
     testImplementation(libs.archunit)

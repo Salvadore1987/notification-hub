@@ -16,6 +16,7 @@ COPY gradle gradle
 COPY domain/build.gradle.kts domain/
 COPY application/build.gradle.kts application/
 COPY bootstrap/build.gradle.kts bootstrap/
+COPY adapter/build.gradle.kts adapter/
 COPY adapter/in/admin/build.gradle.kts adapter/in/admin/
 COPY adapter/in/callback/build.gradle.kts adapter/in/callback/
 COPY adapter/in/contract/build.gradle.kts adapter/in/contract/

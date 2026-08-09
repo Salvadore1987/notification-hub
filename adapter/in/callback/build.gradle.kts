@@ -6,6 +6,6 @@ dependencies {
 
     implementation(libs.spring.boot.starter.web)
 
-    testImplementation(project(":adapter-in-rest"))
+    testImplementation(project(":adapter:in:rest"))
     testImplementation(libs.spring.boot.starter.test)
 }

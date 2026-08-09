@@ -3,8 +3,8 @@
 
 dependencies {
     api(project(":application"))
-    implementation(project(":adapter-out-compliance"))
-    implementation(project(":adapter-out-persistence"))
+    implementation(project(":adapter:out:compliance"))
+    implementation(project(":adapter:out:persistence"))
 
     implementation(libs.spring.boot.starter)
 }

@@ -3,11 +3,11 @@
 
 dependencies {
     api(project(":application"))
-    implementation(project(":adapter-in-contract"))
-    implementation(project(":adapter-in-rest"))
-    implementation(project(":adapter-in-security"))
-    implementation(project(":adapter-in-importer"))
-    implementation(project(":adapter-out-provider-support"))
+    implementation(project(":adapter:in:contract"))
+    implementation(project(":adapter:in:rest"))
+    implementation(project(":adapter:in:security"))
+    implementation(project(":adapter:in:importer"))
+    implementation(project(":adapter:out:provider:support"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.security)

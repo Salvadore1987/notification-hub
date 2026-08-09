@@ -76,7 +76,8 @@ export CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)   # AES-256, 32 бай�
 ```
 domain/       — чистая Java: модель и доменные сервисы. Без Spring/JPA/Kafka/Jackson (AR-02)
 application/  — port/in (use cases), port/out (репозитории, провайдеры, паблишеры), оркестрация, saga
-adapter/      — каждый адаптер — отдельный Gradle-модуль (:adapter-in-*, :adapter-out-*):
+adapter/      — каждый адаптер — отдельный Gradle-модуль; путь проекта повторяет каталог
+                (:adapter:in:rest = adapter/in/rest), сам :adapter — агрегатор над ними:
                 in/{rest,admin,kafka,callback,importer,scheduler,contract,security}
                 out/{persistence,kafka,metrics,time,secret,compliance,policy,provider/*}
                 observability/ — ни driving, ни driven
@@ -86,9 +87,15 @@ bootstrap/    — Spring Boot приложение, конфигурация, wi
 ```
 
 Направление зависимостей — только внутрь: `adapter → application → domain` (AR-03); связи между
-модулями адаптеров держит Gradle (например, провайдеры видят `adapter-in-callback` только ради
-интерфейса `ProviderCallbackTranslator`). Один модуль гоняется адресно:
-`./gradlew :adapter-out-persistence:test`.
+модулями адаптеров держит Gradle (например, провайдеры видят `:adapter:in:callback` только ради
+интерфейса `ProviderCallbackTranslator`). Слой целиком — `./gradlew :adapter:build`, один модуль
+адресно — `./gradlew :adapter:out:persistence:test`.
+
+Новый адаптер: каталог под `adapter/in|out/`, свой `build.gradle.kts`, строка `include(...)` в
+`settings.gradle.kts` и строка `api(project(...))` в `adapter/build.gradle.kts`. Имя Gradle-модуля —
+последний сегмент пути, поэтому имена в разных ветках могут совпасть (`in/kafka` и `out/kafka`):
+координаты разводит `group` из пути, а имена артефактов — `archivesName`, оба задаются в корневом
+`build.gradle.kts` и трогать их не нужно.
 
 ## Правила кода
 
