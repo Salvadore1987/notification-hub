@@ -14,6 +14,7 @@ import { AuditPage } from './pages/audit/AuditPage';
 import { BatchesPage } from './pages/batches/BatchesPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { DlqPage } from './pages/dlq/DlqPage';
+import { SendPage } from './pages/send/SendPage';
 import { MessagesPage } from './pages/messages/MessagesPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProvidersPage } from './pages/providers/ProvidersPage';
@@ -32,6 +33,7 @@ const ANTD_LOCALES: Record<string, typeof ruRU> = { ru: ruRU, uz: ruRU, en: enUS
 const SECTION_PAGES: Record<string, ComponentType> = {
   dashboard: DashboardPage,
   batches: BatchesPage,
+  send: SendPage,
   messages: MessagesPage,
   dlq: DlqPage,
   streams: StreamsPage,

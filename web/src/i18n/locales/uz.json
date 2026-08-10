@@ -7,6 +7,7 @@
   "nav": {
     "dashboard": "Boshqaruv paneli",
     "batches": "Ommaviy yuborishlar",
+    "send": "Yuborish",
     "messages": "Xabarlar",
     "dlq": "DLQ",
     "streams": "Kiruvchi oqimlar",
@@ -118,6 +119,25 @@
     "segments": "Segmentlar",
     "card": "Xabar kartasi",
     "test": "Test"
+  },
+  "send": {
+    "tabSingle": "Bitta xabar",
+    "tabBulk": "Fayldan ommaviy yuborish",
+    "singleHint": "Matn chop etilgan shablondan olinadi: u allaqachon ikkinchi shaxs tomonidan ko‘rib chiqilgan (FR-4.2)",
+    "bulkHint": "Ustunlar sarlavha nomlari bo‘yicha: kanalga mos manzil ustuni (msisdn / email / pushToken), clientId va externalId — xizmat ustunlari, qolgan barcha ustunlar merge-o‘zgaruvchilarga aylanadi. Bir faylni qayta yuklash xavfsiz",
+    "estimate": "Smetani hisoblash",
+    "estimateTitle": "Yuborishni tasdiqlash",
+    "estimateWarning": "Bu mijozlarga haqiqiy yuborish. Smeta — bu faqat baho: tariflar va provayderlar holati tasdiqlash bilan yuborish orasida o‘zgarishi mumkin",
+    "confirm": "Yuborish",
+    "recipients": "Qabul qiluvchilar",
+    "missingVariables": "To‘ldirilmagan o‘zgaruvchilar",
+    "fileFailures": "O‘qib bo‘lmagan fayl qatorlari",
+    "fileRequired": "Avval qabul qiluvchilar ro‘yxati faylini yuklang",
+    "result": "Natija",
+    "accepted": "Qabul qilindi",
+    "duplicates": "Dublikatlar",
+    "rejected": "Rad etildi",
+    "openBatch": "Yuborishni ochish"
   },
   "dlq": {
     "reason": "Sabab",

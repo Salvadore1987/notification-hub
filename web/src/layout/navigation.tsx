@@ -7,6 +7,7 @@ import {
   FileTextOutlined,
   ImportOutlined,
   MailOutlined,
+  RocketOutlined,
   SendOutlined,
   SettingOutlined,
   StopOutlined,
@@ -42,6 +43,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'nav.batches',
     icon: <SendOutlined />,
     section: 'operatorOrViewer',
+  },
+  {
+    // Отправка из панели (ADR-0038): своя секция, потому что это действие, а не список.
+    key: 'send',
+    path: '/send',
+    labelKey: 'nav.send',
+    icon: <RocketOutlined />,
+    section: 'operator',
   },
   {
     key: 'messages',

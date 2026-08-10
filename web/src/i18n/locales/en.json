@@ -7,6 +7,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "batches": "Batches",
+    "send": "Send",
     "messages": "Messages",
     "dlq": "DLQ",
     "streams": "Inbound streams",
@@ -118,6 +119,25 @@
     "segments": "Segments",
     "card": "Message card",
     "test": "Test"
+  },
+  "send": {
+    "tabSingle": "Single message",
+    "tabBulk": "Batch from a file",
+    "singleHint": "The text comes from a published template — one a second person has already reviewed (FR-4.2)",
+    "bulkHint": "Columns by header name: the address column of the channel (msisdn / email / pushToken), clientId and externalId are reserved, every other column becomes a merge variable. Re-uploading the same file is safe",
+    "estimate": "Estimate",
+    "estimateTitle": "Confirm the send",
+    "estimateWarning": "This is a real send to customers. An estimate is an estimate: tariffs and provider health may change between confirming and sending",
+    "confirm": "Send",
+    "recipients": "Recipients",
+    "missingVariables": "Unfilled variables",
+    "fileFailures": "Rows of the file that could not be read",
+    "fileRequired": "Upload the recipient list first",
+    "result": "Result",
+    "accepted": "Accepted",
+    "duplicates": "Duplicates",
+    "rejected": "Rejected",
+    "openBatch": "Open the batch"
   },
   "dlq": {
     "reason": "Reason",
