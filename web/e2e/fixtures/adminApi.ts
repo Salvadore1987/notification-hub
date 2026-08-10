@@ -285,7 +285,7 @@ export const test = base.extend<{ admin: AdminStub }>({
     const navigate = page.goto.bind(page);
     page.goto = async (url, options) => {
       const response = await navigate(url, options);
-      await waitForPanel(page);
+      await waitForPanel(page, url);
       return response;
     };
     await runTest(page);
@@ -298,14 +298,16 @@ export const test = base.extend<{ admin: AdminStub }>({
   ],
 });
 
-/** Редирект на issuer прошёл, код обменян, returnTo вернул на запрошенный экран — оболочка на месте. */
-async function waitForPanel(page: Page): Promise<void> {
-  await page.waitForURL(
-    (url) => url.port === '5173' && !url.pathname.startsWith('/auth/callback'),
-    {
-      timeout: 30_000,
-    },
-  );
+/**
+ * Редирект на issuer прошёл, код обменян, панель отрисовалась — и вернулась она **на запрошенный
+ * экран**, а не на дашборд. Последнее проверяется здесь, а значит проверяется каждым сценарием:
+ * возврат по returnTo — не отдельный тест, а предусловие всех остальных.
+ */
+async function waitForPanel(page: Page, requested: string): Promise<void> {
+  const wanted = new URL(requested, 'http://localhost:5173').pathname;
+  await page.waitForURL((url) => url.port === '5173' && url.pathname === wanted, {
+    timeout: 30_000,
+  });
   await page.locator('.ant-layout-sider').first().waitFor({ state: 'visible', timeout: 30_000 });
 }
 

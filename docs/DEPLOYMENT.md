@@ -41,7 +41,7 @@ SQL-пакета в поставке нет.
 ### 3.1. Инфраструктура
 
 ```bash
-docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, WireMock, GreenMail
+docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak, WireMock, GreenMail
 ```
 
 | Сервис | Адрес | Учётные данные |
@@ -49,12 +49,18 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, WireMock
 | PostgreSQL | `localhost:5432/commhub` | `commhub` / `commhub` |
 | Kafka | `localhost:9092` | без auth |
 | Schema Registry | `http://localhost:8081` | — |
+| Keycloak (realm `commhub`) | `http://localhost:8180` | консоль `admin` / `admin`; панель `demo` / `demo` |
 | WireMock (стабы Playmobile/SMS Gate/FCM/APNs) | `http://localhost:8089` | — |
 | GreenMail SMTP / IMAP / UI | `3025` / `3143` / `http://localhost:8085` | без auth |
 
 Топики Kafka создаются автоматически (`KAFKA_AUTO_CREATE_TOPICS_ENABLE=true` в compose) — до
 первой публикации в логе приложения будут одиночные предупреждения `UNKNOWN_TOPIC_OR_PARTITION`,
 это штатно.
+
+Keycloak поднимается в режиме `start-dev` и импортирует `docker/keycloak/commhub-realm.json` при каждом
+запуске — тома у него нет намеренно: realm демонстрационный, и правка файла применяется рестартом
+(`docker compose up -d --force-recreate keycloak`). Тот же файл копируется в Testcontainer интеграционных
+тестов, поэтому расходиться копиям негде.
 
 Остановка с удалением данных: `docker compose down -v`.
 
@@ -68,7 +74,9 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, WireMock
 в репозитории лежит готовая `.run/Notification Hub (local).run.xml`, IntelliJ показывает её
 в списке сам.
 
-Единственная обязательная переменная без значения по умолчанию — ключ шифрования контента (DB-04):
+Обязательных значений два, и оба локально подставляет `config/application.yml`: издатель OIDC
+(`spring.security.oauth2.resourceserver.jwt.issuer-uri` → локальный Keycloak; без него инстанс не стартует,
+ADR-0037) и ключ шифрования контента (DB-04):
 без него контекст не поднимется, тихого отката на хранение открытым текстом нет. Локально ключ
 подставляет **`config/application.yml`** в корне репозитория (плюс `bootstrap/config/application.yml`,
 который его импортирует — рабочий каталог у Gradle и у IDE разный). Шифрование при этом включено,
@@ -87,12 +95,26 @@ java -jar bootstrap/build/libs/notification-hub.jar
 ```bash
 curl http://localhost:8080/actuator/health            # {"status":"UP", ...}
 curl http://localhost:8080/actuator/health/readiness  # 200
-curl http://localhost:8080/api/admin/v1/dashboard     # 200 (админ-BFF в open mode)
+curl -i http://localhost:8080/api/admin/v1/dashboard  # 401 — панель за OIDC на любом контуре
 ```
 
+Админ-BFF требует токен всегда (ADR-0037), поэтому проверять его нужно с токеном демо-администратора
+локального Keycloak:
+
+```bash
+TOKEN=$(curl -s -d grant_type=password -d client_id=commhub-admin \
+  -d username=demo -d password=demo \
+  http://localhost:8180/realms/commhub/protocol/openid-connect/token | jq -r .access_token)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/admin/v1/dashboard        # 200
+```
+
+Инстанс без `spring.security.oauth2.resourceserver.jwt.issuer-uri` **не стартует**: локально значение
+подставляет `config/application.yml` (см. §3.1), в контуре — переменная окружения.
+
 Ожидаемые предупреждения в логе локального запуска (и только локального): аутентификация
-систем-источников выключена (SEC-01), авторизация admin BFF неактивна (SEC-03), security
-Kafka-клиента не настроена. Это осознанные локальные умолчания — см. §5.3.
+систем-источников выключена (SEC-01) и security Kafka-клиента не настроена. Это осознанные локальные
+умолчания — см. §5.3.
 
 Провайдеры по умолчанию выключены (`PLAYMOBILE_ENABLED=false` и т.д.). Для проверки отправки
 против WireMock-стабов включайте нужный и указывайте кредам-ссылкам схему `env:`, например:
@@ -125,8 +147,12 @@ npm install        # однократно
 npm run dev        # http://localhost:5173, прокси /api → localhost:8080
 ```
 
-`public/config.json` с пустым `oidc.authority` — это open mode: панель доступна со всеми ролями
-и предупреждающей плашкой, та же позиция, что у backend'а без OIDC-издателя.
+`public/config.json` указывает на локальный Keycloak (`http://localhost:8180/realms/commhub`), вход —
+`demo/demo`. Пустой `oidc.authority` открытым режимом больше не является: панель покажет «не настроена»
+и внутрь не пустит (ADR-0037).
+
+Другие роли §10.1 — тем же паролем, что и логин: `operator`, `template-manager`, `analyst`, `viewer`,
+`auditor`. Ими проверяется, что видит каждая роль, без правки конфигурации.
 
 ### 3.5. Проверки перед PR
 
@@ -210,17 +236,26 @@ cd web && npm ci && npm run build   # -> web/dist/
 
 ### 5.3. Безопасность — включить обязательно
 
-Оба механизма аутентификации **выключены по умолчанию** (осознанно: локально нет ни издателя,
-ни CA), и инстанс без единого включённого пишет предупреждение на старте. В контуре включается
-то, что предписывает стандарт Банка:
+Издатель OIDC **обязателен на любом контуре** — без него инстанс не стартует: админ-панель за SSO
+всегда (SEC-02, ADR-0037). Выключателя у неё нет; выключателем контур располагает только для
+систем-источников на `/api/v1`.
 
 ```bash
-# OAuth2 для систем-источников и admin BFF (SEC-01/SEC-02/SEC-03):
-COMMHUB_OAUTH2_ENABLED=true
+# Обязательно (SEC-02): издатель, против которого проверяются токены панели.
 SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://sso.hamkorbank.uz/realms/commhub
-# и/или mTLS: COMMHUB_MTLS_ENABLED=true (CN сертификата = streamId по соглашению)
+# SEC-01: требовать токен и от систем-источников. В контуре Банка — true.
+COMMHUB_REQUIRE_SOURCE_SYSTEM_TOKEN=true
 # Kafka: KAFKA_SECURITY_PROTOCOL / KAFKA_SASL_* / KAFKA_*STORE_* (SASL/SCRAM или mTLS + ACL)
 ```
+
+**mTLS для систем-источников не поддерживается** — удалён вместе с открытым режимом (ADR-0037).
+
+Группы SSO должны называться именами ролей §10.1 (`ADMIN`, `OPERATOR`, `TEMPLATE_MANAGER`, `ANALYST`,
+`VIEWER`, `SECURITY_AUDITOR`) и приходить в claim `groups` **коротким именем, без пути**: значение
+берётся как есть, в верхнем регистре, поэтому `/commhub-admin` превратится в роль, которой ни у кого
+нет. Пример настройки — локальный `docker/keycloak/commhub-realm.json` (group-membership mapper,
+`full.path=false`). Если имена групп Банка отличаются от имён ролей, отображение задаётся в
+`groupRoles` файла `public/config.json` панели и в `COMMHUB_ROLES_CLAIM` на backend'е.
 
 Секреты callback'ов провайдеров — `PLAYMOBILE_CALLBACK_SECRET_REF` / `SMSGATE_CALLBACK_SECRET_REF`
 (SEC-07, форма `env:PLAYMOBILE_CALLBACK_SECRET`), плюс списки разрешённых IP, согласованные с

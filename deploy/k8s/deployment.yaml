@@ -60,6 +60,16 @@ spec:
                 secretKeyRef:
                   name: notification-hub-crypto
                   key: active-key
+            # SEC-02 (ADR-0037): издатель корпоративного SSO. Обязателен — админ-панель за OIDC на
+            # любом контуре, и инстанс без издателя не стартует, а не открывает панель.
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: notification-hub
+                  key: oidc-issuer-uri
+            # SEC-01: требовать токен и от систем-источников на /api/v1. Панели это не касается.
+            - name: COMMHUB_REQUIRE_SOURCE_SYSTEM_TOKEN
+              value: "true"
             # SEC-04 (ADR-0036): креды провайдеров приходят переменными окружения. Ссылки на них
             # заданы в application.yml (env:PLAYMOBILE_PASSWORD и т.д.); здесь — только источник
             # значения. Ротация: обновить Secret и `kubectl rollout restart` — переменную живого

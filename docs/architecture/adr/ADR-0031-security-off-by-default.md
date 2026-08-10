@@ -2,10 +2,18 @@
 
 | | |
 |---|---|
-| **Статус** | Принято · реализовано |
+| **Статус** | Частично заменено [ADR-0037](ADR-0037-admin-panel-always-behind-oidc.md) |
 | **Дата** | 09.08.2026 |
 | **Требования SRS** | SEC-01, SEC-02, SEC-03, SEC-07, §10.1 |
-| **Связанные решения** | [ADR-0017](ADR-0017-admin-bff-separate-api.md), [ADR-0033](ADR-0033-frontend-stack.md) |
+| **Связанные решения** | [ADR-0037](ADR-0037-admin-panel-always-behind-oidc.md), [ADR-0017](ADR-0017-admin-bff-separate-api.md), [ADR-0033](ADR-0033-frontend-stack.md) |
+
+> **Что из этого больше не действует (10.08.2026, [ADR-0037](ADR-0037-admin-panel-always-behind-oidc.md)).**
+> Открытого режима у админ-панели нет: `@adminAccess.open()` и сам `AdminAccess` удалены, пустой issuer в
+> `public/config.json` — экран ошибки конфигурации, а инстанс без `issuer-uri` не стартует. mTLS удалён целиком.
+> Предпосылка этого решения — «у локального контура нет OIDC-провайдера» — перестала быть верной: Keycloak
+> входит в `docker compose`. В силе остаётся всё, что ниже относится к системам-источникам (`/api/v1` под
+> переименованным `require-source-system-token`), к разделению 401/403, к `StreamAccessGuard`, к человеку против
+> машины в `AuthenticatedCaller` и к защите callback'ов.
 
 ## Контекст
 

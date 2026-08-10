@@ -9,6 +9,7 @@ SPA админ-панели (§11, UI-01…UI-04): React 18 + TypeScript, сбо
 ```bash
 npm install
 npm run dev            # http://localhost:5173, /api проксируется на bootstrap (localhost:8080)
+                       # нужен поднятый Keycloak: docker compose up -d keycloak, вход demo/demo
 npm run build          # tsc -b + vite build → dist/
 npm run lint           # ESLint (flat config)
 npm run format         # Prettier
@@ -19,6 +20,8 @@ npm run test:e2e       # Playwright: сценарии QA-07 и проверка 
 ```
 
 Перед первым `npm run test:e2e` — `npx playwright install chromium` (браузер качается один раз).
+E2E логинятся в настоящий Keycloak, поэтому ему нужно быть поднятым: `docker compose up -d keycloak`
+(без него прогон падает сразу и говорит эту команду).
 
 ## Тесты
 
@@ -29,8 +32,11 @@ npm run test:e2e       # Playwright: сценарии QA-07 и проверка 
   и что ушло на сервер, и что увидел оператор.
 - **E2E** (`e2e/*.spec.ts`, Playwright): сценарии QA-07 — пауза рассылки, повтор из DLQ,
   публикация шаблона, тестовая отправка. Backend не поднимается: Admin BFF подменяется на
-  уровне сети (`e2e/fixtures/adminApi.ts`, состояние живое — пауза меняет статус в карточке),
-  панель работает в open mode. Плюс `accessibility.spec.ts`: axe-core (WCAG 2.1 A/AA, кроме
+  уровне сети (`e2e/fixtures/adminApi.ts`, состояние живое — пауза меняет статус в карточке).
+  А вот **вход настоящий**: проект `setup` один раз проходит форму Keycloak демо-пользователем и
+  сохраняет SSO-cookie — не токен панели, потому что Playwright не переносит `sessionStorage`, где
+  токен и живёт (SEC-02). Ожидание редиректа стоит в фикстуре `page`, а не в spec'ах.
+  Плюс `accessibility.spec.ts`: axe-core (WCAG 2.1 A/AA, кроме
   контраста — это тема Ant Design) на пяти экранах и язык документа при переключении языка.
 - Словари RU/UZ/EN сверяются между собой и с ключами, которые просят экраны
   (`src/i18n/locales.test.ts`), а списки перечислений в `shared/labels.ts` — со
@@ -46,8 +52,10 @@ npm run test:e2e       # Playwright: сценарии QA-07 и проверка 
 
 - `apiBaseUrl` — база Admin BFF (по умолчанию относительная `/api/admin/v1`);
 - `oidc.authority` / `clientId` / `scope` — OIDC-провайдер корпоративного SSO (UI-02, SEC-02).
-  Пустой `authority` — open mode: панель работает без аутентификации со всеми ролями, с
-  предупреждением в шапке — та же позиция, что `@adminAccess.open()` на backend;
+  Локально это Keycloak из `docker compose` (`http://localhost:8180/realms/commhub`), вход
+  `demo/demo`; другие роли §10.1 — `operator`, `template-manager`, `analyst`, `viewer`, `auditor`
+  (пароль совпадает с логином). Пустой `authority` — **не** режим работы, а ошибка настройки
+  контура: панель показывает «не настроена» и внутрь не пускает (ADR-0037);
 - `rolesClaim` — claim токена с SSO-группами (зеркало `commhub.security.roles-claim`,
   по умолчанию `groups`);
 - `groupRoles` — маппинг SSO-группа → роль §10.1; группа, совпадающая с именем роли,
