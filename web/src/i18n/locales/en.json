@@ -25,7 +25,8 @@
     "redirecting": "Redirecting to SSO…",
     "forbidden": "You have no role for this section",
     "error": "Sign-in failed",
-    "openMode": "SSO is not configured — the panel runs without authentication"
+    "notConfigured": "The panel is not configured",
+    "notConfiguredHint": "No OIDC issuer: oidc.authority in public/config.json is empty. The panel is behind SSO on every contour — ask whoever deployed it."
   },
   "errors": {
     "request": "Request failed",

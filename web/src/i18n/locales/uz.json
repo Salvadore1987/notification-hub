@@ -25,7 +25,8 @@
     "redirecting": "SSO sahifasiga yoʻnaltirilmoqda…",
     "forbidden": "Bu boʻlim uchun rolingiz yoʻq",
     "error": "Kirish amalga oshmadi",
-    "openMode": "SSO sozlanmagan — panel autentifikatsiyasiz ishlamoqda"
+    "notConfigured": "Panel sozlanmagan",
+    "notConfiguredHint": "OIDC-issuer koʻrsatilmagan: public/config.json faylida oidc.authority boʻsh. Panel har qanday konturda SSO ortida — uni oʻrnatgan mutaxassislarga murojaat qiling."
   },
   "errors": {
     "request": "Soʻrov bajarilmadi",

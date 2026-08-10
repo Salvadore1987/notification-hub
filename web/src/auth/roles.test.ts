@@ -32,7 +32,7 @@ describe('rolesFromClaim', () => {
 });
 
 describe('section gating', () => {
-  const canSee = (roles: string[]) => makeSession(roles as never, false, 'tester', () => {}).canSee;
+  const canSee = (roles: string[]) => makeSession(roles as never, 'tester', () => {}).canSee;
 
   it('mirrors AdminAuthority: ADMIN does not inherit the other roles implicitly', () => {
     expect(SECTION_ROLES.admin).toEqual(['ADMIN']);
@@ -62,11 +62,10 @@ describe('section gating', () => {
     }
   });
 
-  it('gives an open-mode session every section — the panel warns instead of refusing', () => {
-    const open = makeSession(ROLES, true, undefined, () => {});
+  it('gives a session holding every role every section', () => {
+    const everything = makeSession(ROLES, 'tester', () => {});
     for (const section of Object.keys(SECTION_ROLES) as (keyof typeof SECTION_ROLES)[]) {
-      expect(open.canSee(section)).toBe(true);
+      expect(everything.canSee(section)).toBe(true);
     }
-    expect(open.open).toBe(true);
   });
 });

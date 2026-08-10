@@ -30,13 +30,17 @@ describe('loadAppConfig', () => {
     });
   });
 
-  it('falls back to open mode when config.json is missing', async () => {
+  it('reports a missing config.json as an unconfigured panel, never as an open one', async () => {
     respondWith({}, 404);
 
-    await expect(loadAppConfig()).resolves.toEqual(DEFAULT_CONFIG);
+    const config = await loadAppConfig();
+
+    expect(config).toEqual(DEFAULT_CONFIG);
+    // Пустой issuer — это экран «панель не настроена» (ADR-0037), а не доступ без аутентификации.
+    expect(config.oidc.authority).toBe('');
   });
 
-  it('falls back to open mode when config.json is unreadable — the panel still starts', async () => {
+  it('survives an unreadable config.json — a blank page would say even less', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -44,7 +48,10 @@ describe('loadAppConfig', () => {
       }),
     );
 
-    await expect(loadAppConfig()).resolves.toEqual(DEFAULT_CONFIG);
+    const config = await loadAppConfig();
+
+    expect(config).toEqual(DEFAULT_CONFIG);
+    expect(config.oidc.authority).toBe('');
   });
 
   it('reads the file past the cache — a redeployed contour must not get yesterday copy', async () => {

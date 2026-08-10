@@ -1,9 +1,9 @@
 {
   "apiBaseUrl": "/api/admin/v1",
   "oidc": {
-    "authority": "",
+    "authority": "http://localhost:8180/realms/commhub",
     "clientId": "commhub-admin",
-    "scope": "openid profile offline_access"
+    "scope": "openid profile"
   },
   "rolesClaim": "groups",
   "groupRoles": {}

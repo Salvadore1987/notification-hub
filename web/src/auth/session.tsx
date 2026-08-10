@@ -6,32 +6,29 @@ import { useTranslation } from 'react-i18next';
 
 import { setAccessTokenProvider } from '../api/client';
 import { useAppConfig, type AppConfig } from '../config/appConfig';
-import { rolesFromClaim, SECTION_ROLES } from './roles';
+import { restoreReturnTo, signinState } from './returnTo';
+import { rolesFromClaim } from './roles';
 import { makeSession, SessionContext } from './sessionContext';
 
 /**
- * Провайдер сессии выбирается по конфигурации — контур без issuer работает в open mode, зеркаля
- * @adminAccess.open() backend'а: панель, которая на таком контуре отказывает всем, чинят
- * удалением проверок, а не настройкой SSO.
+ * Панель за SSO на любом контуре (ADR-0037): открытого режима нет ни здесь, ни на backend'е, где
+ * админ-цепочка безусловно требует токен, а инстанс без issuer'а не стартует. Пустой authority —
+ * это не «SSO не настроено, работаем так», а ошибка конфигурации развёртывания, и панель говорит
+ * об этом вместо того, чтобы пустить внутрь.
  */
 export function SessionProvider({ children }: PropsWithChildren) {
   const config = useAppConfig();
+  const { t } = useTranslation();
   if (!config.oidc.authority) {
-    return <OpenSession>{children}</OpenSession>;
+    return (
+      <Result
+        status="error"
+        title={t('auth.notConfigured')}
+        subTitle={t('auth.notConfiguredHint')}
+      />
+    );
   }
   return <OidcSession config={config}>{children}</OidcSession>;
-}
-
-function OpenSession({ children }: PropsWithChildren) {
-  const warned = useRef(false);
-  useEffect(() => {
-    if (!warned.current) {
-      warned.current = true;
-      console.warn('OIDC authority is not configured — admin panel runs in open mode (UI-02)');
-    }
-  }, []);
-  const session = useMemo(() => makeSession(SECTION_ROLES.any, true, undefined, () => {}), []);
-  return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
 
 function OidcSession({ config, children }: PropsWithChildren<{ config: AppConfig }>) {
@@ -45,9 +42,7 @@ function OidcSession({ config, children }: PropsWithChildren<{ config: AppConfig
       // sessionStorage, не localStorage: токен живёт со вкладкой, а не переживает её (SEC-02).
       userStore: new WebStorageStateStore({ store: window.sessionStorage }),
       automaticSilentRenew: true,
-      onSigninCallback: () => {
-        window.history.replaceState({}, document.title, '/');
-      },
+      onSigninCallback: restoreReturnTo,
     }),
     [config],
   );
@@ -79,7 +74,7 @@ function OidcSessionInner({ config, children }: PropsWithChildren<{ config: AppC
       !signinAttempted.current
     ) {
       signinAttempted.current = true;
-      void auth.signinRedirect();
+      void auth.signinRedirect({ state: signinState() });
     }
   }, [auth]);
 
@@ -96,7 +91,6 @@ function OidcSessionInner({ config, children }: PropsWithChildren<{ config: AppC
     () =>
       makeSession(
         roles,
-        false,
         auth.user?.profile.preferred_username ?? auth.user?.profile.sub,
         () => void auth.signoutRedirect(),
       ),
@@ -110,7 +104,7 @@ function OidcSessionInner({ config, children }: PropsWithChildren<{ config: AppC
         title={t('auth.error')}
         subTitle={auth.error.message}
         extra={
-          <Button type="primary" onClick={() => void auth.signinRedirect()}>
+          <Button type="primary" onClick={() => void auth.signinRedirect({ state: signinState() })}>
             {t('auth.signIn')}
           </Button>
         }

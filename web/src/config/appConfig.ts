@@ -6,7 +6,7 @@ import { createContext, useContext } from 'react';
  * что у backend'а, где issuer и group→role mapping приходят из deployment-конфигурации (SEC-02).
  */
 export interface OidcSettings {
-  /** URL OIDC-провайдера (issuer). Пустая строка — SSO не настроен, панель в open mode. */
+  /** URL OIDC-провайдера (issuer). Пустая строка — ошибка настройки контура, а не режим работы. */
   readonly authority: string;
   readonly clientId: string;
   readonly scope: string;
@@ -23,19 +23,26 @@ export interface AppConfig {
 
 export const DEFAULT_CONFIG: AppConfig = {
   apiBaseUrl: '/api/admin/v1',
-  oidc: { authority: '', clientId: 'commhub-admin', scope: 'openid profile offline_access' },
+  // offline_access нет намеренно: публичному браузерному клиенту offline-токен, переживающий
+  // выход из SSO, не нужен — обычного refresh-токена хватает для automaticSilentRenew.
+  oidc: { authority: '', clientId: 'commhub-admin', scope: 'openid profile' },
   rolesClaim: 'groups',
   groupRoles: {},
 };
 
 /**
- * Недоступный или битый config.json не роняет панель, а оставляет дефолты: относительный
- * apiBaseUrl и open mode — то же поведение, что у контура без настроенного SSO.
+ * Недоступный или битый config.json не роняет загрузку — иначе вместо сообщения была бы пустая
+ * страница, — но и не открывает панель: дефолтный authority пустой, а это экран «контур не
+ * настроен» (ADR-0037). Ошибка при этом попадает в консоль: тому, кто раскатывал, нужен факт, а
+ * не только вывод.
  */
 export async function loadAppConfig(): Promise<AppConfig> {
   try {
     const response = await fetch('/config.json', { cache: 'no-store' });
     if (!response.ok) {
+      console.error(
+        `/config.json is unavailable (HTTP ${response.status}) — the panel cannot be configured`,
+      );
       return DEFAULT_CONFIG;
     }
     const raw = (await response.json()) as Partial<AppConfig>;
@@ -45,7 +52,8 @@ export async function loadAppConfig(): Promise<AppConfig> {
       rolesClaim: raw.rolesClaim ?? DEFAULT_CONFIG.rolesClaim,
       groupRoles: raw.groupRoles ?? DEFAULT_CONFIG.groupRoles,
     };
-  } catch {
+  } catch (error) {
+    console.error('/config.json could not be read — the panel cannot be configured', error);
     return DEFAULT_CONFIG;
   }
 }

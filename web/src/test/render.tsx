@@ -14,19 +14,14 @@ import { ROLES, type Role } from '../auth/roles';
  */
 export interface RenderOptions {
   readonly roles?: readonly Role[];
-  readonly open?: boolean;
   readonly route?: string;
+  readonly userName?: string;
   readonly signOut?: () => void;
 }
 
 export function renderWithProviders(ui: ReactNode, options: RenderOptions = {}): RenderResult {
   const roles = options.roles ?? ROLES;
-  const session = makeSession(
-    roles,
-    options.open ?? false,
-    options.open ? undefined : 'tester',
-    options.signOut ?? (() => {}),
-  );
+  const session = makeSession(roles, options.userName ?? 'tester', options.signOut ?? (() => {}));
   return render(
     <MemoryRouter initialEntries={[options.route ?? '/']}>
       <SessionContext.Provider value={session}>

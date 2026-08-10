@@ -33,14 +33,15 @@ describe('RequireSection', () => {
     expect(screen.queryByText('настройки провайдеров')).not.toBeInTheDocument();
   });
 
-  it('lets a contour without SSO through — the panel warns instead of refusing (open mode)', () => {
+  it('refuses a session with no roles at all — an SSO account outside every group sees nothing', () => {
     renderWithProviders(
       <RequireSection section="admin">
         <div>настройки провайдеров</div>
       </RequireSection>,
-      { open: true },
+      { roles: [] },
     );
 
-    expect(screen.getByText('настройки провайдеров')).toBeInTheDocument();
+    expect(screen.getByText('403')).toBeInTheDocument();
+    expect(screen.queryByText('настройки провайдеров')).not.toBeInTheDocument();
   });
 });

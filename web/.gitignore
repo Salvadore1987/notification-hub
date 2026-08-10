@@ -4,5 +4,7 @@ coverage
 test-results
 playwright-report
 .playwright
+# SSO-cookie демо-пользователя, которую сохраняет проект setup: живой credential, пусть и локальный
+e2e/.auth
 *.local
 .DS_Store
