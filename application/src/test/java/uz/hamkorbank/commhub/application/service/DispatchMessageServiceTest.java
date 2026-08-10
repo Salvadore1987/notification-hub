@@ -54,6 +54,7 @@ import uz.hamkorbank.commhub.application.service.pipeline.MessageValidator;
 import uz.hamkorbank.commhub.application.service.pipeline.PanDetector;
 import uz.hamkorbank.commhub.application.service.pipeline.QuotaGuard;
 import uz.hamkorbank.commhub.application.service.pipeline.TemplateApplier;
+import uz.hamkorbank.commhub.application.service.support.BatchProgressRecorder;
 import uz.hamkorbank.commhub.application.service.support.DispatchGuards;
 import uz.hamkorbank.commhub.application.service.support.DispatchPreparation;
 import uz.hamkorbank.commhub.application.service.support.DispatchSettlement;
@@ -154,11 +155,20 @@ class DispatchMessageServiceTest {
         MessageStatusNotifier notifier =
                 new MessageStatusNotifier(outbox, mock(MetricsPort.class), new MessageMapperImpl());
         DispatchGuards dispatchGuards = new DispatchGuards(killSwitch, batches, streams);
+        BatchProgressRecorder recorder = new BatchProgressRecorder(batches);
         service = new DispatchMessageService(
                 new DispatchPreparation(
-                        clock, messages, dispatchGuards, pipeline, notifier, gateway, SendingPolicy.defaults()),
+                        clock,
+                        messages,
+                        dispatchGuards,
+                        pipeline,
+                        notifier,
+                        gateway,
+                        SendingPolicy.defaults(),
+                        recorder),
                 gateway,
-                new DispatchSettlement(clock, messages, dlqEntries, pipeline, notifier, SendingPolicy.defaults()));
+                new DispatchSettlement(
+                        clock, messages, dlqEntries, pipeline, notifier, SendingPolicy.defaults(), recorder));
     }
 
     @Test

@@ -42,6 +42,28 @@ public class BatchPersistenceAdapter implements BatchRepository {
                AND (NOT CAST(:activeOnly AS boolean) OR status NOT IN ('STOPPED', 'COMPLETED'))
             """;
 
+    /**
+     * Counter change applied in one statement, never as a read-modify-write (FR-3.1, ADR-0040).
+     *
+     * <p>{@link #save(Batch)} writes the counters as absolute values taken from an aggregate loaded a
+     * moment earlier, so two dispatch threads on the same batch would lose one of their increments.
+     * A progress counter is a concurrent accumulator, like the quota and frequency counters, and is
+     * treated as one.
+     *
+     * <p>{@code GREATEST(0, …)} mirrors {@code Batch.apply}: a DLQ retry sends negative components, and
+     * the {@code CHECK} on the table would otherwise refuse the write.
+     */
+    private static final String APPLY_PROGRESS = """
+            UPDATE batch
+               SET processed = GREATEST(0, processed + :processed),
+                   sent      = GREATEST(0, sent + :sent),
+                   delivered = GREATEST(0, delivered + :delivered),
+                   failed    = GREATEST(0, failed + :failed),
+                   updated_at = now()
+             WHERE id = :id
+            RETURNING total, processed, sent, delivered, failed
+            """;
+
     private static final String UPSERT = """
             INSERT INTO batch (id, stream_id, channel, status, total, processed, sent, delivered, failed,
                                cost_estimate, cost_currency, timing, created_at)
@@ -88,6 +110,36 @@ public class BatchPersistenceAdapter implements BatchRepository {
                 .param("createdAt", SqlValues.timestamp(batch.createdAt()))
                 .update();
         return batch;
+    }
+
+    @Override
+    @Transactional
+    public Batch.Progress applyProgress(BatchId batchId, Batch.Delta delta) {
+        return jdbcClient
+                .sql(APPLY_PROGRESS)
+                .param("id", batchId.value())
+                .param("processed", delta.processed())
+                .param("sent", delta.sent())
+                .param("delivered", delta.delivered())
+                .param("failed", delta.failed())
+                .query((rs, rowNum) -> new Batch.Progress(
+                        rs.getLong("total"),
+                        rs.getLong("processed"),
+                        rs.getLong("sent"),
+                        rs.getLong("delivered"),
+                        rs.getLong("failed")))
+                .optional()
+                .orElseGet(() -> new Batch.Progress(0, 0, 0, 0, 0));
+    }
+
+    @Override
+    @Transactional
+    public void markCompleted(BatchId batchId) {
+        jdbcClient
+                .sql("UPDATE batch SET status = 'COMPLETED', updated_at = now()"
+                        + " WHERE id = :id AND status = 'PROCESSING'")
+                .param("id", batchId.value())
+                .update();
     }
 
     @Override

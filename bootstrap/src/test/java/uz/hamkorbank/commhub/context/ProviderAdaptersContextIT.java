@@ -36,6 +36,9 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
 @SpringBootTest(classes = NotificationHubApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @TestPropertySource(
         properties = {
+            // Предмет теста — адаптеры §9. Фиктивный провайдер стенда сюда не относится
+            // и включён локальным config/application.yml, который читается и отсюда (ADR-0041).
+            "commhub.provider.mock.enabled=false",
             "commhub.outbox.relay.poll-interval-ms=3600000",
             "commhub.config.cache.refresh-interval=30s",
             "commhub.provider.health.initial-delay=1h",

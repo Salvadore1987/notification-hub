@@ -7,6 +7,7 @@ import uz.hamkorbank.commhub.application.dto.ProcessProviderStatusResult;
 import uz.hamkorbank.commhub.application.port.in.ProcessProviderStatus;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
+import uz.hamkorbank.commhub.application.service.support.BatchProgressRecorder;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
 import uz.hamkorbank.commhub.domain.model.Actor;
@@ -30,12 +31,17 @@ public class ProcessProviderStatusService implements ProcessProviderStatus {
     private final MessageRepository messages;
     private final MessageStatusNotifier notifier;
     private final SuppressionRegistrar suppressions;
+    private final BatchProgressRecorder progress;
 
     public ProcessProviderStatusService(
-            MessageRepository messages, MessageStatusNotifier notifier, SuppressionRegistrar suppressions) {
+            MessageRepository messages,
+            MessageStatusNotifier notifier,
+            SuppressionRegistrar suppressions,
+            BatchProgressRecorder progress) {
         this.messages = Guard.notNull(messages, "messages");
         this.notifier = Guard.notNull(notifier, "notifier");
         this.suppressions = Guard.notNull(suppressions, "suppressions");
+        this.progress = Guard.notNull(progress, "progress");
     }
 
     @Override
@@ -58,9 +64,12 @@ public class ProcessProviderStatusService implements ProcessProviderStatus {
                     message.status(),
                     "%s does not follow %s".formatted(command.status(), message.status()));
         }
+        // Строго после проверок идемпотентности: повторный отчёт не должен ничего считать (ADR-0040).
+        BatchProgressRecorder.Contribution before = progress.contributionOf(message);
         StatusChange change = apply(message, command);
         messages.save(message);
         notifier.publish(message, change);
+        progress.apply(message, before);
         return ProcessProviderStatusResult.applied(message.id(), message.status());
     }
 

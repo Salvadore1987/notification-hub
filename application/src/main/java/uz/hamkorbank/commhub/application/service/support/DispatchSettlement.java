@@ -47,6 +47,7 @@ public class DispatchSettlement {
     private final MessagePipeline pipeline;
     private final MessageStatusNotifier notifier;
     private final SendingPolicy policy;
+    private final BatchProgressRecorder progress;
 
     public DispatchSettlement(
             ClockPort clock,
@@ -54,13 +55,15 @@ public class DispatchSettlement {
             DlqRepository dlqEntries,
             MessagePipeline pipeline,
             MessageStatusNotifier notifier,
-            SendingPolicy policy) {
+            SendingPolicy policy,
+            BatchProgressRecorder progress) {
         this.clock = Guard.notNull(clock, "clock");
         this.messages = Guard.notNull(messages, "messages");
         this.dlqEntries = Guard.notNull(dlqEntries, "dlqEntries");
         this.pipeline = Guard.notNull(pipeline, "pipeline");
         this.notifier = Guard.notNull(notifier, "notifier");
         this.policy = Guard.notNull(policy, "policy");
+        this.progress = Guard.notNull(progress, "progress");
     }
 
     /** Applies what the provider answered and decides what happens to the message next. */
@@ -73,10 +76,12 @@ public class DispatchSettlement {
                         () -> NotFoundException.of("message", plan.message().id()));
         DeliveryAttempt attempt = openAttempt(message, plan);
         ProviderRef provider = plan.provider();
+        BatchProgressRecorder.Contribution before = progress.contributionOf(message);
         recordAttempt(attempt, ack);
         suppressIfAddressRejected(message, provider, ack);
         DispatchResult result = ack.isAccepted() ? sent(message, provider, ack) : handleFailure(message, provider, ack);
         messages.releaseClaim(message, nextAttemptAt(message, result));
+        progress.apply(message, before);
         return result;
     }
 

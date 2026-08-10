@@ -19,10 +19,12 @@ import org.mockito.ArgumentCaptor;
 import uz.hamkorbank.commhub.application.dto.ProcessProviderStatusResult;
 import uz.hamkorbank.commhub.application.mapper.MessageMapperImpl;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
+import uz.hamkorbank.commhub.application.port.out.BatchRepository;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
 import uz.hamkorbank.commhub.application.port.out.SuppressionRepository;
+import uz.hamkorbank.commhub.application.service.support.BatchProgressRecorder;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.application.service.support.SuppressionRegistrar;
 import uz.hamkorbank.commhub.domain.model.Actor;
@@ -57,7 +59,8 @@ class ProcessProviderStatusServiceTest {
         service = new ProcessProviderStatusService(
                 messages,
                 new MessageStatusNotifier(outbox, mock(MetricsPort.class), new MessageMapperImpl()),
-                new SuppressionRegistrar(suppressions, mock(MetricsPort.class)));
+                new SuppressionRegistrar(suppressions, mock(MetricsPort.class)),
+                new BatchProgressRecorder(mock(BatchRepository.class)));
     }
 
     @Test

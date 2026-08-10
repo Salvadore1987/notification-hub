@@ -29,6 +29,7 @@ import uz.hamkorbank.commhub.application.port.in.command.ResendDlqCommand;
 import uz.hamkorbank.commhub.application.port.in.command.StreamActionCommand;
 import uz.hamkorbank.commhub.application.port.out.AuditEntry;
 import uz.hamkorbank.commhub.application.port.out.AuditPort;
+import uz.hamkorbank.commhub.application.port.out.BatchRepository;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.DlqRepository;
 import uz.hamkorbank.commhub.application.port.out.KillSwitchPort;
@@ -37,6 +38,7 @@ import uz.hamkorbank.commhub.application.port.out.MessageRepository;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
 import uz.hamkorbank.commhub.application.port.out.StreamRepository;
+import uz.hamkorbank.commhub.application.service.support.BatchProgressRecorder;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.ChannelPlan;
@@ -90,7 +92,8 @@ class OperationsUseCasesTest {
         DlqEntry entry = DlqEntry.of(message.id(), RejectionReason.ATTEMPTS_EXHAUSTED, "timeout", NOW);
         when(dlqEntries.findByMessageId(message.id())).thenReturn(Optional.of(entry));
         when(messages.findById(message.id())).thenReturn(Optional.of(message));
-        ResendDlqService service = new ResendDlqService(clock, dlqEntries, messages, notifier, audit);
+        ResendDlqService service =
+                new ResendDlqService(clock, dlqEntries, messages, notifier, audit, progressRecorder());
 
         // Act
         ResendDlqResult result = service.resend(ResendDlqCommand.of(message.id(), Actor.operator("ivanov")));
@@ -112,7 +115,8 @@ class OperationsUseCasesTest {
         entry.retry("petrov", NOW);
         when(dlqEntries.findByMessageId(message.id())).thenReturn(Optional.of(entry));
         when(messages.findById(message.id())).thenReturn(Optional.of(message));
-        ResendDlqService service = new ResendDlqService(clock, dlqEntries, messages, notifier, audit);
+        ResendDlqService service =
+                new ResendDlqService(clock, dlqEntries, messages, notifier, audit, progressRecorder());
 
         // Act
         ResendDlqResult result = service.resend(ResendDlqCommand.of(message.id(), Actor.operator("ivanov")));
@@ -130,7 +134,7 @@ class OperationsUseCasesTest {
         Message expired = otpMessage(Duration.ofMinutes(5));
         when(messages.findExpired(any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(expired));
         when(clock.now()).thenReturn(NOW.plus(Duration.ofMinutes(6)));
-        ExpireMessagesService service = new ExpireMessagesService(clock, messages, notifier);
+        ExpireMessagesService service = new ExpireMessagesService(clock, messages, notifier, progressRecorder());
 
         // Act
         ExpireMessagesResult result = service.expire(new ExpireMessagesCommand(10));
@@ -147,7 +151,7 @@ class OperationsUseCasesTest {
         // Arrange
         Message alive = otpMessage(Duration.ofMinutes(30));
         when(messages.findExpired(any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(alive));
-        ExpireMessagesService service = new ExpireMessagesService(clock, messages, notifier);
+        ExpireMessagesService service = new ExpireMessagesService(clock, messages, notifier, progressRecorder());
 
         // Act
         ExpireMessagesResult result = service.expire(ExpireMessagesCommand.defaults());
@@ -221,5 +225,10 @@ class OperationsUseCasesTest {
         message.markRouted(Channel.SMS, smsProvider("PLAYMOBILE").ref(), Actor.system(), NOW);
         message.markQueued(Actor.system(), NOW);
         return message;
+    }
+
+    /** Счётчики батча здесь не предмет теста: сообщения этих сценариев батчу не принадлежат. */
+    private static BatchProgressRecorder progressRecorder() {
+        return new BatchProgressRecorder(mock(BatchRepository.class));
     }
 }

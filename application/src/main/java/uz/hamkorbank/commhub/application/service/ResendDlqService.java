@@ -14,6 +14,7 @@ import uz.hamkorbank.commhub.application.port.out.AuditPort;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.DlqRepository;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
+import uz.hamkorbank.commhub.application.service.support.BatchProgressRecorder;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.DlqEntry;
@@ -40,18 +41,21 @@ public class ResendDlqService implements ResendDlq {
     private final MessageRepository messages;
     private final MessageStatusNotifier notifier;
     private final AuditPort audit;
+    private final BatchProgressRecorder progress;
 
     public ResendDlqService(
             ClockPort clock,
             DlqRepository dlqEntries,
             MessageRepository messages,
             MessageStatusNotifier notifier,
-            AuditPort audit) {
+            AuditPort audit,
+            BatchProgressRecorder progress) {
         this.clock = Guard.notNull(clock, "clock");
         this.dlqEntries = Guard.notNull(dlqEntries, "dlqEntries");
         this.messages = Guard.notNull(messages, "messages");
         this.notifier = Guard.notNull(notifier, "notifier");
         this.audit = Guard.notNull(audit, "audit");
+        this.progress = Guard.notNull(progress, "progress");
     }
 
     @Override
@@ -77,11 +81,14 @@ public class ResendDlqService implements ResendDlq {
         if (entry.isEmpty() || message.isEmpty() || !entry.get().isRetryable()) {
             return false;
         }
+        // Повтор возвращает сообщение в работу, поэтому дельта отрицательная и считается сама (ADR-0040).
+        BatchProgressRecorder.Contribution before = progress.contributionOf(message.get());
         entry.get().retry(operatorOf(actor), now);
         StatusChange change = message.get().requeueFromDlq(actor, now);
         dlqEntries.save(entry.get());
         messages.save(message.get());
         notifier.publish(message.get(), change);
+        progress.apply(message.get(), before);
         audit.write(AuditEntry.of(actor, "dlq.retry", ENTITY_TYPE, messageId.toString(), now));
         return true;
     }

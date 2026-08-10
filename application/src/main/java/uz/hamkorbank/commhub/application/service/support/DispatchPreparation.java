@@ -45,6 +45,7 @@ public class DispatchPreparation {
     private final MessageStatusNotifier notifier;
     private final ProviderGateway gateway;
     private final SendingPolicy policy;
+    private final BatchProgressRecorder progress;
 
     public DispatchPreparation(
             ClockPort clock,
@@ -53,7 +54,8 @@ public class DispatchPreparation {
             MessagePipeline pipeline,
             MessageStatusNotifier notifier,
             ProviderGateway gateway,
-            SendingPolicy policy) {
+            SendingPolicy policy,
+            BatchProgressRecorder progress) {
         this.clock = Guard.notNull(clock, "clock");
         this.messages = Guard.notNull(messages, "messages");
         this.guards = Guard.notNull(guards, "guards");
@@ -61,6 +63,7 @@ public class DispatchPreparation {
         this.notifier = Guard.notNull(notifier, "notifier");
         this.gateway = Guard.notNull(gateway, "gateway");
         this.policy = Guard.notNull(policy, "policy");
+        this.progress = Guard.notNull(progress, "progress");
     }
 
     /** Decides whether this turn calls a provider, and opens the attempt if it does. */
@@ -69,16 +72,21 @@ public class DispatchPreparation {
         Guard.notNull(messageId, "messageId");
         Instant now = clock.now();
         Message message = messages.findById(messageId).orElseThrow(() -> NotFoundException.of("message", messageId));
+        // Вклад снимается до изменений: дельта — разность вкладов, а не приращение (ADR-0040).
+        BatchProgressRecorder.Contribution before = progress.contributionOf(message);
         if (message.status().isTerminal()) {
             return release(
-                    message, null, DispatchResult.skipped(message.id(), message.status(), DispatchOutcome.SKIPPED));
+                    message,
+                    null,
+                    DispatchResult.skipped(message.id(), message.status(), DispatchOutcome.SKIPPED),
+                    before);
         }
         DispatchGate gate = guards.evaluate(message, now);
         if (!gate.isProceed()) {
-            return applyGate(message, gate, now);
+            return applyGate(message, gate, now, before);
         }
         if (message.selectedProvider().isEmpty() && !reroute(message)) {
-            return release(message, null, noRoute(message, now));
+            return release(message, null, noRoute(message, now), before);
         }
         ProviderRef provider = message.selectedProvider().orElseThrow();
         moveToSending(message, now);
@@ -89,23 +97,29 @@ public class DispatchPreparation {
     }
 
     /** Applies a guard that stopped the message before any provider call (FR-3.2, FR-3.4). */
-    private DispatchPlan applyGate(Message message, DispatchGate gate, Instant now) {
+    private DispatchPlan applyGate(
+            Message message, DispatchGate gate, Instant now, BatchProgressRecorder.Contribution before) {
         return switch (gate.decision()) {
             case DEFER ->
                 release(
                         message,
                         gate.notBeforeOptional().orElseGet(() -> now.plus(policy.deferBackoff())),
-                        DispatchResult.skipped(message.id(), message.status(), DispatchOutcome.DEFERRED));
+                        DispatchResult.skipped(message.id(), message.status(), DispatchOutcome.DEFERRED),
+                        before);
             case EXPIRE -> {
                 StatusChange change = message.expire(Actor.system(), now);
-                yield release(message, null, complete(message, change, DispatchOutcome.EXPIRED, null));
+                yield release(message, null, complete(message, change, DispatchOutcome.EXPIRED, null), before);
             }
             case CANCEL -> {
                 StatusChange change = message.cancel(gate.reason(), Actor.system(), now);
-                yield release(message, null, complete(message, change, DispatchOutcome.CANCELLED, null));
+                yield release(message, null, complete(message, change, DispatchOutcome.CANCELLED, null), before);
             }
             default ->
-                release(message, null, DispatchResult.skipped(message.id(), message.status(), DispatchOutcome.SKIPPED));
+                release(
+                        message,
+                        null,
+                        DispatchResult.skipped(message.id(), message.status(), DispatchOutcome.SKIPPED),
+                        before);
         };
     }
 
@@ -146,9 +160,16 @@ public class DispatchPreparation {
                 message.attempts().size());
     }
 
-    /** Gives the claim back so the message is not held by an instance that is done with it. */
-    private DispatchPlan release(Message message, Instant nextAttemptAt, DispatchResult result) {
+    /**
+     * Gives the claim back and settles the batch counters, since this turn is over (FR-3.1).
+     *
+     * <p>Both happen here and not in the caller because every path that ends the turn goes through this
+     * method: a counter updated on some of them would be worse than one updated on none.
+     */
+    private DispatchPlan release(
+            Message message, Instant nextAttemptAt, DispatchResult result, BatchProgressRecorder.Contribution before) {
         messages.releaseClaim(message, nextAttemptAt);
+        progress.apply(message, before);
         return DispatchPlan.done(result);
     }
 }

@@ -120,6 +120,46 @@ public final class Batch extends AggregateRoot<BatchId> {
         this.failed = increase(failed, count, "failed");
     }
 
+    /**
+     * Applies a counter change computed from one message's transition (FR-3.1, FR-3.3, ADR-0040).
+     *
+     * <p>Components may be negative: a DLQ retry takes an item back out of {@code failed} and out of
+     * {@code processed}, because the message is in flight again. Counters are floored at zero here and
+     * in the SQL that persists them — the {@code CHECK} constraint would otherwise refuse the write, and
+     * a counter that went negative would be a worse lie than one that stopped at zero.
+     */
+    public void apply(Delta delta) {
+        Guard.notNull(delta, "delta");
+        this.processed = floorAtZero(processed + delta.processed());
+        this.sent = floorAtZero(sent + delta.sent());
+        this.delivered = floorAtZero(delivered + delta.delivered());
+        this.failed = floorAtZero(failed + delta.failed());
+    }
+
+    private static long floorAtZero(long value) {
+        return Math.max(0L, value);
+    }
+
+    /**
+     * How much one message's transition changes the counters of its batch (ADR-0040).
+     *
+     * <p>Computed as the difference between what the message contributed before the change and what it
+     * contributes after it, which is what makes a repeated provider report cost nothing and a DLQ retry
+     * subtract by itself, without anybody having to remember either case.
+     */
+    public record Delta(long processed, long sent, long delivered, long failed) {
+
+        private static final Delta NONE = new Delta(0, 0, 0, 0);
+
+        public static Delta none() {
+            return NONE;
+        }
+
+        public boolean isEmpty() {
+            return processed == 0 && sent == 0 && delivered == 0 && failed == 0;
+        }
+    }
+
     /** Expected cost of the batch by provider tariffs and computed segments (FR-6.2). */
     public void applyCostEstimate(Money estimate) {
         this.costEstimate = Guard.notNull(estimate, "estimate");
@@ -254,6 +294,11 @@ public final class Batch extends AggregateRoot<BatchId> {
 
         public long remaining() {
             return Math.max(0L, total - processed);
+        }
+
+        /** Whether every accepted item has been processed and the batch may be closed (FR-3.1). */
+        public boolean isComplete() {
+            return total > 0 && processed >= total;
         }
 
         /** Completion in percent, 0 for an empty batch. */
