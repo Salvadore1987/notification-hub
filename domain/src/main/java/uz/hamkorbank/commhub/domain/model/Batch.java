@@ -5,6 +5,7 @@ import java.util.Optional;
 import uz.hamkorbank.commhub.domain.exception.InvalidStatusTransitionException;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
+import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.BatchId;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
@@ -24,6 +25,7 @@ public final class Batch extends AggregateRoot<BatchId> {
     private final Instant createdAt;
 
     private BatchStatus status;
+    private ItemDefaults itemDefaults = ItemDefaults.none();
     private long total;
     private long processed;
     private long sent;
@@ -55,6 +57,7 @@ public final class Batch extends AggregateRoot<BatchId> {
         this.delivered = Guard.notNegative(source.delivered, "Batch.delivered");
         this.failed = Guard.notNegative(source.failed, "Batch.failed");
         this.costEstimate = source.costEstimate;
+        this.itemDefaults = source.itemDefaults == null ? ItemDefaults.none() : source.itemDefaults;
     }
 
     /** Accepts a batch header; {@code total} may be 0 when items are uploaded afterwards (FR-1.6). */
@@ -72,6 +75,52 @@ public final class Batch extends AggregateRoot<BatchId> {
     public static Rehydration rehydrate(
             BatchId id, StreamId streamId, Channel channel, Timing timing, Instant createdAt) {
         return new Rehydration(id, streamId, channel, timing, createdAt);
+    }
+
+    /**
+     * Sets what the items of this batch inherit from its header (FR-1.6, FR-4.1, FR-7.4).
+     *
+     * <p>Applied once, at acceptance: the traffic class, the TEST flag and the template of a batch are
+     * part of what was accepted, and changing them afterwards would mean two halves of one batch sent
+     * under different rules.
+     */
+    public void applyItemDefaults(ItemDefaults defaults) {
+        Guard.notNull(defaults, "defaults");
+        Guard.isTrue(status == BatchStatus.ACCEPTED, "item defaults are part of the accepted header");
+        this.itemDefaults = defaults;
+    }
+
+    /** What an item takes from the batch unless it says otherwise. */
+    public ItemDefaults itemDefaults() {
+        return itemDefaults;
+    }
+
+    /**
+     * The part of a batch header its items inherit (FR-1.6).
+     *
+     * <p>Grouped rather than spread over the aggregate's fields because that is exactly how it is used:
+     * every item asks the same three questions, and the answer is either the item's own or this.
+     *
+     * @param trafficClass class of the items; {@code null} leaves the decision to the stream
+     * @param template template every item is rendered from unless it names its own (FR-4.1)
+     * @param test whether the batch is a test send, kept out of business statistics (FR-7.4)
+     */
+    public record ItemDefaults(TrafficClass trafficClass, TemplateRef template, boolean test) {
+
+        private static final ItemDefaults NONE = new ItemDefaults(null, null, false);
+
+        /** Nothing inherited: the stream decides the class and every item carries its own content. */
+        public static ItemDefaults none() {
+            return NONE;
+        }
+
+        public Optional<TrafficClass> trafficClassOptional() {
+            return Optional.ofNullable(trafficClass);
+        }
+
+        public Optional<TemplateRef> templateOptional() {
+            return Optional.ofNullable(template);
+        }
     }
 
     /** Registers another chunk of uploaded items (FR-1.6). */
@@ -230,6 +279,7 @@ public final class Batch extends AggregateRoot<BatchId> {
         private long delivered;
         private long failed;
         private Money costEstimate;
+        private ItemDefaults itemDefaults = ItemDefaults.none();
 
         private Rehydration(BatchId id, StreamId streamId, Channel channel, Timing timing, Instant createdAt) {
             this.id = id;
@@ -260,6 +310,12 @@ public final class Batch extends AggregateRoot<BatchId> {
 
         public Rehydration costEstimate(Money estimate) {
             this.costEstimate = estimate;
+            return this;
+        }
+
+        /** What the items of this batch inherit from its header (FR-1.6). */
+        public Rehydration itemDefaults(ItemDefaults defaults) {
+            this.itemDefaults = defaults;
             return this;
         }
 

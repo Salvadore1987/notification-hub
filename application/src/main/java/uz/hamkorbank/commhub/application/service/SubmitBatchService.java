@@ -77,6 +77,7 @@ public class SubmitBatchService implements SubmitBatch {
                 command.expectedTotal(),
                 command.timingOptional().orElseGet(Timing::immediate),
                 now);
+        batch.applyItemDefaults(new Batch.ItemDefaults(command.trafficClass(), command.template(), command.test()));
         stream.touch(now);
         streams.save(stream);
         return mapper.toAcceptedResult(batches.save(batch));
@@ -127,9 +128,20 @@ public class SubmitBatchService implements SubmitBatch {
         }
     }
 
-    /** Expands one item into a submission, inheriting the header of the batch (FR-1.6). */
+    /**
+     * Expands one item into a submission, inheriting the header of the batch (FR-1.6).
+     *
+     * <p>The traffic class, the TEST flag and the template come from the header the batch was accepted
+     * with. They used to be dropped here — {@code POST /api/v1/batches} accepts all three (§8.2) and the
+     * items went out as ordinary, non-test messages of the stream's default class, whatever the caller
+     * had asked for.
+     *
+     * <p>{@code pinnedProvider} stays null in any case: the invariant of {@code Delivery} allows pinning
+     * only for a test send by an administrator, and choosing the provider is the Hub's job (FR-2.2).
+     */
     private static SubmitMessageCommand commandFor(
             AddBatchItemsCommand command, Batch batch, AddBatchItemsCommand.Item item) {
+        Batch.ItemDefaults defaults = batch.itemDefaults();
         return new SubmitMessageCommand(
                 command.streamId(),
                 item.externalMessageId(),
@@ -137,7 +149,8 @@ public class SubmitBatchService implements SubmitBatch {
                 item.recipient(),
                 item.contents(),
                 item.channelPlanOptional().orElseGet(() -> ChannelPlan.explicitChannel(batch.channel())),
-                item.template(),
-                new SubmitMessageCommand.Delivery(null, null, batch.timing(), null, null, false, null));
+                item.templateOptional().orElseGet(() -> defaults.template()),
+                new SubmitMessageCommand.Delivery(
+                        defaults.trafficClass(), null, batch.timing(), null, null, defaults.test(), null));
     }
 }
