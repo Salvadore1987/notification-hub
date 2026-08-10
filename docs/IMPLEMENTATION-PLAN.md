@@ -29,7 +29,7 @@
   — пайплайн в репозитории не держим: сборка запускается локально, SAST/анализ зависимостей (SEC-09)
   подключаются корпоративным конвейером Банка (Jenkins/GitLab CI, SonarQube, Nexus IQ)
 - ✅ Настроить Flyway, каталог миграций, воспроизведение схемы с нуля (DB-01)
-  — `adapter/src/main/resources/db/migration/V1__baseline.sql`, схема `comm_hub`, тест `FlywayMigrationIT`
+  — `adapter/out/persistence/src/main/resources/db/migration/V1__baseline.sql`, схема `comm_hub`, тест `FlywayMigrationIT`
 - ✅ Git-репозиторий, ветвление, PR-шаблон
   — `.gitignore`, `CONTRIBUTING.md` (trunk-based, Conventional Commits), `.github/pull_request_template.md`
 
@@ -160,7 +160,7 @@
 - ✅ Топики: продюсер `comm.outbound.status.v1`, `comm.outbound.dlq.v1` (§8.1) — `KafkaOutboundProperties`,
   ключ партиционирования — `messageId`, заголовки `commhub-event-id`/`-event-type`/`-stream-id`/`-schema-version`
 - ✅ Формат исходящего статуса §6.4 — `StatusEventCodec` (JSON, поля §6.4 + `schemaVersion`, отсутствующие
-  значения как явные `null`), схема `adapter/src/main/resources/schema/comm.outbound.status.v1.json`
+  значения как явные `null`), схема `adapter/out/kafka/src/main/resources/schema/comm.outbound.status.v1.json`
   — ⚠️ регистрация субъекта в Schema Registry (BACKWARD, NF-08) остаётся операционным шагом: сериализатор
   намеренно не ходит в реестр, иначе реестр окажется на пути отправки каждого статуса. Avro не берём —
   контракт JSON, как у входящего IK-03. Команда регистрации — в `CONTRIBUTING.md`
@@ -209,7 +209,7 @@
 - ✅ Трансляция транспортных DTO → Command (AR-06), обработчики ошибок в `handlers/` — `adapter/in/contract`
   (общий для REST и Kafka: §8.2 говорит «тело = IK-03», поэтому парсер один) + MapStruct-мапперы
   `InboundPayloadMapper` и `RestResponseMapper`
-- ✅ OpenAPI 3.1 (IR-03) — `adapter/src/main/resources/openapi/comm-hub-api-v1.yaml`, отдаётся по
+- ✅ OpenAPI 3.1 (IR-03) — `adapter/in/rest/src/main/resources/openapi/comm-hub-api-v1.yaml`, отдаётся по
   `GET /api/v1/openapi.yaml`. ⚠️ Не генерируется springdoc'ом: его актуальная ветка 2.8.x собрана под Spring 6 и
   Jackson 2, релиза под Boot 4 нет. Вместо генерации — `OpenApiContractTest`: обходит `@RequestMapping`
   контроллеров и валит сборку, если эндпоинт не описан в документе. Заменить на генерацию, когда springdoc
@@ -229,9 +229,12 @@
   любой ответ провайдера и **бросает** `ProviderCallException` только когда ответа не было — ретрай и breaker видят
   исключение, поэтому поток отказов по контенту никогда не открывает breaker
 - ✅ Секреты только из `SecretResolverPort` (Vault/K8s), маскирование в логах (SEC-04, SG-04, PR-03)
-  — `adapter/out/secret`: схемы `env:`/`file:`/`prop:`, без схемы — файл в смонтированном каталоге секретов
-  (проверка выхода за каталог), кэш с TTL ⇒ ротация без рестарта. В Vault Hub не ходит сам: токен Vault — ещё один
-  секрет, а реестр на пути каждой отправки — ещё одна точка отказа; секреты рендерит Vault-agent в том пода.
+  — `adapter/out/secret`: схемы `env:` (основная) и `prop:`, после схемы допустим модификатор `base64:`
+  для многострочных блобов (JSON сервис-аккаунта FCM, `.p8` APNs); без схемы — литерал из
+  `commhub.secrets.values` для локального стенда и тестов. Кэш с TTL держит разрешение ссылки подальше от
+  каждого сообщения; ротация — обновление Secret'а плюс rolling restart (10.08.2026: ADR-0036 заменил
+  каталог секретов и схему `file:`, см. пункт SEC-04 в Phase 13). В Vault Hub не ходит сам: токен Vault — ещё один
+  секрет, а реестр на пути каждой отправки — ещё одна точка отказа; значение в окружение пода кладёт платформа.
   Заодно закрыт долг Phase 6: секрет callback'а (`commhub.callback.providers.<code>.secret-ref`) тоже идёт через
   резолвер, а нерезолвящаяся ссылка отклоняет вызов, а не отключает проверку молча
 - ✅ **Playmobile** адаптер `SmsProviderPort`: маппинг `Message`→`/send` (одиночный/батч), классификация ошибок 100–411 (PM-01, §18.1)
@@ -618,9 +621,11 @@
   scope описывает, что можно машине, группа — кто такой человек), `@EnableMethodSecurity` для `@PreAuthorize`
   в BFF (Phase 14); критичные операции уже пишут аудит — у kill switch, тестовой отправки и правок
   конфигурации запись в журнал не опциональна
-- ✅ Секрет-хранилище + ротация без простоя (SEC-04) — сделано в Phase 7 (`adapter/out/secret`: схемы
-  `env:`/`file:`/`prop:`, TTL-кэш, поэтому ротация подхватывается без рестарта); в этой фазе добавлены только
-  брокерские креды Kafka (см. SEC-01) и монтирование каталога секретов в манифесте
+- ✅ Секрет-хранилище + ротация (SEC-04) — сделано в Phase 7 (`adapter/out/secret`); в этой фазе добавлены
+  только брокерские креды Kafka (см. SEC-01). 10.08.2026 способ доставки значения изменён: переменные
+  окружения вместо каталога секретов (ADR-0036 заменил ADR-0021), из манифеста убран том, вместо него
+  `secretKeyRef` в `env`. Ценой стала мгновенность ротации: она теперь требует rolling restart
+  (простоя нет, `maxUnavailable: 0`), процедура — в `docs/RUNBOOK.md`
 - ✅ Аудит действий пользователей и доступа к ПДн, append-only, экспорт (FR-7.3, SEC-08) —
   `PersonalDataAccess` пишет запись при **чтении** сообщения оператором; опрос своего сообщения системой-
   источником не пишет ничего (это штатный трафик §8.2, и строка на каждый опрос утопила бы журнал, который
@@ -650,7 +655,7 @@
   групп: для того и существует outbox, а провайдер лежит одинаково на всех подах, — но их индикаторы
   (`KafkaHealthIndicator`, `ProviderAvailabilityHealthIndicator` в `bootstrap/health`) публикуются и питают
   алерты. Graceful shutdown: `server.shutdown=graceful`, дожидание прохода планировщиков, `Dockerfile` и
-  `deploy/k8s/deployment.yaml` (rolling update без просадки, PDB, непривилегированный контейнер, каталог секретов)
+  `deploy/k8s/deployment.yaml` (rolling update без просадки, PDB, непривилегированный контейнер, креды провайдеров переменными окружения)
 - ✅ Grafana-дашборды + runbook (OBS-05, OBS-06) — `deploy/observability/grafana/`: обзорный, по-канальный,
   по-провайдерный и инфраструктурный; `docs/RUNBOOK.md` — по разделу на симптом, с якорями, на которые ссылаются
   аннотации алертов

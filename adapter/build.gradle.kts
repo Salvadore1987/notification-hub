@@ -1,63 +1,40 @@
-// Слой adapter: driving-адаптеры (rest, kafka, admin, callback) и
-// driven-адаптеры (persistence, kafka, provider/*, notification).
-// Зависит от application и domain, но не наоборот (AR-03, AR-04).
+// Слой adapter целиком: агрегатор над модулями адаптеров (AR-01, AR-04).
+//
+// Своего кода здесь нет — каждый адаптер живёт в своём модуле под in/, out/ и out/provider/.
+// Этот проект существует ради двух вещей: `./gradlew :adapter:build` собирает и проверяет слой
+// целиком, а bootstrap зависит от одной строки вместо двадцати одной — ему по определению нужны
+// все адаптеры сразу, он и есть композиционный корень.
+//
+// api, а не implementation: зависимость транзитивна для bootstrap'а, который пишет wiring против
+// классов адаптеров (WebSecurityConfig, health-индикаторы, DomainServiceConfig).
+//
+// Между собой адаптеры зависят напрямую и явно (например, in:admin -> in:rest ради тела §8.2):
+// этот агрегатор их связи не заменяет и не ослабляет.
 
 dependencies {
-    api(project(":application"))
+    api(project(":adapter:in:admin"))
+    api(project(":adapter:in:callback"))
+    api(project(":adapter:in:contract"))
+    api(project(":adapter:in:importer"))
+    api(project(":adapter:in:kafka"))
+    api(project(":adapter:in:rest"))
+    api(project(":adapter:in:scheduler"))
+    api(project(":adapter:in:security"))
 
-    // in/rest, in/admin, in/callback
-    implementation(libs.spring.boot.starter.web)
-    implementation(libs.spring.boot.starter.validation)
+    api(project(":adapter:out:compliance"))
+    api(project(":adapter:out:kafka"))
+    api(project(":adapter:out:metrics"))
+    api(project(":adapter:out:persistence"))
+    api(project(":adapter:out:policy"))
+    api(project(":adapter:out:secret"))
+    api(project(":adapter:out:time"))
 
-    // in/kafka, out/kafka
-    implementation(libs.spring.kafka)
+    api(project(":adapter:out:provider:apns"))
+    api(project(":adapter:out:provider:fcm"))
+    api(project(":adapter:out:provider:playmobile"))
+    api(project(":adapter:out:provider:smsgate"))
+    api(project(":adapter:out:provider:smtp"))
+    api(project(":adapter:out:provider:support"))
 
-    // out/persistence (+ Flyway-миграции лежат в этом модуле: src/main/resources/db/migration).
-    // Стартер, а не только flyway-core: в Boot 4 автоконфигурация Flyway живёт в отдельном модуле,
-    // и без него ключи spring.flyway.* — просто текст в yaml, а приложение поднимается на базе
-    // без схемы (DB-01). Тесты, гоняющие Flyway вручную, продолжают работать с flyway-core.
-    implementation(libs.spring.boot.starter.data.jdbc)
-    implementation(libs.spring.boot.starter.flyway)
-    runtimeOnly(libs.flyway.postgresql)
-    runtimeOnly(libs.postgresql)
-
-    // out/provider/* — таймауты, retry с backoff+jitter, circuit breaker на провайдера (PR-01)
-    implementation(libs.resilience4j.circuitbreaker)
-    implementation(libs.resilience4j.retry)
-
-    // out/provider/smtp — Email-канал: отправка (EM-01), подпись DKIM (EM-03) и разбор NDR по IMAP (EM-02)
-    implementation(libs.jakarta.mail.api)
-    runtimeOnly(libs.angus.mail)
-
-    // out/metrics — реализация MetricsPort (OBS-01); реестр Prometheus подключается в bootstrap
-    implementation(libs.micrometer.core)
-
-    // in/rest, in/kafka — correlationId в baggage и трассировка приёма (OBS-02)
-    implementation(libs.micrometer.tracing)
-
-    // in/rest/security — аутентификация систем-источников и RBAC админ-API (SEC-01, SEC-03)
-    implementation(libs.spring.boot.starter.security)
-    implementation(libs.spring.boot.starter.oauth2.resource.server)
-
-    // Транспортный DTO <-> Command (AR-06) — только через MapStruct-мапперы
-    implementation(libs.mapstruct)
-    annotationProcessor(libs.mapstruct.processor)
-    testAnnotationProcessor(libs.mapstruct.processor)
-
-    testImplementation(libs.spring.boot.starter.test)
-    testImplementation(libs.spring.security.test)
-
-    // Персистентность проверяется на настоящем PostgreSQL со схемой из Flyway (QA-03, DB-01),
-    // outbox-relay — на настоящем брокере (AD-03, QA-06).
-    testImplementation(libs.testcontainers.junit)
-    testImplementation(libs.testcontainers.postgresql)
-    testImplementation(libs.testcontainers.kafka)
-    testImplementation(libs.flyway.core)
-    testRuntimeOnly(libs.flyway.postgresql)
-
-    // Адаптеры провайдеров проверяются по стабам из документации Playmobile / SMS Gate (QA-04, PR-04)
-    testImplementation(libs.wiremock.standalone)
-
-    // Email проверяется на настоящем SMTP/IMAP-сервере: MIME собирается и разбирается целиком (QA-03)
-    testImplementation(libs.greenmail.junit5)
+    api(project(":adapter:observability"))
 }

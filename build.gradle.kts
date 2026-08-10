@@ -10,7 +10,13 @@ fun lib(alias: String): Provider<MinimalExternalModuleDependency> = catalog.find
 fun version(alias: String): String = catalog.findVersion(alias).orElseThrow().requiredVersion
 
 allprojects {
-    group = "uz.hamkorbank.commhub"
+    // Группа выводится из пути проекта, а не задаётся константой: имя Gradle-модуля — это
+    // последний сегмент пути, поэтому :adapter:in:kafka и :adapter:out:kafka назывались бы
+    // одинаково («kafka»), и координаты group:name у них совпали бы. Gradle различает проекты
+    // по координатам — при совпадении зависимость (в том числе testFixtures) разрешается в
+    // произвольный из двух. Путь в группе делает пару различимой: uz.hamkorbank.commhub.adapter.in
+    // против uz.hamkorbank.commhub.adapter.out.
+    group = "uz.hamkorbank.commhub" + project.path.substringBeforeLast(':').replace(':', '.')
     version = "0.1.0-SNAPSHOT"
 }
 
@@ -21,6 +27,13 @@ subprojects {
     apply(plugin = "com.diffplug.spotless")
 
     val sourceSets = extensions.getByType<SourceSetContainer>()
+
+    // Имя артефакта — тоже полный путь: иначе adapter/in/kafka и adapter/out/kafka дали бы два
+    // файла kafka-0.1.0-SNAPSHOT.jar, и сборка fat jar'а упала бы на дубликате (а с политикой
+    // «брать первый» — что хуже — собралась бы, потеряв половину классов одного из адаптеров).
+    extensions.configure<BasePluginExtension> {
+        archivesName.set(path.removePrefix(":").replace(':', '-'))
+    }
 
     // Java 25 (LTS) — Virtual Threads (Loom) доступны без preview-флагов (AR-07, SRS §3.1).
     extensions.configure<JavaPluginExtension> {

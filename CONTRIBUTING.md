@@ -49,7 +49,7 @@ docker compose down -v    # останов с удалением данных
 
 ```bash
 jq -Rs '{schemaType:"JSON", schema:.}' \
-  adapter/src/main/resources/schema/comm.outbound.status.v1.json \
+  adapter/out/kafka/src/main/resources/schema/comm.outbound.status.v1.json \
   | curl -s -X POST -H 'Content-Type: application/vnd.schemaregistry.v1+json' -d @- \
     http://localhost:8081/subjects/comm.outbound.status.v1-value/versions
 ```
@@ -67,6 +67,22 @@ export CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)   # AES-256, 32 бай�
 ```
 
 Без него контекст не поднимется: тихого отката на хранение контента открытым текстом нет.
+
+Локально экспортировать его не нужно: заведомо локальный ключ подставляет `config/application.yml`
+в корне репозитория. Spring Boot читает `./config/application.yml` относительно рабочего каталога,
+а он зависит от способа запуска — у `bootRun` это каталог модуля `bootstrap`, у Spring Boot run
+configuration в IDE по умолчанию корень проекта, — поэтому рядом лежит ещё
+`bootstrap/config/application.yml`, который корневой файл только импортирует. Значение задано один
+раз, менять нужно корневой. Шифрование при этом включено, а экспортированный
+`CONTENT_ENCRYPTION_KEY` побеждает подставленный.
+
+В репозитории лежит и разделяемая конфигурация запуска `.run/Notification Hub (local).run.xml` —
+IntelliJ подхватывает каталог `.run/` сам, и она задаёт рабочий каталог и ключ явно.
+
+В поставке этих файлов нет: `config/` не является каталогом ресурсов, поэтому в jar они не попадают,
+а runtime-стадия Dockerfile копирует только jar. Запуск контейнера и `java -jar` из любого каталога
+вне дерева исходников ключ требуют по-прежнему и без него не стартуют.
+
 В контуре Банка ключ приходит из секрет-хранилища платформы, в репозитории его быть не должно.
 Ротация: добавить новый ключ в `commhub.persistence.encryption.keys`, перевести на него
 `active-key-id`, старый держать, пока живы секции со строками под ним (DB-03).
@@ -76,12 +92,26 @@ export CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)   # AES-256, 32 бай�
 ```
 domain/       — чистая Java: модель и доменные сервисы. Без Spring/JPA/Kafka/Jackson (AR-02)
 application/  — port/in (use cases), port/out (репозитории, провайдеры, паблишеры), оркестрация, saga
-adapter/      — in: rest, kafka, admin, callback; out: persistence, kafka, provider/*, notification
-                (здесь же Flyway-миграции: adapter/src/main/resources/db/migration)
-bootstrap/    — Spring Boot приложение, конфигурация, wiring, ArchUnit- и интеграционные тесты
+adapter/      — каждый адаптер — отдельный Gradle-модуль; путь проекта повторяет каталог
+                (:adapter:in:rest = adapter/in/rest), сам :adapter — агрегатор над ними:
+                in/{rest,admin,kafka,callback,importer,scheduler,contract,security}
+                out/{persistence,kafka,metrics,time,secret,compliance,policy,provider/*}
+                observability/ — ни driving, ни driven
+                (Flyway-миграции: adapter/out/persistence/src/main/resources/db/migration)
+bootstrap/    — Spring Boot приложение, конфигурация, wiring (в т.ч. WebSecurityConfig),
+                ArchUnit- и интеграционные тесты
 ```
 
-Направление зависимостей — только внутрь: `adapter → application → domain` (AR-03).
+Направление зависимостей — только внутрь: `adapter → application → domain` (AR-03); связи между
+модулями адаптеров держит Gradle (например, провайдеры видят `:adapter:in:callback` только ради
+интерфейса `ProviderCallbackTranslator`). Слой целиком — `./gradlew :adapter:build`, один модуль
+адресно — `./gradlew :adapter:out:persistence:test`.
+
+Новый адаптер: каталог под `adapter/in|out/`, свой `build.gradle.kts`, строка `include(...)` в
+`settings.gradle.kts` и строка `api(project(...))` в `adapter/build.gradle.kts`. Имя Gradle-модуля —
+последний сегмент пути, поэтому имена в разных ветках могут совпасть (`in/kafka` и `out/kafka`):
+координаты разводит `group` из пути, а имена артефактов — `archivesName`, оба задаются в корневом
+`build.gradle.kts` и трогать их не нужно.
 
 ## Правила кода
 

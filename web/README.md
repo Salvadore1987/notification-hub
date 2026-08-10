@@ -12,7 +12,7 @@ npm run dev            # http://localhost:5173, /api проксируется н
 npm run build          # tsc -b + vite build → dist/
 npm run lint           # ESLint (flat config)
 npm run format         # Prettier
-npm run generate:api   # типы из ../adapter/src/main/resources/openapi/comm-hub-admin-v1.yaml
+npm run generate:api   # типы из ../adapter/in/admin/src/main/resources/openapi/comm-hub-admin-v1.yaml
 npm test               # unit/компонентные тесты (Vitest + Testing Library, jsdom)
 npm run test:coverage  # то же с покрытием
 npm run test:e2e       # Playwright: сценарии QA-07 и проверка доступности (нужен chromium)

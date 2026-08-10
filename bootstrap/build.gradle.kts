@@ -5,9 +5,16 @@ plugins {
 // bootstrap: Spring Boot приложение, конфигурация и wiring всех адаптеров (AR-01).
 
 dependencies {
+    // Слой adapter целиком, одной строкой: композиционному корню нужны все адаптеры сразу,
+    // а какие именно они есть — знает :adapter (агрегатор). Новый адаптер объявляется там.
     implementation(project(":adapter"))
     implementation(libs.spring.boot.starter)
     implementation(libs.spring.boot.starter.actuator)
+
+    // WebSecurityConfig переехал сюда из adapter/in/rest/security: он собирает цепочки
+    // rest + admin + callback разом — это wiring композиционного корня, а не адаптер.
+    implementation(libs.spring.boot.starter.security)
+    implementation(libs.spring.boot.starter.oauth2.resource.server)
 
     // OBS-01: реестр Prometheus подключается на уровне развёртывания — код метрик знает только
     // MeterRegistry, а какой это реестр, решает сборка приложения.
@@ -31,6 +38,10 @@ dependencies {
     // §8.2 обещан по сети, и сериализация с кодами ответов входят в обещание (QA-08).
     testImplementation(libs.spring.boot.starter.web)
 
+    // Кросс-модульные тесты провайдеров (ProviderDocumentationContractTest,
+    // ProviderRuntimeSettingsTest) живут здесь: они видят сразу несколько адаптеров.
+    testImplementation(testFixtures(project(":adapter:out:provider:support")))
+
     // ArchUnit видит классы всех слоёв через runtime classpath (AR-03, QA-02)
     testImplementation(libs.archunit)
     testImplementation(libs.testcontainers.junit)
@@ -48,3 +59,7 @@ dependencies {
 tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     archiveFileName.set("notification-hub.jar")
 }
+
+// Ключ шифрования контента (DB-04) для локального запуска не задаётся здесь: он лежит в
+// bootstrap/config/application.yml, который Spring Boot читает из рабочего каталога сам — так его
+// видят одинаково и bootRun, и запуск main-класса из IDE в обход Gradle. Подробности — в том файле.

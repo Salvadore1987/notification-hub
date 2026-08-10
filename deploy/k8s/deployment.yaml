@@ -60,13 +60,45 @@ spec:
                 secretKeyRef:
                   name: notification-hub-crypto
                   key: active-key
+            # SEC-04 (ADR-0036): креды провайдеров приходят переменными окружения. Ссылки на них
+            # заданы в application.yml (env:PLAYMOBILE_PASSWORD и т.д.); здесь — только источник
+            # значения. Ротация: обновить Secret и `kubectl rollout restart` — переменную живого
+            # процесса не сменить (см. docs/RUNBOOK.md, «Ротация секретов»).
+            # Оставить только те, чей провайдер включён: отсутствующая переменная — отказ отправки,
+            # а не тихая отправка без учётных данных.
+            - name: PLAYMOBILE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-provider-credentials
+                  key: playmobile-username
+            - name: PLAYMOBILE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-provider-credentials
+                  key: playmobile-password
+            - name: SMSGATE_LOGIN
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-provider-credentials
+                  key: smsgate-login
+            - name: SMSGATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-provider-credentials
+                  key: smsgate-key
+            # Блобы (JSON сервис-аккаунта, PEM .p8) лежат в Secret'е в base64 — ссылка на них
+            # объявлена как env:base64:, поэтому значение декодируется резолвером.
+            - name: FCM_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-provider-credentials
+                  key: fcm-service-account-base64
+            - name: APNS_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: notification-hub-provider-credentials
+                  key: apns-private-key-base64
           volumeMounts:
-            # SEC-04: креды провайдеров приходят каталогом секретов. Kubernetes обновляет содержимое
-            # смонтированного Secret'а на месте, а TTL-кэш резолвера подхватывает новое значение —
-            # ротация без рестарта.
-            - name: provider-secrets
-              mountPath: /etc/commhub/secrets
-              readOnly: true
             - name: tmp
               mountPath: /tmp
           # NF-05: три пробы, три группы actuator'а. startup даёт время миграциям Flyway (DB-01) и
@@ -101,9 +133,6 @@ spec:
             capabilities:
               drop: ["ALL"]
       volumes:
-        - name: provider-secrets
-          secret:
-            secretName: notification-hub-provider-credentials
         - name: tmp
           emptyDir: {}
 ---

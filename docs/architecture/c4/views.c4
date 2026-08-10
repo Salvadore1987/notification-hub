@@ -1,0 +1,292 @@
+/**
+ * Notification Hub — представления C4 (LikeC4).
+ *
+ * Просмотр:  npx likec4 start docs/architecture/c4
+ * Экспорт:   npx likec4 export png -o docs/architecture/c4/out docs/architecture/c4
+ */
+views {
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // C4 L1 — Системный контекст
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  view index {
+    title 'L1. Контекст: Модуль в ландшафте Банка'
+    description '''
+      Кто пользуется Модулем и с чем он разговаривает. Ключевое ограничение §1.3 видно
+      прямо на схеме: аудитории и контент приходят снаружи, Модуль отвечает за транспорт.
+    '''
+
+    include *
+
+    autoLayout LeftRight
+  }
+
+  view ingressContext {
+    title 'L1. Контекст приёма: кто и как отдаёт рассылки'
+    description 'Два транспорта приёма (§8.1, §8.2) и обратный поток статусов через Kafka (IK-02)'
+
+    include
+      sourceSystem,
+      esb,
+      kafka,
+      hub,
+      dataMart
+
+    autoLayout LeftRight
+  }
+
+  view providerContext {
+    title 'L1. Контекст доставки: провайдеры каналов'
+    description 'SMS — основной и резервный провайдеры, Email — корпоративный релей, Push — FCM и APNs (§9)'
+
+    include
+      hub,
+      playmobile,
+      smsGate,
+      mailRelay,
+      fcm,
+      apns,
+      secretStore
+
+    autoLayout LeftRight
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // C4 L2 — Контейнеры
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  view containers of hub {
+    title 'L2. Контейнеры Модуля'
+    description '''
+      Три собственных контейнера: SPA, backend и PostgreSQL. Kafka намеренно снаружи —
+      это корпоративный кластер Банка, а не часть поставки Модуля (§3.1).
+    '''
+
+    include *
+    include
+      sourceSystem,
+      esb,
+      admin,
+      operator,
+      analyst,
+      templateManager,
+      securityAuditor,
+      kafka,
+      playmobile,
+      smsGate,
+      mailRelay,
+      fcm,
+      apns,
+      sso,
+      secretStore,
+      dataMart,
+      monitoring
+
+    autoLayout LeftRight
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // C4 L3 — Компоненты backend
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  view components of hub.app {
+    title 'L3. Компоненты backend: гексагон целиком'
+    description '''
+      Один компонент — один Gradle-модуль (AR-01, AR-04). Слева driving-адаптеры (синие),
+      в центре ядро, справа driven-адаптеры. Зависимости направлены внутрь: adapter → application → domain,
+      правило проверяется ArchUnit-тестами в ./gradlew build (AR-03, QA-02).
+    '''
+
+    include *
+    include
+      sourceSystem,
+      kafka,
+      playmobile,
+      smsGate,
+      mailRelay,
+      fcm,
+      apns,
+      sso,
+      secretStore,
+      monitoring,
+      hub.db,
+      hub.adminSpa
+
+    autoLayout LeftRight
+  }
+
+  view componentsIngress of hub.app {
+    title 'L3. Приём: driving-адаптеры и ядро'
+    description '''
+      Тело REST-запроса и есть сообщение Kafka, поэтому разбор контракта IK-03 общий.
+      Класс трафика приходит из топика и переопределяет документ — так строится изоляция TC-01.
+    '''
+
+    include
+      hub.app.restApi,
+      hub.app.adminApi,
+      hub.app.kafkaIn,
+      hub.app.callbackApi,
+      hub.app.inboundContract,
+      hub.app.importer,
+      hub.app.scheduler,
+      hub.app.securityShared,
+      hub.app.application,
+      hub.app.domain,
+      sourceSystem,
+      esb,
+      kafka,
+      playmobile,
+      smsGate,
+      sso,
+      hub.adminSpa
+
+    autoLayout LeftRight
+  }
+
+  view componentsDelivery of hub.app {
+    title 'L3. Доставка: ядро и провайдерные адаптеры'
+    description '''
+      Ядро знает канальные порты, а не провайдеров (MP-05). Всё, что не специфично для провайдера —
+      таймауты, retry, circuit breaker, троттлинг, маскирование — живёт в общем каркасе (PR-01, PR-03).
+      Добавление провайдера — это новый модуль и строка конфигурации, без правок ядра (AR-04).
+    '''
+
+    include
+      hub.app.application,
+      hub.app.domain,
+      hub.app.providerSupport,
+      hub.app.playmobileAdapter,
+      hub.app.smsGateAdapter,
+      hub.app.smtpAdapter,
+      hub.app.fcmAdapter,
+      hub.app.apnsAdapter,
+      hub.app.secretAdapter,
+      playmobile,
+      smsGate,
+      mailRelay,
+      fcm,
+      apns,
+      secretStore
+
+    autoLayout LeftRight
+  }
+
+  view componentsState of hub.app {
+    title 'L3. Состояние, гарантии доставки и наблюдаемость'
+    description '''
+      Outbox лежит в одной транзакции с бизнес-записью, публикует его отдельный проход
+      планировщика, и published_at ставится только после ack брокера (AD-03).
+      Метрики и логи — единственный способ ядра рассказать о себе (OBS-01, OBS-03).
+    '''
+
+    include
+      hub.app.application,
+      hub.app.persistence,
+      hub.app.kafkaOut,
+      hub.app.scheduler,
+      hub.app.metrics,
+      hub.app.observability,
+      hub.app.timeAdapter,
+      hub.app.policyAdapter,
+      hub.app.complianceAdapter,
+      hub.db,
+      kafka,
+      monitoring,
+      dataMart
+
+    autoLayout LeftRight
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Динамические представления
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  dynamic view otpFlow {
+    title 'Динамика. OTP: от REST-запроса до отправки провайдеру'
+    description '''
+      Путь, на котором стоит SLA TC-01 (p99 ≤ 5 с от приёма до передачи провайдеру)
+      и подтверждение приёма ≤ 200 мс (FR-1.7).
+    '''
+
+    esb -> hub.app.restApi 'POST /api/v1/messages, тело IK-03'
+    hub.app.restApi -> hub.app.securityShared 'Кто вызвал; поток из claim или CN сертификата (SEC-01)'
+    hub.app.restApi -> hub.app.inboundContract 'Разбор и проверка контракта'
+    hub.app.restApi -> hub.app.application 'SubmitMessage'
+    hub.app.application -> hub.app.domain 'Message, сегментация, инварианты'
+    hub.app.application -> hub.app.persistence 'Дедуп, сохранение сообщения и записи outbox — одна транзакция'
+    hub.app.persistence -> hub.db 'INSERT message, outbox_event'
+    hub.app.restApi -> esb '202 Accepted, messageId и статус ACCEPTED'
+    hub.app.application -> hub.app.domain 'Router выбирает провайдера по действующей конфигурации'
+    hub.app.application -> hub.app.playmobileAdapter 'SmsProviderPort.submit'
+    hub.app.playmobileAdapter -> playmobile 'POST /send, приоритет realtime'
+    hub.app.application -> hub.app.persistence 'DeliveryAttempt, статус SENT_TO_PROVIDER, событие в outbox'
+    hub.app.scheduler -> hub.app.application 'PublishOutboxEvents'
+    hub.app.application -> hub.app.kafkaOut 'StatusPublisherPort'
+    hub.app.kafkaOut -> kafka 'comm.outbound.status.v1'
+
+    autoLayout LeftRight
+  }
+
+  dynamic view statusFlow {
+    title 'Динамика. DLR: статус провайдера возвращается источнику'
+    description '''
+      Callback провайдеро-независим, словарь статусов лежит в модуле провайдера (AR-04, ST-03).
+      Отдельно от смены статуса применяется следствие «адрес мёртв»: suppression ставится даже тогда,
+      когда статус не меняется.
+    '''
+
+    playmobile -> hub.app.callbackApi 'DLR: message-id, status, status-date'
+    hub.app.callbackApi -> hub.app.playmobileAdapter 'ProviderCallbackTranslator: статус провайдера в канонический'
+    hub.app.callbackApi -> hub.app.application 'ProcessProviderStatus'
+    hub.app.application -> hub.app.domain 'Переход по статусной машине §6.3'
+    hub.app.application -> hub.app.persistence 'История статуса, при необходимости suppression, запись в outbox'
+    hub.app.persistence -> hub.db 'UPDATE message, INSERT message_status_history, outbox_event'
+    hub.app.scheduler -> hub.app.application 'PublishOutboxEvents'
+    hub.app.application -> hub.app.kafkaOut 'Публикация после ack брокера ставит published_at'
+    hub.app.kafkaOut -> kafka 'comm.outbound.status.v1'
+    kafka -> sourceSystem 'Источник читает статус в едином формате §6.4'
+
+    autoLayout LeftRight
+  }
+
+  dynamic view failoverFlow {
+    title 'Динамика. Отказ провайдера: retry, circuit breaker, failover'
+    description '''
+      Ответ провайдера — это ProviderAck, отсутствие ответа — исключение: retry и breaker
+      реагируют только на исключение, поэтому поток отказов по контенту не открывает breaker (AD-04, PR-01).
+      Открытый breaker отвечает retryable-подтверждением, и сообщение уходит к резервному провайдеру.
+    '''
+
+    hub.app.application -> hub.app.playmobileAdapter 'SmsProviderPort.submit'
+    hub.app.playmobileAdapter -> hub.app.providerSupport 'Вызов под retry и circuit breaker'
+    hub.app.providerSupport -> playmobile 'POST /send — таймаут, ответа нет'
+    hub.app.providerSupport -> hub.app.application 'Breaker открыт, ack помечен как retryable'
+    hub.app.application -> hub.app.domain 'FallbackChain даёт следующего провайдера канала'
+    hub.app.application -> hub.app.smsGateAdapter 'SmsProviderPort.submit у резервного'
+    hub.app.smsGateAdapter -> smsGate 'POST /api/v2/send'
+    hub.app.application -> hub.app.persistence 'Обе попытки сохранены в delivery_attempt'
+    hub.app.scheduler -> hub.app.application 'CheckProviderHealth по фактическим показателям'
+    hub.app.application -> hub.app.metrics 'Деградация провайдера видна в метриках и алертах (FR-6.3, OBS-04)'
+
+    autoLayout LeftRight
+  }
+
+  dynamic view adminFlow {
+    title 'Динамика. Оператор ставит батч на паузу'
+    description 'Сценарий приёмки QA-07: решение о доступе принимает backend, панель лишь показывает то, что разрешено (UI-02, SEC-03)'
+
+    operator -> hub.adminSpa 'Карточка батча, кнопка «Пауза»'
+    hub.adminSpa -> sso 'Токен OIDC (Code + PKCE)'
+    hub.adminSpa -> hub.app.adminApi 'POST /api/admin/v1/batches/{id}/actions/pause'
+    hub.app.adminApi -> hub.app.securityShared 'Аутентификация на цепочке, авторизация на методе'
+    hub.app.adminApi -> hub.app.application 'PauseBatch'
+    hub.app.application -> hub.app.domain 'Batch: допустимость перехода'
+    hub.app.application -> hub.app.persistence 'Статус батча и запись аудита (FR-7.3)'
+    hub.app.persistence -> hub.db 'UPDATE batch, INSERT audit_log'
+    hub.app.adminApi -> hub.adminSpa 'Карточка с новым статусом'
+
+    autoLayout LeftRight
+  }
+}

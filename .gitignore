@@ -27,6 +27,9 @@ replay_pid*
 # в том числе пакет `application/.../port/out` (output-порты гексагона).
 /out/
 */out/
+# ...кроме `adapter/out` — это каталог исходников (driven-адаптеры), а не сборки IntelliJ.
+# Без этой строки любой новый файл под `adapter/out/**` молча не попадает в коммит.
+!/adapter/out/
 
 # --- OS ---
 .DS_Store
