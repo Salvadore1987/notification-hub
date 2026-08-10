@@ -48,6 +48,8 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
 @TestPropertySource(
         properties = {
             "commhub.outbox.relay.poll-interval-ms=3600000",
+            "commhub.dispatch.enabled=false",
+            "commhub.dispatch.expiry.enabled=false",
             "commhub.provider.health.initial-delay=1h",
             "commhub.metrics.backlog-refresh-interval=1h",
             "commhub.kafka.outbound.create-topics=true",
