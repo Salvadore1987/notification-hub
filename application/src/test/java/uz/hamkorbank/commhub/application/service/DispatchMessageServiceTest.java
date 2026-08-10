@@ -55,6 +55,8 @@ import uz.hamkorbank.commhub.application.service.pipeline.PanDetector;
 import uz.hamkorbank.commhub.application.service.pipeline.QuotaGuard;
 import uz.hamkorbank.commhub.application.service.pipeline.TemplateApplier;
 import uz.hamkorbank.commhub.application.service.support.DispatchGuards;
+import uz.hamkorbank.commhub.application.service.support.DispatchPreparation;
+import uz.hamkorbank.commhub.application.service.support.DispatchSettlement;
 import uz.hamkorbank.commhub.application.service.support.MessageRouting;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.application.service.support.ProviderGateway;
@@ -147,15 +149,16 @@ class DispatchMessageServiceTest {
                         providerConfig,
                         new RoutingRotation()),
                 new SuppressionRegistrar(suppressions, mock(MetricsPort.class)));
+        // Сага разрезана на две транзакции, между которыми идёт вызов провайдера (ADR-0039):
+        // тест собирает те же три бина, что и контекст, и остаётся тестом одного оборота.
+        MessageStatusNotifier notifier =
+                new MessageStatusNotifier(outbox, mock(MetricsPort.class), new MessageMapperImpl());
+        DispatchGuards dispatchGuards = new DispatchGuards(killSwitch, batches, streams);
         service = new DispatchMessageService(
-                clock,
-                messages,
-                dlqEntries,
+                new DispatchPreparation(
+                        clock, messages, dispatchGuards, pipeline, notifier, gateway, SendingPolicy.defaults()),
                 gateway,
-                new DispatchGuards(killSwitch, batches, streams),
-                pipeline,
-                new MessageStatusNotifier(outbox, mock(MetricsPort.class), new MessageMapperImpl()),
-                SendingPolicy.defaults());
+                new DispatchSettlement(clock, messages, dlqEntries, pipeline, notifier, SendingPolicy.defaults()));
     }
 
     @Test
@@ -190,6 +193,33 @@ class DispatchMessageServiceTest {
         assertThat(result.outcome()).isEqualTo(DispatchOutcome.RETRY_SCHEDULED);
         assertThat(message.status()).isEqualTo(MessageStatus.RETRYING);
         assertThat(message.selectedProvider()).contains(playmobile.ref());
+    }
+
+    @Test
+    @DisplayName("PR-01: a retry is given a pause, a terminal outcome is given none (ADR-0039)")
+    void writesTheNextAttemptTime() {
+        // Arrange
+        Message retrying = queuedMessage();
+        when(gateway.submit(any(), any(), any(), any())).thenReturn(ProviderAck.timedOut(NOW));
+
+        // Act
+        service.dispatch(DispatchMessageCommand.of(retrying.id()));
+
+        // Assert — без паузы диспетчер забрал бы сообщение тем же проходом и сжёг бы бюджет попыток
+        ArgumentCaptor<java.time.Instant> retryAt = ArgumentCaptor.forClass(java.time.Instant.class);
+        verify(messages).releaseClaim(any(Message.class), retryAt.capture());
+        assertThat(retryAt.getValue()).isAfter(NOW);
+
+        // Arrange — принятое сообщение терминально для этого оборота
+        Message accepted = queuedMessage();
+        when(gateway.submit(any(), any(), any(), any()))
+                .thenReturn(ProviderAck.accepted(ProviderMessageId.of("PM-2"), "0", NOW));
+
+        // Act
+        service.dispatch(DispatchMessageCommand.of(accepted.id()));
+
+        // Assert
+        verify(messages).releaseClaim(any(Message.class), org.mockito.ArgumentMatchers.isNull());
     }
 
     @Test

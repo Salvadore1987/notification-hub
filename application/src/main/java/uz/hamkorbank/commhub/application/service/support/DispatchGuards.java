@@ -99,7 +99,9 @@ public class DispatchGuards {
                 && quietHours.isPresent()
                 && quietHours.get().isQuietAt(now)) {
             return quietHours.get().defersDelivery()
-                    ? DispatchGate.defer("quiet hours until " + quietHours.get().nextOpeningAt(now))
+                    ? DispatchGate.deferUntil(
+                            quietHours.get().nextOpeningAt(now),
+                            "quiet hours until " + quietHours.get().nextOpeningAt(now))
                     : DispatchGate.cancel(RejectionReason.QUIET_HOURS, "quiet-hours window rejects the message");
         }
         return DispatchGate.proceed();
