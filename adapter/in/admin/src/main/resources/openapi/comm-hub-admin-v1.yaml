@@ -65,6 +65,8 @@ tags:
     description: Статистика и отчёты (§11.2, FR-6.2)
   - name: audit
     description: Журнал аудита (§11.2, FR-7.3, SEC-08)
+  - name: send
+    description: Отправка, инициированная оператором (ADR-0038)
   - name: administration
     description: Kill switch и системные параметры (§11.2, FR-3.2)
 
@@ -1151,6 +1153,82 @@ paths:
               schema: { type: string }
         '403': { $ref: '#/components/responses/Problem' }
 
+  # ------------------------------------------------------------------ отправка (ADR-0038)
+  /send/estimate:
+    post:
+      tags: [send]
+      summary: Смета отправки — получатели, сегменты, провайдер и стоимость (FR-4.4)
+      description: >-
+        JSON — одно сообщение, text/csv — загруженный список получателей. Ничего не отправляет,
+        поэтому обоснования не требует.
+      parameters:
+        - { name: streamId, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: templateCode, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: locale, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: channel, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: trafficClass, in: query, schema: { type: string }, description: Только для text/csv }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendRequest' }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Смета
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendEstimate' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /send/message:
+    post:
+      tags: [send]
+      summary: Отправить одно сообщение по опубликованному шаблону (ADR-0038)
+      parameters:
+        - $ref: '#/components/parameters/ReasonHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendRequest' }
+      responses:
+        '200':
+          description: Сообщение принято конвейером
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageAccepted' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /send/batch:
+    post:
+      tags: [send]
+      summary: Отправить рассылку по загруженному списку получателей (FR-1.6)
+      description: >-
+        Тело — CSV. Адресная колонка по каналу (msisdn / email / pushToken); зарезервированы также
+        clientId, externalId, pushPlatform. Все прочие колонки — merge-переменные строки, имя
+        колонки есть имя переменной, регистр сохраняется.
+      parameters:
+        - { name: streamId, in: query, required: true, schema: { type: string } }
+        - { name: templateCode, in: query, required: true, schema: { type: string } }
+        - { name: locale, in: query, required: true, schema: { type: string } }
+        - { name: channel, in: query, required: true, schema: { type: string } }
+        - { name: trafficClass, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/ReasonHeader'
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Рассылка создана; дальше она видна в разделе «Рассылки»
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendBatchResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
   # ------------------------------------------------------------------ администрирование
 
   /administration/kill-switch:
@@ -2039,6 +2117,71 @@ components:
           nullable: true
           description: Обоснование, введённое оператором (X-Commhub-Reason, FR-7.3)
         sourceIp: { type: string }
+
+    SendRequest:
+      type: object
+      required: [streamId, templateCode, locale, channel, recipient]
+      description: Поля текста здесь нет намеренно — контент берётся из опубликованного шаблона (ADR-0038)
+      properties:
+        streamId: { type: string }
+        templateCode: { type: string }
+        locale: { type: string, description: 'RU / UZ / EN' }
+        channel: { type: string }
+        trafficClass: { type: string, nullable: true }
+        recipient: { $ref: '#/components/schemas/Recipient' }
+        variables:
+          type: object
+          additionalProperties: { type: string }
+          description: Merge-поля шаблона
+        externalId: { type: string, nullable: true }
+
+    SendEstimate:
+      type: object
+      properties:
+        recipients: { type: integer, format: int64 }
+        segments: { type: integer, format: int64 }
+        estimatedCost: { type: string, nullable: true }
+        provider: { type: string, nullable: true }
+        template:
+          type: object
+          properties:
+            version: { type: integer }
+            status: { type: string }
+        missingVariables:
+          type: array
+          items: { type: string }
+          description: Незаполненные merge-поля; на реальной отправке эти строки были бы отклонены
+        rejection:
+          type: object
+          nullable: true
+          properties:
+            reason: { type: string }
+            detail: { type: string, nullable: true }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: integer, description: Строка файла, 1-based }
+              reason: { type: string }
+
+    SendBatchResult:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        accepted: { type: integer, format: int64 }
+        duplicates:
+          type: integer
+          format: int64
+          description: Повторная загрузка того же файла попадает целиком сюда (FR-1.5)
+        rejected: { type: integer, format: int64 }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: integer, description: Строка файла, 1-based }
+              reason: { type: string }
 
     KillSwitch:
       type: object

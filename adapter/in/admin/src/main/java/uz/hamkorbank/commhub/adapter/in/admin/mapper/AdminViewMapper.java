@@ -9,6 +9,7 @@ import uz.hamkorbank.commhub.adapter.in.admin.dto.ChannelResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.DashboardResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.DlqActionResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.DlqEntryResponse;
+import uz.hamkorbank.commhub.adapter.in.admin.dto.ImportResultResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.KillSwitchResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.MessageDigestResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.ProviderResponse;
@@ -17,6 +18,8 @@ import uz.hamkorbank.commhub.adapter.in.admin.dto.QuotaDto;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.RateLimitDto;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.RouteEvaluationResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.RoutingPolicyResponse;
+import uz.hamkorbank.commhub.adapter.in.admin.dto.SendBatchResponse;
+import uz.hamkorbank.commhub.adapter.in.admin.dto.SendEstimateResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.StatisticsRowResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.StreamResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.SuppressionCheckResponse;
@@ -35,10 +38,12 @@ import uz.hamkorbank.commhub.application.dto.DashboardView;
 import uz.hamkorbank.commhub.application.dto.DlqEntryView;
 import uz.hamkorbank.commhub.application.dto.KillSwitchResult;
 import uz.hamkorbank.commhub.application.dto.MessageDigestView;
+import uz.hamkorbank.commhub.application.dto.OperatorBatchResult;
 import uz.hamkorbank.commhub.application.dto.ProviderView;
 import uz.hamkorbank.commhub.application.dto.ResendDlqResult;
 import uz.hamkorbank.commhub.application.dto.RouteEvaluationView;
 import uz.hamkorbank.commhub.application.dto.RoutingPolicyView;
+import uz.hamkorbank.commhub.application.dto.SendEstimateView;
 import uz.hamkorbank.commhub.application.dto.StatisticsRowView;
 import uz.hamkorbank.commhub.application.dto.StreamView;
 import uz.hamkorbank.commhub.application.dto.SuppressionCheckView;
@@ -337,6 +342,31 @@ public interface AdminViewMapper {
                 new AuditEntryResponse.Change(view.before(), view.after()),
                 view.reason(),
                 view.sourceIp());
+    }
+
+    /** The estimate as the confirmation dialog shows it (ADR-0038, FR-4.4). */
+    default SendEstimateResponse toSendEstimate(SendEstimateView view, List<ImportResultResponse.FailureDto> failures) {
+        return new SendEstimateResponse(
+                view.recipients(),
+                view.segments(),
+                view.estimatedCostOptional()
+                        .map(money -> money.amount().toPlainString())
+                        .orElse(null),
+                view.providerOptional().map(ProviderCode::value).orElse(null),
+                new SendEstimateResponse.TemplateVersionDto(
+                        view.template().number(), view.template().status().name()),
+                view.missingVariables(),
+                view.rejectionOptional()
+                        .map(rejection -> new SendEstimateResponse.RejectionDto(
+                                rejection.reason().name(), rejection.detail()))
+                        .orElse(null),
+                failures);
+    }
+
+    /** What came of the batch, plus the rows the file itself could not yield. */
+    default SendBatchResponse toSendBatch(OperatorBatchResult result, List<ImportResultResponse.FailureDto> failures) {
+        return new SendBatchResponse(
+                result.batchId().toString(), result.accepted(), result.duplicates(), result.rejected(), failures);
     }
 
     default KillSwitchResponse toKillSwitch(KillSwitchResult result) {

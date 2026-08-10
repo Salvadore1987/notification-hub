@@ -46,7 +46,8 @@ class AdminOpenApiContractTest {
             SuppressionAdminController.class,
             StatisticsController.class,
             AuditController.class,
-            AdministrationController.class);
+            AdministrationController.class,
+            SendAdminController.class);
 
     @Test
     @DisplayName("§11.2: every endpoint of the admin BFF is in the published contract")
@@ -104,6 +105,7 @@ class AdminOpenApiContractTest {
                         "name: suppressions",
                         "name: statistics",
                         "name: audit",
+                        "name: send",
                         "name: administration");
     }
 

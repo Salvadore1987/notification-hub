@@ -52,5 +52,13 @@ public final class AdminAuthority {
     /** The suppression list, which §11.2 gives to both ADMIN and OPERATOR. */
     public static final String SUPPRESSION = OPERATOR;
 
+    /**
+     * Sending from the panel (ADR-0038).
+     *
+     * <p>The same pair that already controls running traffic: the right to send and the right to stop
+     * what is being sent belong together, and a separate role would only make one of them harder to get.
+     */
+    public static final String SENDER = OPERATOR;
+
     private AdminAuthority() {}
 }

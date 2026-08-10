@@ -2246,6 +2246,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/send/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Смета отправки — получатели, сегменты, провайдер и стоимость (FR-4.4)
+         * @description JSON — одно сообщение, text/csv — загруженный список получателей. Ничего не отправляет, поэтому обоснования не требует.
+         */
+        post: {
+            parameters: {
+                query?: {
+                    /** @description Только для text/csv */
+                    streamId?: string;
+                    /** @description Только для text/csv */
+                    templateCode?: string;
+                    /** @description Только для text/csv */
+                    locale?: string;
+                    /** @description Только для text/csv */
+                    channel?: string;
+                    /** @description Только для text/csv */
+                    trafficClass?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SendRequest"];
+                    "text/csv": string;
+                };
+            };
+            responses: {
+                /** @description Смета */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SendEstimate"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/send/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправить одно сообщение по опубликованному шаблону (ADR-0038) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
+                    "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SendRequest"];
+                };
+            };
+            responses: {
+                /** @description Сообщение принято конвейером */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MessageAccepted"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/send/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить рассылку по загруженному списку получателей (FR-1.6)
+         * @description Тело — CSV. Адресная колонка по каналу (msisdn / email / pushToken); зарезервированы также clientId, externalId, pushPlatform. Все прочие колонки — merge-переменные строки, имя колонки есть имя переменной, регистр сохраняется.
+         */
+        post: {
+            parameters: {
+                query: {
+                    streamId: string;
+                    templateCode: string;
+                    locale: string;
+                    channel: string;
+                    trafficClass?: string;
+                };
+                header?: {
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
+                    "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "text/csv": string;
+                };
+            };
+            responses: {
+                /** @description Рассылка создана; дальше она видна в разделе «Рассылки» */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SendBatchResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/administration/kill-switch": {
         parameters: {
             query?: never;
@@ -3035,6 +3188,62 @@ export interface components {
             /** @description Обоснование, введённое оператором (X-Commhub-Reason, FR-7.3) */
             reason?: string | null;
             sourceIp?: string;
+        };
+        /** @description Поля текста здесь нет намеренно — контент берётся из опубликованного шаблона (ADR-0038) */
+        SendRequest: {
+            streamId: string;
+            templateCode: string;
+            /** @description RU / UZ / EN */
+            locale: string;
+            channel: string;
+            trafficClass?: string | null;
+            recipient: components["schemas"]["Recipient"];
+            /** @description Merge-поля шаблона */
+            variables?: {
+                [key: string]: string;
+            };
+            externalId?: string | null;
+        };
+        SendEstimate: {
+            /** Format: int64 */
+            recipients?: number;
+            /** Format: int64 */
+            segments?: number;
+            estimatedCost?: string | null;
+            provider?: string | null;
+            template?: {
+                version?: number;
+                status?: string;
+            };
+            /** @description Незаполненные merge-поля; на реальной отправке эти строки были бы отклонены */
+            missingVariables?: string[];
+            rejection?: {
+                reason?: string;
+                detail?: string | null;
+            } | null;
+            failures?: {
+                /** @description Строка файла */
+                line?: number;
+                reason?: string;
+            }[];
+        };
+        SendBatchResult: {
+            /** Format: uuid */
+            batchId?: string;
+            /** Format: int64 */
+            accepted?: number;
+            /**
+             * Format: int64
+             * @description Повторная загрузка того же файла попадает целиком сюда (FR-1.5)
+             */
+            duplicates?: number;
+            /** Format: int64 */
+            rejected?: number;
+            failures?: {
+                /** @description Строка файла */
+                line?: number;
+                reason?: string;
+            }[];
         };
         KillSwitch: {
             active?: boolean;

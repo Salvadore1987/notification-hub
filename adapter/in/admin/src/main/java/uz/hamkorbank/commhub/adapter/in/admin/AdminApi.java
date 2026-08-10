@@ -28,6 +28,9 @@ public final class AdminApi {
     public static final String AUDIT = BASE + "/audit";
     public static final String ADMINISTRATION = BASE + "/administration";
 
+    /** Отправка, инициированная оператором (ADR-0038); §11.2 такого раздела не знает — он новее. */
+    public static final String SEND = BASE + "/send";
+
     /**
      * Justification of an action, kept in the audit journal (FR-7.3, SEC-03).
      *
