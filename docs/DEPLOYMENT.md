@@ -169,18 +169,44 @@ cd web && npm ci && npm run build   # -> web/dist/
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL (`currentSchema=comm_hub`) |
 | `CONTENT_ENCRYPTION_KEY` | ключ шифрования контента; из секрет-хранилища платформы, отсутствие — отказ старта |
 | `KAFKA_BOOTSTRAP_SERVERS` | кластер Kafka Банка |
-| `SECRETS_DIR` | каталог секретов, примонтированный в под (`/etc/commhub/secrets`) |
+| креды включённых провайдеров | переменные окружения, см. §5.2 (`PLAYMOBILE_PASSWORD`, `SMSGATE_KEY`, …) |
 | `COMMHUB_ENVIRONMENT` | метка контура в метриках (`prod`, `test`, …) |
 
 Топики (входящие `comm.inbound.*.v1`, исходящие `comm.outbound.*.v1`) заводит эксплуатация —
 партиции, retention, ACL; `KAFKA_CREATE_TOPICS` остаётся `false`. Субъект схемы статусов
 регистрируется в Schema Registry контура (см. §3.3), режим совместимости `BACKWARD`.
 
-### 5.2. Секреты (SEC-04)
+### 5.2. Секреты (SEC-04, ADR-0036)
 
-Секреты приходят **каталогом файлов** (Vault-agent рендерит в примонтированный том), приложение
-читает их по ссылкам вида `playmobile/password` относительно `SECRETS_DIR`; TTL-кэш (30с) даёт
-ротацию без рестарта. Поддерживаются также схемы `env:`/`file:`/`prop:`. Hub сам в Vault не ходит.
+Секреты приходят **переменными окружения**. В БД и в yaml лежат только ссылки; ссылка называет свой
+источник: `env:ИМЯ` (основная схема), `prop:ключ` (свойство Spring) или без схемы — литерал из
+`commhub.secrets.values`, который существует для локального стенда и тестов. Каталога секретов и
+схемы `file:` больше нет. Hub сам в Vault не ходит: значение в окружение пода кладёт платформа
+(K8s Secret, инжектор Vault, CSI-драйвер).
+
+Многострочные блобы — JSON сервис-аккаунта FCM и `.p8`-ключ APNs — переносятся в base64, и ссылка на
+них объявляется с модификатором: `env:base64:FCM_SERVICE_ACCOUNT`. Значение, объявленное `base64:`,
+но им не являющееся, не разрешается вовсе (отказ отправки вместо отправки с искажённым ключом).
+
+Умолчания ссылок в `application.yml` уже указывают на окружение, поэтому в контуре достаточно задать
+сами переменные:
+
+| Провайдер | Переменные |
+|---|---|
+| Playmobile | `PLAYMOBILE_USERNAME`, `PLAYMOBILE_PASSWORD` |
+| SMS Gate | `SMSGATE_LOGIN`, `SMSGATE_KEY` |
+| FCM | `FCM_SERVICE_ACCOUNT` (base64 JSON) |
+| APNs | `APNS_PRIVATE_KEY` (base64 PEM) |
+
+Там, где умолчание ссылки пустое (пустое = «без аутентификации»), задаётся и она сама, и переменная:
+`SMTP_USERNAME_REF=env:SMTP_USERNAME`, `SMTP_PASSWORD_REF=env:SMTP_PASSWORD`,
+`SMTP_BOUNCE_USERNAME_REF` / `SMTP_BOUNCE_PASSWORD_REF` (EM-02),
+`SMTP_DKIM_KEY_REF=env:base64:SMTP_DKIM_KEY` (EM-03), `KAFKA_SASL_PASSWORD_REF`,
+`KAFKA_TRUSTSTORE_PASSWORD_REF`, `KAFKA_KEYSTORE_PASSWORD_REF`.
+
+**Ротация требует rolling restart** — переменную окружения живого процесса сменить нельзя. Простоя при
+этом нет (`maxUnavailable: 0`), но и мгновенной ротация не будет; процедура — в
+[RUNBOOK](RUNBOOK.md#ротация-секретов).
 
 ### 5.3. Безопасность — включить обязательно
 
@@ -197,12 +223,13 @@ SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://sso.hamkorbank.uz/r
 ```
 
 Секреты callback'ов провайдеров — `PLAYMOBILE_CALLBACK_SECRET_REF` / `SMSGATE_CALLBACK_SECRET_REF`
-(SEC-07), плюс списки разрешённых IP, согласованные с провайдерами.
+(SEC-07, форма `env:PLAYMOBILE_CALLBACK_SECRET`), плюс списки разрешённых IP, согласованные с
+провайдерами.
 
 ### 5.4. Провайдеры
 
 Каждый включается своим флагом (`PLAYMOBILE_ENABLED`, `SMSGATE_ENABLED`, `SMTP_ENABLED`,
-`FCM_ENABLED`, `APNS_ENABLED`) и кредами-ссылками в каталог секретов. В yaml/окружении живёт
+`FCM_ENABLED`, `APNS_ENABLED`) и кредами из переменных окружения (§5.2). В yaml/окружении живёт
 только топология деплоя (base-url, таймауты, окна breaker'а); лимиты и настройки отправки
 (originator/sender, приоритеты, веса, TTL) читаются из БД (`provider.rate_limit_config`,
 `provider.endpoint_config`) и правятся из админ-панели без рестарта (AD-07, NF-07).

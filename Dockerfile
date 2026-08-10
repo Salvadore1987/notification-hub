@@ -60,9 +60,8 @@ USER 10001
 
 COPY --from=build /workspace/bootstrap/build/libs/notification-hub.jar app.jar
 
-# Секреты монтируются каталогом (SEC-04): SecretResolverAdapter читает файлы, а не переменные,
-# и ротация подхватывается по TTL кэша без рестарта.
-VOLUME ["/etc/commhub/secrets"]
+# Секреты приходят переменными окружения (SEC-04, ADR-0036): SecretResolverAdapter читает окружение,
+# каталога секретов у контейнера нет. Ротация — пересоздание контейнера с новым значением.
 
 EXPOSE 8080
 

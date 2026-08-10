@@ -100,7 +100,7 @@ model {
   secretStore = externalSystem 'Секрет-хранилище Банка' {
     #external
     technology 'Vault / K8s secrets'
-    description 'Учётные данные провайдеров. Модуль не ходит в Vault сам: он читает смонтированные значения по ссылкам env:, file:, prop: (SEC-04)'
+    description 'Учётные данные провайдеров. Модуль не ходит в Vault сам: платформа кладёт значение в окружение пода, Модуль читает его по ссылке env: (SEC-04, ADR-0036)'
   }
 
   dataMart = externalSystem 'Витрина данных (BigData)' {
@@ -341,7 +341,7 @@ model {
       secretAdapter = component 'Резолвер секретов' {
         #driven
         technology ':adapter:out:secret'
-        description 'Схемы env:, file:, prop:; без схемы — файл в смонтированном каталоге. Кэш с TTL, чтобы ротация применялась без рестарта (SEC-04)'
+        description 'Схемы env: (основная) и prop:, модификатор base64: для блобов; без схемы — литерал для локального стенда. Кэш с TTL, чтобы разрешение ссылки не повторялось на каждое сообщение (SEC-04, ADR-0036)'
       }
 
       complianceAdapter = component 'Политики compliance' {

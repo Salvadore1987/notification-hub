@@ -3,36 +3,89 @@ package uz.hamkorbank.commhub.adapter.out.secret;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.env.MockEnvironment;
 import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 
-/** Credentials come from the platform, never from the database or a log line (SEC-04, SG-04). */
+/** Credentials come from the environment, never from the database or a log line (SEC-04, SG-04). */
 class SecretResolverAdapterTest {
 
+    private static final String SERVICE_ACCOUNT = "{\"type\":\"service_account\",\"project_id\":\"hb\"}";
+
     @Test
-    @DisplayName("SEC-04: a scheme-less reference is a file in the mounted secret directory")
-    void resolvesMountedFile(@TempDir Path mount) throws IOException {
+    @DisplayName("SEC-04: env: reads an environment variable, which is how the contour delivers a credential")
+    void resolvesEnvironmentVariable() {
         // Arrange
-        Files.writeString(mount.resolve("playmobile-password"), "s3cr3t\n", StandardCharsets.UTF_8);
-        SecretResolverAdapter resolver = resolver(mount, Map.of());
+        SecretResolverAdapter resolver = resolver(Map.of("PLAYMOBILE_PASSWORD", "s3cr3t\n"), Map.of());
 
         // Act
-        String value = resolver.require("playmobile-password");
+        String value = resolver.require("env:PLAYMOBILE_PASSWORD");
 
         // Assert
         assertThat(value).isEqualTo("s3cr3t");
+    }
+
+    @Test
+    @DisplayName("SEC-04: env:base64: decodes the blob, which is how a .p8 key survives an environment variable")
+    void decodesDeclaredBase64() {
+        // Arrange: a key encoded on the command line arrives line-wrapped.
+        String encoded = base64("-----BEGIN PRIVATE KEY-----\nMIGT\n-----END PRIVATE KEY-----");
+        SecretResolverAdapter resolver = resolver(Map.of("APNS_PRIVATE_KEY", encoded + "\n"), Map.of());
+
+        // Act
+        String value = resolver.require("env:base64:APNS_PRIVATE_KEY");
+
+        // Assert
+        assertThat(value).startsWith("-----BEGIN PRIVATE KEY-----").endsWith("-----END PRIVATE KEY-----");
+    }
+
+    @Test
+    @DisplayName("SEC-04: a base64: reference whose value is not base64 resolves to nothing, not to itself")
+    void refusesDeclaredBase64ThatIsNot() {
+        // Arrange
+        SecretResolverAdapter resolver = resolver(Map.of("FCM_SERVICE_ACCOUNT", "not base64 at all!"), Map.of());
+
+        // Act + Assert
+        assertThat(resolver.resolve("env:base64:FCM_SERVICE_ACCOUNT")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SEC-04: a base64-encoded blob is decoded even without the modifier")
+    void decodesDetectedBase64Blob() {
+        // Arrange
+        SecretResolverAdapter resolver = resolver(Map.of("FCM_SERVICE_ACCOUNT", base64(SERVICE_ACCOUNT)), Map.of());
+
+        // Act + Assert
+        assertThat(resolver.resolve("env:FCM_SERVICE_ACCOUNT")).contains(SERVICE_ACCOUNT);
+    }
+
+    @Test
+    @DisplayName("SEC-04: auto-detection leaves an ordinary password alone, base64-shaped or not")
+    void leavesPasswordsAlone() {
+        // Arrange: eight canonical base64 characters — decodable, but not into a blob.
+        SecretResolverAdapter resolver = resolver(Map.of("SMSGATE_KEY", "aGFta29y"), Map.of());
+
+        // Act + Assert
+        assertThat(resolver.resolve("env:SMSGATE_KEY")).contains("aGFta29y");
+    }
+
+    @Test
+    @DisplayName("SEC-04: a JSON blob supplied verbatim is used as it is")
+    void leavesVerbatimBlobAlone() {
+        // Arrange
+        SecretResolverAdapter resolver = resolver(Map.of("FCM_SERVICE_ACCOUNT", SERVICE_ACCOUNT), Map.of());
+
+        // Act + Assert
+        assertThat(resolver.resolve("env:FCM_SERVICE_ACCOUNT")).contains(SERVICE_ACCOUNT);
     }
 
     @Test
@@ -40,8 +93,8 @@ class SecretResolverAdapterTest {
     void resolvesPropertyScheme() {
         // Arrange
         MockEnvironment environment = new MockEnvironment().withProperty("playmobile.password", "local");
-        SecretResolverAdapter resolver =
-                new SecretResolverAdapter(SecretProperties.defaults(), environment, FixedClock.standard());
+        SecretResolverAdapter resolver = new SecretResolverAdapter(
+                SecretProperties.defaults(), environment, name -> null, FixedClock.standard());
 
         // Act + Assert
         assertThat(resolver.resolve("prop:playmobile.password")).contains("local");
@@ -51,64 +104,67 @@ class SecretResolverAdapterTest {
     @DisplayName("SEC-04: a literal from commhub.secrets.values is the fallback for tests and the local stack")
     void resolvesConfiguredLiteral() {
         // Arrange
-        SecretResolverAdapter resolver = resolver(null, Map.of("smsgate/key", "abc"));
+        SecretResolverAdapter resolver = resolver(Map.of(), Map.of("smsgate/key", "abc"));
 
         // Act + Assert
         assertThat(resolver.resolve("smsgate/key")).contains("abc");
     }
 
     @Test
-    @DisplayName("SEC-04: a reference escaping the secret directory resolves to nothing")
-    void refusesPathTraversal(@TempDir Path mount) throws IOException {
-        // Arrange: the reference comes from the provider table, which the admin panel writes.
-        Path outside = mount.getParent().resolve("outside-secret");
-        Files.writeString(outside, "leaked", StandardCharsets.UTF_8);
-        SecretResolverAdapter resolver = resolver(mount, Map.of());
+    @DisplayName("SEC-04: an environment variable never loses to a property of the same name")
+    void environmentIsNotSpringProperty() {
+        // Arrange: the yaml key would win if env went through Spring's Environment.
+        MockEnvironment environment = new MockEnvironment().withProperty("PLAYMOBILE_PASSWORD", "from-yaml");
+        SecretResolverAdapter resolver = new SecretResolverAdapter(
+                SecretProperties.defaults(),
+                environment,
+                Map.of("PLAYMOBILE_PASSWORD", "from-env")::get,
+                FixedClock.standard());
 
         // Act + Assert
-        assertThat(resolver.resolve("../outside-secret")).isEmpty();
+        assertThat(resolver.resolve("env:PLAYMOBILE_PASSWORD")).contains("from-env");
     }
 
     @Test
     @DisplayName("SEC-04: a missing secret fails the call instead of sending with a blank credential")
     void requireFailsOnMissingSecret() {
         // Arrange
-        SecretResolverAdapter resolver = resolver(null, Map.of());
+        SecretResolverAdapter resolver = resolver(Map.of(), Map.of());
 
         // Act + Assert
-        assertThatThrownBy(() -> resolver.require("playmobile/password"))
+        assertThatThrownBy(() -> resolver.require("env:PLAYMOBILE_PASSWORD"))
                 .isInstanceOf(SecretNotFoundException.class)
-                .hasMessageContaining("playmobile/password");
+                .hasMessageContaining("env:PLAYMOBILE_PASSWORD");
     }
 
     @Test
-    @DisplayName("SEC-04: a rotated secret is picked up once the cache window has passed, without a restart")
-    void rotationAppliesAfterTheCacheWindow(@TempDir Path mount) throws IOException {
+    @DisplayName("SEC-04: a resolved value is reused for the cache window and looked up again after it")
+    void cacheWindowBoundsTheLookup() {
         // Arrange
-        Path secret = mount.resolve("smsgate-key");
-        Files.writeString(secret, "old", StandardCharsets.UTF_8);
-        Instant start = FixedClock.DEFAULT;
-        MutableClock clock = new MutableClock(start);
+        Map<String, String> variables = new HashMap<>(Map.of("SMSGATE_KEY", "old"));
+        MutableClock clock = new MutableClock(FixedClock.DEFAULT);
         SecretResolverAdapter resolver = new SecretResolverAdapter(
-                new SecretProperties(mount.toString(), Map.of(), Duration.ofSeconds(30)), new MockEnvironment(), clock);
-        assertThat(resolver.resolve("smsgate-key")).contains("old");
-        Files.writeString(secret, "new", StandardCharsets.UTF_8);
+                new SecretProperties(Map.of(), Duration.ofSeconds(30)), new MockEnvironment(), variables::get, clock);
+        assertThat(resolver.resolve("env:SMSGATE_KEY")).contains("old");
+        variables.put("SMSGATE_KEY", "new");
 
         // Act
-        String withinWindow = resolver.require("smsgate-key");
+        String withinWindow = resolver.require("env:SMSGATE_KEY");
         clock.advanceSeconds(31);
-        String afterWindow = resolver.require("smsgate-key");
+        String afterWindow = resolver.require("env:SMSGATE_KEY");
 
         // Assert
         assertThat(withinWindow).isEqualTo("old");
         assertThat(afterWindow).isEqualTo("new");
     }
 
-    private static SecretResolverAdapter resolver(Path directory, Map<String, String> values) {
+    private static SecretResolverAdapter resolver(Map<String, String> variables, Map<String, String> values) {
         return new SecretResolverAdapter(
-                new SecretProperties(directory == null ? null : directory.toString(), values, null),
-                new MockEnvironment(),
-                FixedClock.standard());
+                new SecretProperties(values, null), new MockEnvironment(), variables::get, FixedClock.standard());
+    }
+
+    private static String base64(String value) {
+        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
     /** A clock the test moves by hand, to cross the cache window without waiting for it. */

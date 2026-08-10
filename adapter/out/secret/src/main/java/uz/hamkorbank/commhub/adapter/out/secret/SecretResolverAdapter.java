@@ -1,14 +1,19 @@
 package uz.hamkorbank.commhub.adapter.out.secret;
 
-import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.UnaryOperator;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
@@ -18,17 +23,21 @@ import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
- * Reads provider and stream credentials from the platform's secret store (SEC-04, SG-04, PR-03).
+ * Reads provider and stream credentials from the process environment (SEC-04, SG-04, PR-03, ADR-0036).
  *
  * <p>The only place in the Hub that ever holds a credential value. Everything else carries a
  * reference: {@code Provider.credentialsRef} in the database, {@code …-ref} properties in the provider
  * adapters. Nothing resolved here is ever logged, put on an exception message or written to the
  * database — a failure names the reference, never what was found under it.
  *
- * <p>Values are cached for {@link SecretProperties#cacheTtl()} rather than for the lifetime of the
- * process. A rotation therefore applies without a restart, within that window (SEC-04): the file the
- * Vault agent or the kubelet rewrites is simply read again. Caching at all is what keeps a per-message
- * provider call from touching the filesystem.
+ * <p>A reference names its source: {@code env:NAME} (the contour), {@code prop:key} (a Spring
+ * property), or no scheme at all, which is a literal from {@code commhub.secrets.values} and exists
+ * for the local stack and the tests. Either scheme may carry a {@code base64:} modifier for a
+ * multi-line blob — the FCM service account and the APNs {@code .p8} key are why it exists.
+ *
+ * <p>Values are cached for {@link SecretProperties#cacheTtl()}, which keeps a per-message provider
+ * call away from the lookup. It is no longer what makes a rotation apply: an environment variable
+ * cannot change inside a running process, so rotating one is a rolling restart of the deployment.
  */
 @Component
 public class SecretResolverAdapter implements SecretResolverPort {
@@ -36,20 +45,28 @@ public class SecretResolverAdapter implements SecretResolverPort {
     private static final Logger LOG = LoggerFactory.getLogger(SecretResolverAdapter.class);
 
     private static final String ENV_SCHEME = "env:";
-    private static final String FILE_SCHEME = "file:";
     private static final String PROPERTY_SCHEME = "prop:";
+
+    /** Modifier after the scheme: the value is Base64 and has to be decoded before it is used. */
+    private static final String BASE64_MODIFIER = "base64:";
 
     /** Property namespace a scheme-less reference falls back to; mirrors {@code commhub.secrets.values}. */
     private static final String VALUES_PREFIX = "commhub.secrets.values.";
 
+    /** Canonical Base64, no line breaks: what the auto-detection below is willing to consider. */
+    private static final Pattern STRICT_BASE64 = Pattern.compile("[A-Za-z0-9+/]+={0,2}");
+
     private final SecretProperties properties;
     private final Environment environment;
+    private final EnvironmentVariables variables;
     private final ClockPort clock;
     private final Map<String, CachedSecret> cache = new ConcurrentHashMap<>();
 
-    public SecretResolverAdapter(SecretProperties properties, Environment environment, ClockPort clock) {
+    public SecretResolverAdapter(
+            SecretProperties properties, Environment environment, EnvironmentVariables variables, ClockPort clock) {
         this.properties = Guard.notNull(properties, "properties");
         this.environment = Guard.notNull(environment, "environment");
+        this.variables = Guard.notNull(variables, "variables");
         this.clock = Guard.notNull(clock, "clock");
     }
 
@@ -82,64 +99,104 @@ public class SecretResolverAdapter implements SecretResolverPort {
 
     private Optional<String> load(String ref) {
         if (ref.startsWith(ENV_SCHEME)) {
-            return nonBlank(System.getenv(ref.substring(ENV_SCHEME.length())));
-        }
-        if (ref.startsWith(FILE_SCHEME)) {
-            return readFile(Path.of(ref.substring(FILE_SCHEME.length())), ref);
+            return read(ref, ref.substring(ENV_SCHEME.length()), variables::get);
         }
         if (ref.startsWith(PROPERTY_SCHEME)) {
-            return nonBlank(environment.getProperty(ref.substring(PROPERTY_SCHEME.length())));
+            return read(ref, ref.substring(PROPERTY_SCHEME.length()), environment::getProperty);
         }
-        return mountedFile(ref)
-                .or(() -> nonBlank(properties.values().get(ref)))
-                .or(() -> nonBlank(environment.getProperty(VALUES_PREFIX + ref)));
+        return nonBlank(properties.values().get(ref))
+                .or(() -> nonBlank(environment.getProperty(VALUES_PREFIX + ref)))
+                .map(SecretResolverAdapter::decodeBlobIfBase64);
     }
 
     /**
-     * A scheme-less reference as a file under the mounted secret directory.
+     * One source, one lookup, with the {@code base64:} modifier applied if the reference carries it.
      *
-     * <p>The reference is checked to stay inside that directory: it arrives from the {@code provider}
-     * table, which the admin panel writes, and a reference of {@code ../../etc/passwd} must read
-     * nothing rather than something.
+     * @param ref the whole reference, for the log line a failure produces — never the value
+     * @param locator what follows the scheme: the variable name or the property key, possibly prefixed
      */
-    private Optional<String> mountedFile(String ref) {
-        if (!properties.hasDirectory()) {
-            return Optional.empty();
+    private static Optional<String> read(String ref, String locator, UnaryOperator<String> source) {
+        if (locator.startsWith(BASE64_MODIFIER)) {
+            return nonBlank(source.apply(locator.substring(BASE64_MODIFIER.length())))
+                    .flatMap(value -> decodeBase64(value, ref));
         }
-        Path root = Path.of(properties.directory()).toAbsolutePath().normalize();
-        Path candidate = root.resolve(ref).toAbsolutePath().normalize();
-        if (!candidate.startsWith(root)) {
-            LOG.warn("Secret reference {} points outside the secret directory and is ignored", ref);
-            return Optional.empty();
-        }
-        return readFile(candidate, ref);
+        return nonBlank(source.apply(locator)).map(SecretResolverAdapter::decodeBlobIfBase64);
     }
 
-    private static Optional<String> readFile(Path path, String ref) {
-        if (!Files.isReadable(path)) {
-            return Optional.empty();
+    /**
+     * The value of a reference that asked for {@code base64:} explicitly.
+     *
+     * <p>Whitespace is dropped first: a key encoded with {@code base64} on the command line arrives
+     * line-wrapped. A value that is not Base64 at all resolves to nothing rather than to itself — the
+     * deployment said what the encoding is, and sending with a mangled credential is worse than not
+     * sending.
+     */
+    private static Optional<String> decodeBase64(String value, String ref) {
+        String compact = value.replaceAll("\\s", "");
+        try {
+            return utf8(Base64.getDecoder().decode(compact));
+        } catch (IllegalArgumentException standard) {
+            try {
+                return utf8(Base64.getUrlDecoder().decode(compact));
+            } catch (IllegalArgumentException url) {
+                LOG.warn("Secret reference {} is declared base64 but its value is not; it is ignored", ref);
+                return Optional.empty();
+            }
+        }
+    }
+
+    /**
+     * Decodes a value that was not declared Base64 but plainly is one.
+     *
+     * <p>Narrow on purpose: the value has to be canonical Base64 without whitespace, decode to valid
+     * UTF-8, and yield a blob marker — an opening brace for JSON, {@code -----BEGIN} for PEM — that it
+     * did not already start with. A password cannot be mangled by that rule short of a coincidence,
+     * and a deployment that wants certainty writes {@code base64:} — the modifier is never guessed at,
+     * only added to.
+     */
+    private static String decodeBlobIfBase64(String value) {
+        if (looksLikeBlob(value)
+                || value.length() % 4 != 0
+                || !STRICT_BASE64.matcher(value).matches()) {
+            return value;
         }
         try {
-            return nonBlank(Files.readString(path, StandardCharsets.UTF_8).strip());
-        } catch (IOException e) {
-            // The reference, never the content: an I/O message can quote what it managed to read.
-            LOG.warn(
-                    "Secret reference {} could not be read: {}",
-                    ref,
-                    e.getClass().getSimpleName());
+            return utf8(Base64.getDecoder().decode(value))
+                    .filter(SecretResolverAdapter::looksLikeBlob)
+                    .orElse(value);
+        } catch (IllegalArgumentException notBase64) {
+            return value;
+        }
+    }
+
+    private static boolean looksLikeBlob(String value) {
+        String text = value.stripLeading();
+        return text.startsWith("{") || text.startsWith("-----BEGIN");
+    }
+
+    /** The bytes as text, or nothing if they are not UTF-8 — a binary secret is not one we can carry. */
+    private static Optional<String> utf8(byte[] bytes) {
+        CharsetDecoder decoder = StandardCharsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
+            return nonBlank(decoded.toString());
+        } catch (CharacterCodingException notText) {
             return Optional.empty();
         }
     }
 
     private static Optional<String> nonBlank(String value) {
-        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.strip());
     }
 
     /**
      * One resolution attempt with its timestamp.
      *
-     * <p>A miss is cached too: a provider whose credential reference is wrong would otherwise hit the
-     * filesystem on every message it sends, and the answer will not change within the TTL either way.
+     * <p>A miss is cached too: a provider whose credential reference is wrong would otherwise repeat
+     * the lookup on every message it sends, and the answer will not change within the TTL either way.
      */
     private record CachedSecret(Optional<String> value, Instant resolvedAt) {
 

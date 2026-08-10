@@ -52,7 +52,8 @@
 | ADR | Решение | Требования |
 |---|---|---|
 | [0020](ADR-0020-provider-ack-contract.md) | Ответ провайдера возвращается, отсутствие ответа бросается | PR-01, AR-04 |
-| [0021](ADR-0021-secrets-by-reference.md) | Секреты — ссылками; Модуль не ходит в Vault сам | SEC-04 |
+| [0021](ADR-0021-secrets-by-reference.md) | ~~Секреты — ссылками, значение из каталога~~ · заменено [0036](ADR-0036-secrets-from-environment.md) | SEC-04 |
+| [0036](ADR-0036-secrets-from-environment.md) | Секреты — ссылками, значение из переменной окружения; `base64:` для блобов | SEC-04, SG-04 |
 | [0022](ADR-0022-passive-provider-health.md) | Пассивное здоровье провайдера и возврат через испытательный срок | FR-6.3, PR-02 |
 | [0023](ADR-0023-no-smpp.md) | SMPP-адаптер не реализуется | PM-04 |
 | [0024](ADR-0024-email-smtp-decisions.md) | Email: пул как предел канала, свой Message-ID, возвраты через IMAP | EM-01…EM-03 |

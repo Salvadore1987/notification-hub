@@ -73,6 +73,10 @@ import uz.hamkorbank.commhub.support.ProviderStub;
             "commhub.config.cache.refresh-interval=1s",
             "commhub.provider.playmobile.enabled=true",
             "commhub.provider.playmobile.sending.originator=3700",
+            // Креды: в контуре ссылка указывает на переменную окружения (ADR-0036), в тесте — на
+            // литерал, потому что переменную окружения JVM изнутри теста не задать.
+            "commhub.provider.playmobile.credentials.username-ref=playmobile/username",
+            "commhub.provider.playmobile.credentials.password-ref=playmobile/password",
             "commhub.secrets.values.playmobile/username=hamkor",
             "commhub.secrets.values.playmobile/password=s3cr3t",
             "commhub.kafka.outbound.create-topics=true",

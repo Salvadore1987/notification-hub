@@ -1,12 +1,14 @@
 package uz.hamkorbank.commhub.context;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -18,6 +20,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestPropertySource;
+import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.bootstrap.NotificationHubApplication;
 import uz.hamkorbank.commhub.support.HubTestContainers;
 
@@ -62,10 +65,12 @@ class ApplicationContextIT {
 
     private final ApplicationContext context;
     private final JdbcClient jdbc;
+    private final SecretResolverPort secrets;
 
-    ApplicationContextIT(ApplicationContext context, JdbcClient jdbc) {
+    ApplicationContextIT(ApplicationContext context, JdbcClient jdbc, SecretResolverPort secrets) {
         this.context = context;
         this.jdbc = jdbc;
+        this.secrets = secrets;
     }
 
     @DynamicPropertySource
@@ -144,6 +149,23 @@ class ApplicationContextIT {
         assertThat(liveness).isEqualTo("livenessState");
         assertThat(readiness).contains("db");
         assertThat(liveness).doesNotContain("db");
+    }
+
+    @Test
+    @DisplayName("SEC-04: the resolver in a started context reads the real process environment")
+    void secretsComeFromTheProcessEnvironment() {
+        // Arrange: the credentials of every provider are env: references (ADR-0036), and the one link
+        // a unit test cannot cover is whether the wired bean is the real System.getenv. PATH is simply
+        // a variable that is always set; nothing about it is a secret.
+        String path = System.getenv("PATH");
+        assumeTrue(path != null && !path.isBlank(), "PATH is not set in this environment");
+
+        // Act
+        Optional<String> resolved = secrets.resolve("env:PATH");
+
+        // Assert
+        assertThat(resolved).contains(path.strip());
+        assertThat(secrets.resolve("env:COMMHUB_NO_SUCH_VARIABLE")).isEmpty();
     }
 
     private boolean hasBean(String className) {

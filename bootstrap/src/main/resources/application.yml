@@ -226,13 +226,15 @@ commhub:
         secret-ref: ${SMSGATE_CALLBACK_SECRET_REF:}
         secret: ${SMSGATE_CALLBACK_SECRET:}
 
-  # Секрет-хранилище (SEC-04, SG-04). Значений здесь нет — только то, откуда их брать.
-  # В контуре Банка Vault-agent рендерит секреты в примонтированный том, а приложение читает файлы:
+  # Секрет-хранилище (SEC-04, SG-04, ADR-0036). Значений здесь нет — только то, откуда их брать.
+  # В контуре Банка платформа кладёт секрет в окружение пода (K8s Secret, инжектор Vault, CSI):
   # так у Hub'а нет собственного токена Vault и Vault не оказывается на пути отправки сообщения.
-  # Ссылки поддерживают схемы env:/file:/prop:; без схемы — файл в directory, затем values.
+  # Схемы ссылок: env:ИМЯ (основная) и prop:ключ; после схемы допустим модификатор base64: —
+  # им приходят многострочные блобы (ключ сервис-аккаунта FCM, .p8 APNs). Ссылка без схемы —
+  # литерал из values, это только локальный стенд и тесты.
   secrets:
-    directory: ${SECRETS_DIR:}
-    # Кэш ссылки: ротация применяется без рестарта в пределах этого окна (SEC-04, AD-07 просит ≤30с).
+    # Кэш ссылки: он держит разрешение подальше от каждого сообщения. Ротацию он больше не применяет —
+    # переменную окружения живого процесса не сменить, ротация секрета это rolling restart.
     cache-ttl: ${SECRETS_CACHE_TTL:30s}
     # values здесь не объявляется по той же причине, что и rate-limit.streams выше: пустая карта
     # в YAML приходит биндеру скаляром. Литералы для локального стенда задаются точечно, например
@@ -265,8 +267,8 @@ commhub:
       enabled: ${PLAYMOBILE_ENABLED:false}
       provider-code: ${PLAYMOBILE_PROVIDER_CODE:PLAYMOBILE}
       credentials:
-        username-ref: ${PLAYMOBILE_USERNAME_REF:playmobile/username}
-        password-ref: ${PLAYMOBILE_PASSWORD_REF:playmobile/password}
+        username-ref: ${PLAYMOBILE_USERNAME_REF:env:PLAYMOBILE_USERNAME}
+        password-ref: ${PLAYMOBILE_PASSWORD_REF:env:PLAYMOBILE_PASSWORD}
       sending:
         originator: ${PLAYMOBILE_ORIGINATOR:}
         # Префикс message-id, согласован с Playmobile; вместе с номером — не более 20 символов (§9.1).
@@ -291,8 +293,8 @@ commhub:
       enabled: ${SMSGATE_ENABLED:false}
       provider-code: ${SMSGATE_PROVIDER_CODE:SMSGATE}
       credentials:
-        login-ref: ${SMSGATE_LOGIN_REF:smsgate/login}
-        key-ref: ${SMSGATE_KEY_REF:smsgate/key}
+        login-ref: ${SMSGATE_LOGIN_REF:env:SMSGATE_LOGIN}
+        key-ref: ${SMSGATE_KEY_REF:env:SMSGATE_KEY}
       sending:
         sender: ${SMSGATE_SENDER:}
         # weight 0–10, больше — раньше в очереди провайдера (§9.2).
@@ -329,7 +331,8 @@ commhub:
       provider-code: ${FCM_PROVIDER_CODE:FCM}
       # JSON-ключ сервис-аккаунта целиком, ссылкой в секрет-хранилище (SEC-04). В образ и в yaml
       # не кладётся никогда: это единственный секрет, дающий право писать клиентам Банка в push.
-      credentials-ref: ${FCM_CREDENTIALS_REF:fcm/service-account.json}
+      # base64: — потому что это многострочный JSON, а не строка (ADR-0036).
+      credentials-ref: ${FCM_CREDENTIALS_REF:env:base64:FCM_SERVICE_ACCOUNT}
       sending:
         # PU-03: HIGH будит устройство. Массовая рассылка на HIGH — это разряженные батареи и
         # последующий троттлинг со стороны Google для всего трафика, включая OTP.
@@ -368,7 +371,8 @@ commhub:
         team-id: ${APNS_TEAM_ID:}
         key-id: ${APNS_KEY_ID:}
         # .p8-ключ (PKCS#8) в секрет-хранилище (SEC-04); в отличие от сертификата, не истекает.
-        private-key-ref: ${APNS_KEY_REF:apns/key.p8}
+        # base64: — PEM многострочный (ADR-0036).
+        private-key-ref: ${APNS_KEY_REF:env:base64:APNS_PRIVATE_KEY}
         # PU-06: подпись обновляется не чаще раза в 20 минут и не реже раза в час.
         # Значение вне этого окна не роняет старт, а приводится к границе: цена отказа —
         # выключенный канал push, а правильный диапазон известен из спецификации.
