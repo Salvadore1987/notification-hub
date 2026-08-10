@@ -51,7 +51,10 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
             "commhub.outbox.relay.poll-interval-ms=3600000",
             "commhub.config.cache.refresh-interval=30s",
             "commhub.provider.health.initial-delay=1h",
-            "commhub.metrics.backlog-refresh-interval=1h"
+            "commhub.metrics.backlog-refresh-interval=1h",
+            // Фиктивный провайдер выключен явно: локальный config/application.yml включает его для
+            // стенда и читается в том числе отсюда, а проверяется здесь именно выключатель (ADR-0041).
+            "commhub.provider.mock.enabled=false"
         })
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class ApplicationContextIT {
@@ -135,6 +138,21 @@ class ApplicationContextIT {
         assertThat(unimplemented)
                 .as("a port without an adapter is a use case that cannot run in production")
                 .containsExactlyInAnyOrderElementsOf(UNIMPLEMENTED_BY_DESIGN);
+    }
+
+    @Test
+    @DisplayName("ADR-0041: the fake provider creates no beans where it is not switched on")
+    void mockProviderIsNotWiredWhenDisabled() {
+        // Arrange + Act — контекст поднят с commhub.provider.mock.enabled=false, как в образе,
+        // где ни этого свойства, ни файла config/application.yml вообще нет
+
+        // Assert — код мока лежит в jar, но без включения бинов не существует
+        assertThat(context.getBeanNamesForType(uz.hamkorbank.commhub.adapter.out.provider.mock.MockSmsProvider.class))
+                .as("a stand provider reachable in production would be a way to send nothing and report success")
+                .isEmpty();
+        assertThat(context.getBeanNamesForType(
+                        uz.hamkorbank.commhub.adapter.out.provider.mock.MockDeliveryReports.class))
+                .isEmpty();
     }
 
     @Test
