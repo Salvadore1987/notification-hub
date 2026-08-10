@@ -10,8 +10,6 @@ import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.authentication.TestingAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -20,8 +18,7 @@ import uz.hamkorbank.commhub.domain.model.type.ActorType;
 /** SEC-01: a stream sees only its own data, and who "its own" is comes from the token. */
 class StreamAccessGuardTest {
 
-    private static final SecurityProperties ENABLED =
-            new SecurityProperties(true, false, null, null, null, null, true, null);
+    private static final SecurityProperties ENABLED = new SecurityProperties(true, null, null, null, true, null);
 
     @AfterEach
     void clearContext() {
@@ -73,8 +70,8 @@ class StreamAccessGuardTest {
     }
 
     @Test
-    @DisplayName("with authentication switched off nothing is refused — the platform terminates identity")
-    void permitsEverythingWhenAuthenticationIsDisabled() {
+    @DisplayName("with source-system tokens not required no stream is refused — ingest must not stop")
+    void permitsEveryStreamWhenSourceSystemsAreOpen() {
         // Arrange
         StreamAccessGuard guard = new StreamAccessGuard(new AuthenticatedCaller(SecurityProperties.disabled()));
 
@@ -83,17 +80,31 @@ class StreamAccessGuardTest {
     }
 
     @Test
-    @DisplayName("an mTLS client is identified by its certificate subject, which is its stream")
-    void treatsTheCertificateSubjectAsTheStream() {
+    @DisplayName("a role, unlike a stream, is refused to an unauthenticated caller whatever the contour")
+    void refusesEveryRoleWithoutAuthentication() {
         // Arrange
-        authenticate(new TestingAuthenticationToken(
-                "chakana", null, List.of(new SimpleGrantedAuthority(Roles.authority(Roles.OPERATOR)))));
-        SecurityProperties mtls = new SecurityProperties(false, true, null, null, null, null, true, null);
-        StreamAccessGuard guard = new StreamAccessGuard(new AuthenticatedCaller(mtls));
+        AuthenticatedCaller open = new AuthenticatedCaller(SecurityProperties.disabled());
+        AuthenticatedCaller closed = new AuthenticatedCaller(ENABLED);
 
         // Act + Assert
-        assertThatCode(() -> guard.check("chakana")).doesNotThrowAnyException();
-        assertThatThrownBy(() -> guard.check("crm")).isInstanceOf(StreamAccessDeniedException.class);
+        assertThat(open.hasAnyRole(Roles.ADMIN, Roles.VIEWER)).isFalse();
+        assertThat(closed.hasAnyRole(Roles.ADMIN, Roles.VIEWER)).isFalse();
+    }
+
+    @Test
+    @DisplayName("SEC-08: an operator is named by preferred_username, and by the subject when there is none")
+    void namesTheOperatorByPreferredUsername() {
+        // Arrange
+        AuthenticatedCaller caller = new AuthenticatedCaller(ENABLED);
+
+        // Act + Assert
+        authenticate(jwt(
+                "8f1c-uuid",
+                Map.of(SecurityProperties.DEFAULT_ROLES_CLAIM, List.of("ADMIN"), "preferred_username", "i.petrov")));
+        assertThat(caller.actor().id()).isEqualTo("i.petrov");
+
+        authenticate(jwt("8f1c-uuid", Map.of(SecurityProperties.DEFAULT_ROLES_CLAIM, List.of("ADMIN"))));
+        assertThat(caller.actor().id()).isEqualTo("8f1c-uuid");
     }
 
     @Test

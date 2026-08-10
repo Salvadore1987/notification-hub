@@ -1,19 +1,28 @@
 package uz.hamkorbank.commhub.support;
 
 import com.github.dockerjava.api.DockerClient;
+import java.time.Duration;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.DockerClientFactory;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.utility.MountableFile;
 
 /**
- * The infrastructure a whole Notification Hub needs in order to start: PostgreSQL and a broker.
+ * The infrastructure a whole Notification Hub needs in order to start: PostgreSQL, a broker, Keycloak.
  *
  * <p>One container of each per JVM, shared by every bootstrap integration test. Starting them per test
- * class would dominate the run, and there is nothing in either that one test could leave behind for
- * another — the schema is built by the application's own Flyway migrations (DB-01), and a topic is
- * append-only anyway.
+ * class would dominate the run, and there is nothing in any of them that one test could leave behind
+ * for another — the schema is built by the application's own Flyway migrations (DB-01), a topic is
+ * append-only anyway, and the realm is read-only to the tests.
+ *
+ * <p>Keycloak is here rather than in the one test that checks 401s because the issuer is a startup
+ * requirement now (ADR-0037): every full-context test needs one. Faking it — a static JWKS, a stub
+ * discovery document — would cost the same seconds and stop {@code ApplicationContextIT} from proving
+ * the thing it exists to prove, which is that a pod boots with the wiring a pod is given.
  *
  * <p>Unlike the persistence tests, the schema is <em>not</em> migrated here: proving that the
  * application migrates its own database on startup is part of what a context test is for.
@@ -40,6 +49,33 @@ public final class HubTestContainers {
 
     private static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka:4.2.1"));
 
+    /** Realm of the demo contour; the same export {@code docker compose} imports. */
+    public static final String REALM = "commhub";
+
+    /**
+     * Keycloak with the realm of {@code docker/keycloak/}, which the build puts on the test classpath.
+     *
+     * <p>{@code KC_HOSTNAME} is deliberately unset: {@code start-dev} derives the issuer from the
+     * {@code Host} header, so the discovery document, the {@code iss} of every token and the
+     * {@code issuer-uri} handed to the application all agree on the mapped port without being told.
+     *
+     * <p>The wait strategy is the realm's own discovery endpoint rather than {@code /health/ready},
+     * because what a test depends on is the <em>import having finished</em>, not the port being open.
+     */
+    private static final GenericContainer<?> KEYCLOAK = new GenericContainer<>(
+                    DockerImageName.parse("quay.io/keycloak/keycloak:26.7.1"))
+            .withEnv("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
+            .withEnv("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin")
+            .withCopyFileToContainer(
+                    MountableFile.forClasspathResource("commhub-realm.json"),
+                    "/opt/keycloak/data/import/commhub-realm.json")
+            .withCommand("start-dev", "--import-realm")
+            .withExposedPorts(8080)
+            .waitingFor(Wait.forHttp("/realms/" + REALM + "/.well-known/openid-configuration")
+                    .forPort(8080)
+                    .forStatusCode(200)
+                    .withStartupTimeout(Duration.ofMinutes(3)));
+
     private HubTestContainers() {}
 
     public static synchronized void start() {
@@ -48,6 +84,9 @@ public final class HubTestContainers {
         }
         if (!KAFKA.isRunning()) {
             KAFKA.start();
+        }
+        if (!KEYCLOAK.isRunning()) {
+            KEYCLOAK.start();
         }
     }
 
@@ -60,6 +99,13 @@ public final class HubTestContainers {
         registry.add("commhub.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         registry.add("commhub.persistence.encryption.active-key-id", () -> ENCRYPTION_KEY_ID);
         registry.add("commhub.persistence.encryption.keys." + ENCRYPTION_KEY_ID, () -> ENCRYPTION_KEY);
+        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", HubTestContainers::issuerUri);
+    }
+
+    /** Issuer of the test realm, as both the application and the token will spell it. */
+    public static String issuerUri() {
+        start();
+        return "http://" + KEYCLOAK.getHost() + ":" + KEYCLOAK.getMappedPort(8080) + "/realms/" + REALM;
     }
 
     /** Connects straight into {@code comm_hub}, so the adapters' unqualified table names resolve. */

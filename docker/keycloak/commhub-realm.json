@@ -1,0 +1,225 @@
+{
+  "realm": "commhub",
+  "displayName": "Notification Hub",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 36000,
+  "groups": [
+    {
+      "name": "ADMIN",
+      "path": "/ADMIN"
+    },
+    {
+      "name": "OPERATOR",
+      "path": "/OPERATOR"
+    },
+    {
+      "name": "TEMPLATE_MANAGER",
+      "path": "/TEMPLATE_MANAGER"
+    },
+    {
+      "name": "ANALYST",
+      "path": "/ANALYST"
+    },
+    {
+      "name": "VIEWER",
+      "path": "/VIEWER"
+    },
+    {
+      "name": "SECURITY_AUDITOR",
+      "path": "/SECURITY_AUDITOR"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "commhub-admin",
+      "name": "Notification Hub admin panel",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173*##http://127.0.0.1:5173*##http://localhost:8080*"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "commhub-source",
+      "name": "Notification Hub source systems (/api/v1)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "commhub-source-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "commhub_streams",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "commhub_streams",
+            "claim.value": "[\"*\"]",
+            "jsonType.label": "JSON",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Administrator",
+      "email": "demo@commhub.local",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/ADMIN"
+      ]
+    },
+    {
+      "username": "operator",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Olga",
+      "lastName": "Operator",
+      "email": "operator@commhub.local",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "operator",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/OPERATOR"
+      ]
+    },
+    {
+      "username": "template-manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Timur",
+      "lastName": "Templates",
+      "email": "template.manager@commhub.local",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "template-manager",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/TEMPLATE_MANAGER"
+      ]
+    },
+    {
+      "username": "analyst",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Anna",
+      "lastName": "Analyst",
+      "email": "analyst@commhub.local",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "analyst",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/ANALYST"
+      ]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Vera",
+      "lastName": "Viewer",
+      "email": "viewer@commhub.local",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/VIEWER"
+      ]
+    },
+    {
+      "username": "auditor",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Said",
+      "lastName": "Auditor",
+      "email": "auditor@commhub.local",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "auditor",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/SECURITY_AUDITOR"
+      ]
+    }
+  ]
+}

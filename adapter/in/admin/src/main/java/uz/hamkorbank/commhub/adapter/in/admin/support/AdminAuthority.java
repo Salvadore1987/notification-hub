@@ -15,41 +15,39 @@ import uz.hamkorbank.commhub.adapter.in.rest.security.Roles;
  * is spelled out here as the roles above it, so what a role may do is visible rather than inherited from
  * an ordering nobody wrote down.
  *
- * <p>Every expression begins with {@code @adminAccess.open()}, which is true only while no OIDC issuer
- * is configured and no token can therefore be validated. See {@link AdminAccess} for why the alternative
- * — a panel that refuses everybody on a contour without an issuer — is the worse failure.
+ * <p>There is no escape hatch in these expressions and that is deliberate (ADR-0037). They used to begin
+ * with {@code @adminAccess.open()} so that a contour without an OIDC issuer warned instead of refusing
+ * everybody; since the local stack ships a Keycloak of its own there is no such contour, and a
+ * disjunction that grants everything under a condition nobody re-reads is how a panel ends up open.
  */
 public final class AdminAuthority {
 
-    private static final String OPEN = "@adminAccess.open() or ";
-
     /** Every role the panel has; used by the screens §11.2 marks "все". */
-    public static final String ANY = OPEN + "hasAnyRole('" + Roles.ADMIN + "','" + Roles.OPERATOR + "','"
+    public static final String ANY = "hasAnyRole('" + Roles.ADMIN + "','" + Roles.OPERATOR + "','"
             + Roles.ANALYST + "','" + Roles.VIEWER + "','" + Roles.SECURITY_AUDITOR + "','"
             + Roles.TEMPLATE_MANAGER + "')";
 
     /** Configuration: providers, routing, streams, kill switch, system parameters. */
-    public static final String ADMIN = OPEN + "hasRole('" + Roles.ADMIN + "')";
+    public static final String ADMIN = "hasRole('" + Roles.ADMIN + "')";
 
     /** Running traffic: batch actions, DLQ retries. §11.2 "OPERATOR+". */
-    public static final String OPERATOR = OPEN + "hasAnyRole('" + Roles.ADMIN + "','" + Roles.OPERATOR + "')";
+    public static final String OPERATOR = "hasAnyRole('" + Roles.ADMIN + "','" + Roles.OPERATOR + "')";
 
     /**
      * Reading messages and batches: the operator roles plus {@link Roles#VIEWER}, whose addresses are
      * masked on the way out rather than withheld (§11.2 "Сообщения").
      */
     public static final String OPERATOR_OR_VIEWER =
-            OPEN + "hasAnyRole('" + Roles.ADMIN + "','" + Roles.OPERATOR + "','" + Roles.VIEWER + "')";
+            "hasAnyRole('" + Roles.ADMIN + "','" + Roles.OPERATOR + "','" + Roles.VIEWER + "')";
 
     /** Reports and their exports. §11.2 "ANALYST+". */
-    public static final String ANALYST = OPEN + "hasAnyRole('" + Roles.ADMIN + "','" + Roles.ANALYST + "')";
+    public static final String ANALYST = "hasAnyRole('" + Roles.ADMIN + "','" + Roles.ANALYST + "')";
 
     /** The audit journal: the auditor and the administrator, and deliberately nobody else. */
-    public static final String AUDITOR = OPEN + "hasAnyRole('" + Roles.ADMIN + "','" + Roles.SECURITY_AUDITOR + "')";
+    public static final String AUDITOR = "hasAnyRole('" + Roles.ADMIN + "','" + Roles.SECURITY_AUDITOR + "')";
 
     /** Template authoring and review (FR-4.2). */
-    public static final String TEMPLATE_MANAGER =
-            OPEN + "hasAnyRole('" + Roles.ADMIN + "','" + Roles.TEMPLATE_MANAGER + "')";
+    public static final String TEMPLATE_MANAGER = "hasAnyRole('" + Roles.ADMIN + "','" + Roles.TEMPLATE_MANAGER + "')";
 
     /** The suppression list, which §11.2 gives to both ADMIN and OPERATOR. */
     public static final String SUPPRESSION = OPERATOR;
