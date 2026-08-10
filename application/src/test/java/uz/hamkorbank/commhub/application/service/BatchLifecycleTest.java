@@ -17,6 +17,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
 import uz.hamkorbank.commhub.application.dto.BatchControlResult;
 import uz.hamkorbank.commhub.application.dto.BatchItemsResult;
@@ -156,6 +157,25 @@ class BatchLifecycleTest {
         assertThat(resumed.status()).isEqualTo(BatchStatus.PROCESSING);
         assertThat(stopped.status()).isEqualTo(BatchStatus.STOPPED);
         verify(audit, org.mockito.Mockito.times(3)).write(any(AuditEntry.class));
+    }
+
+    @Test
+    @DisplayName("FR-7.3: the justification the operator typed reaches the journal as its own field")
+    void journalsTheJustification() {
+        // Arrange
+        Batch batch = existingBatch();
+        BatchActionCommand command =
+                new BatchActionCommand(batch.id(), Actor.operator("ivanov"), "провайдер лежит, ждём");
+
+        // Act
+        control.pause(command);
+
+        // Assert
+        ArgumentCaptor<AuditEntry> entry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).write(entry.capture());
+        assertThat(entry.getValue().reason()).isEqualTo("провайдер лежит, ждём");
+        assertThat(entry.getValue().after()).isEqualTo(BatchStatus.PAUSED.name());
+        assertThat(entry.getValue().before()).isNotEqualTo(entry.getValue().after());
     }
 
     @Test

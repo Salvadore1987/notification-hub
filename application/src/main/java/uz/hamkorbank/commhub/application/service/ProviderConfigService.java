@@ -112,10 +112,8 @@ public class ProviderConfigService implements ManageProviders {
                 ENTITY,
                 provider.code().value(),
                 before,
-                describe(provider)
-                        + command.reasonOptional()
-                                .map(reason -> ", reason=" + reason)
-                                .orElse(""));
+                describe(provider),
+                command.reasonOptional().orElse(null));
         return view(provider);
     }
 
@@ -142,7 +140,13 @@ public class ProviderConfigService implements ManageProviders {
         }
         providers.deleteProvider(provider.id());
         auditor.record(
-                command.actor(), "provider.delete", ENTITY, provider.code().value(), describe(provider), null);
+                command.actor(),
+                "provider.delete",
+                ENTITY,
+                provider.code().value(),
+                describe(provider),
+                null,
+                command.reason());
     }
 
     private Provider require(ProviderId providerId) {

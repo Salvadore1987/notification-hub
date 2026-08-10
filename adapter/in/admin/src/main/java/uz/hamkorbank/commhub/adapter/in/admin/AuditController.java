@@ -38,8 +38,8 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 @RequestMapping(AdminApi.AUDIT)
 public class AuditController {
 
-    private static final List<String> CSV_HEADER =
-            List.of("occurredAt", "username", "action", "entityType", "entityId", "before", "after", "sourceIp");
+    private static final List<String> CSV_HEADER = List.of(
+            "occurredAt", "username", "action", "entityType", "entityId", "before", "after", "reason", "sourceIp");
 
     /**
      * How far an export walks.
@@ -144,6 +144,7 @@ public class AuditController {
                 entry.entityId(),
                 entry.before(),
                 entry.after(),
+                entry.reason(),
                 entry.sourceIp());
     }
 }

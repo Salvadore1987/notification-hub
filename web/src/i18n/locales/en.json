@@ -307,6 +307,7 @@
     "entityId": "Entity ID",
     "occurredAt": "When",
     "change": "Change",
+    "reason": "Reason",
     "sourceIp": "IP",
     "truncated": "The export stopped at the 50 000-row ceiling — narrow the period"
   },

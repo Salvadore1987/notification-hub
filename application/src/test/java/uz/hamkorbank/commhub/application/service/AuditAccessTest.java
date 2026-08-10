@@ -91,9 +91,9 @@ class AuditAccessTest {
                         "provider.disabled",
                         "provider",
                         "PLAYMOBILE",
-                        "enabled=true",
-                        "enabled=false",
+                        AuditEntry.Change.of("enabled=true", "enabled=false"),
                         "10.1.2.3",
+                        "плановые работы",
                         NOW)));
         when(journal.count(any())).thenReturn(1L);
         AuditQueryService service = new AuditQueryService(journal, new AuditMapperImpl());
@@ -108,6 +108,7 @@ class AuditAccessTest {
             assertThat(view.action()).isEqualTo("provider.disabled");
             assertThat(view.before()).isEqualTo("enabled=true");
             assertThat(view.after()).isEqualTo("enabled=false");
+            assertThat(view.reason()).isEqualTo("плановые работы");
             assertThat(view.sourceIp()).isEqualTo("10.1.2.3");
         });
     }

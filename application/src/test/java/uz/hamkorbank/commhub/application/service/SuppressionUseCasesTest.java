@@ -161,7 +161,7 @@ class SuppressionUseCasesTest {
         assertThat(entries.getAllValues())
                 .extracting(AuditEntry::action)
                 .containsExactly("suppression.add", "suppression.release");
-        assertThat(entries.getAllValues().getLast().after()).contains("client opted back in");
+        assertThat(entries.getAllValues().getLast().reason()).isEqualTo("client opted back in");
         verify(suppressions).delete(entry.id());
     }
 

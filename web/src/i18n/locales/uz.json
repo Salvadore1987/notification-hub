@@ -307,6 +307,7 @@
     "entityId": "Obyekt ID",
     "occurredAt": "Qachon",
     "change": "Oʻzgarish",
+    "reason": "Asoslash",
     "sourceIp": "IP",
     "truncated": "Eksport 50 000 qator chegarasida toʻxtadi — davrni toraytiring"
   },

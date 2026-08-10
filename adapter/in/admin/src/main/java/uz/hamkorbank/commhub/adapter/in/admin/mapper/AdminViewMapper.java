@@ -334,8 +334,8 @@ public interface AdminViewMapper {
                 view.action(),
                 view.entityType(),
                 view.entityId(),
-                view.before(),
-                view.after(),
+                new AuditEntryResponse.Change(view.before(), view.after()),
+                view.reason(),
                 view.sourceIp());
     }
 

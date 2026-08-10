@@ -44,6 +44,7 @@
 | [0016](ADR-0016-handwritten-openapi.md) | OpenAPI пишется вручную и проверяется тестом | IR-03 |
 | [0017](ADR-0017-admin-bff-separate-api.md) | Панель получает собственный API `/api/admin/v1` | §11.2, SEC-02 |
 | [0018](ADR-0018-admin-masking-and-paging.md) | Маскирование на выходе, период по умолчанию, offset-пагинация | SEC-08, DB-05, UI-03 |
+| [0038](ADR-0038-panel-originated-sends.md) | Отправка из панели: только опубликованный шаблон, смета и обоснование | FR-7.3, FR-4.2, §11.2 |
 | [0019](ADR-0019-reason-header-encoding.md) | Обоснование действия — percent-encoded UTF-8 в заголовке | FR-7.3 |
 | [0033](ADR-0033-frontend-stack.md) | React 18 + Vite + Ant Design, рантайм-конфигурация, типы из контракта | UI-01…UI-04 |
 
@@ -58,6 +59,7 @@
 | [0023](ADR-0023-no-smpp.md) | SMPP-адаптер не реализуется | PM-04 |
 | [0024](ADR-0024-email-smtp-decisions.md) | Email: пул как предел канала, свой Message-ID, возвраты через IMAP | EM-01…EM-03 |
 | [0025](ADR-0025-push-fanout-and-terminal-status.md) | Push: fan-out над портом, правило агрегации, терминальный `SENT_TO_PROVIDER` | PU-09, PU-12 |
+| [0041](ADR-0041-mock-provider-for-local-stand.md) | Фиктивный провайдер адаптером, выключен по умолчанию | AR-04, QA-04 |
 
 ## Прикладные политики и эксплуатация
 
@@ -73,6 +75,8 @@
 | [0032](ADR-0032-health-groups.md) | Health-группы неравны: liveness не знает ничего внешнего | NF-05 |
 | [0034](ADR-0034-testing-strategy.md) | Тесты разделены по вопросу, на который отвечают | QA-01…QA-08 |
 | [0035](ADR-0035-campaigns-out-of-scope.md) | Кампании без списка получателей вне объёма; в ядре остаётся порт | FR-8.11 |
+| [0039](ADR-0039-message-dispatcher-and-leases.md) | Диспетчер: аренда строки, backoff в колонке, планировщик на класс трафика | AD-04, PR-01, TC-01 |
+| [0040](ADR-0040-batch-progress-counters.md) | Счётчики батча — атомарная дельта; идемпотентность разностью вкладов | FR-3.1, FR-3.3 |
 
 ## Как добавить ADR
 

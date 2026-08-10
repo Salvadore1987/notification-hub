@@ -58,15 +58,14 @@ public class StreamControlService implements SuspendStream, ResumeStream {
         String before = stream.status().name();
         transition.accept(stream);
         streams.save(stream);
-        audit.write(new AuditEntry(
-                command.actor(),
-                action,
-                ENTITY_TYPE,
-                stream.id().value(),
-                before,
-                stream.status().name(),
-                null,
-                now));
+        audit.write(AuditEntry.changed(
+                        command.actor(),
+                        action,
+                        ENTITY_TYPE,
+                        stream.id().value(),
+                        AuditEntry.Change.of(before, stream.status().name()),
+                        now)
+                .withReason(command.reason()));
         return new StreamControlResult(stream.id(), stream.status());
     }
 }

@@ -2028,8 +2028,16 @@ components:
         action: { type: string }
         entityType: { type: string }
         entityId: { type: string }
-        before: { type: string }
-        after: { type: string }
+        change:
+          type: object
+          description: Состояние до и после изменения; оба пусты у создания, удаления и чтения
+          properties:
+            before: { type: string, nullable: true }
+            after: { type: string, nullable: true }
+        reason:
+          type: string
+          nullable: true
+          description: Обоснование, введённое оператором (X-Commhub-Reason, FR-7.3)
         sourceIp: { type: string }
 
     KillSwitch:

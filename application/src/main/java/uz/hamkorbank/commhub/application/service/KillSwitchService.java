@@ -49,15 +49,14 @@ public class KillSwitchService implements KillSwitch {
                         command.includeCriticalOtp(), now, actorId(command.actor()), command.reason())
                 : KillSwitchState.deactivated(now, actorId(command.actor()));
         killSwitch.update(after);
-        audit.write(new AuditEntry(
-                command.actor(),
-                command.activate() ? "kill-switch.activate" : "kill-switch.deactivate",
-                ENTITY_TYPE,
-                ENTITY_ID,
-                describe(before),
-                describe(after),
-                null,
-                now));
+        audit.write(AuditEntry.changed(
+                        command.actor(),
+                        command.activate() ? "kill-switch.activate" : "kill-switch.deactivate",
+                        ENTITY_TYPE,
+                        ENTITY_ID,
+                        AuditEntry.Change.of(describe(before), describe(after)),
+                        now)
+                .withReason(command.reason()));
         return KillSwitchResult.of(after);
     }
 

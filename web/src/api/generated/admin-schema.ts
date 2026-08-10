@@ -219,7 +219,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -465,7 +465,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path?: never;
@@ -629,7 +629,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -674,7 +674,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -805,7 +805,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -971,7 +971,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -1013,7 +1013,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -1523,7 +1523,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -1567,7 +1567,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -2005,7 +2005,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -3027,8 +3027,13 @@ export interface components {
             action?: string;
             entityType?: string;
             entityId?: string;
-            before?: string;
-            after?: string;
+            /** @description Состояние до и после изменения; оба пусты у создания, удаления и чтения */
+            change?: {
+                before?: string | null;
+                after?: string | null;
+            };
+            /** @description Обоснование, введённое оператором (X-Commhub-Reason, FR-7.3) */
+            reason?: string | null;
             sourceIp?: string;
         };
         KillSwitch: {
@@ -3096,7 +3101,7 @@ export interface components {
         PolicyIdPath: string;
         TemplateCodePath: string;
         ParameterKeyPath: string;
-        /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+        /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
         ReasonHeader: string;
     };
     requestBodies: never;
