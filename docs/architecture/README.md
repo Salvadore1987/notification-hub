@@ -31,6 +31,7 @@
 | [`../sms-notification-hub-spec.md`](../sms-notification-hub-spec.md) | SRS v1.0 — источник всех идентификаторов требований |
 | [`../IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) | Рабочий чек-лист фаз 1–18 (доска задач) |
 | [`../RUNBOOK.md`](../RUNBOOK.md) | Эксплуатационный runbook (OBS-06) |
+| [`../ADMIN-GUIDE.md`](../ADMIN-GUIDE.md) | Руководство оператора админ-панели: глава на раздел §11.2 |
 | [`../DEPLOYMENT.md`](../DEPLOYMENT.md) | Развёртывание и настройки контура |
 | [`../guidelines/`](../guidelines/) | Стиль кода Java и правила гексагональной структуры |
 | [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md) | Окружение, локальный стек, ветки и PR |
