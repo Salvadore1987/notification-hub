@@ -8,8 +8,6 @@ import { SECTION_ROLES, type Role, type Section } from './roles';
  * только компоненты (fast refresh).
  */
 export interface Session {
-  /** SSO не настроен; все роли даны, backend в этом состоянии предупреждает при старте. */
-  readonly open: boolean;
   readonly userName?: string;
   readonly roles: readonly Role[];
   readonly canSee: (section: Section) => boolean;
@@ -28,12 +26,10 @@ export function useSession(): Session {
 
 export function makeSession(
   roles: readonly Role[],
-  open: boolean,
   userName: string | undefined,
   signOut: () => void,
 ): Session {
   return {
-    open,
     userName,
     roles,
     canSee: (section) => SECTION_ROLES[section].some((role) => roles.includes(role)),

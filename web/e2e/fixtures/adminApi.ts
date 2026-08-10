@@ -270,8 +270,26 @@ function safeJson(text: string): unknown {
 /**
  * Тест с уже поднятой заглушкой BFF: экраны в E2E всегда говорят с ней, а не с сетью.
  * `auto` — потому что перехват должен стоять раньше любого `beforeEach` с переходом на экран.
+ *
+ * `page` подменяется здесь же, и это не удобство, а необходимость: панель за SSO (ADR-0037), так
+ * что любой переход — это уход на Keycloak и возврат через /auth/callback. `page.goto` возвращает
+ * управление, когда загрузился первый документ, то есть до редиректа; тест, который сразу смотрит
+ * на страницу (axe, например, а не локатор с автоожиданием), увидел бы Spin или форму логина.
+ * Ожидание живёт в фикстуре, а не в каждом spec'е, потому что забыть его — значит получить
+ * плавающий тест, а не ошибку.
  */
 export const test = base.extend<{ admin: AdminStub }>({
+  // Параметр назван runTest, а не use: правило react-hooks принимает вызов use() внутри функции
+  // с именем page за хук в не-компоненте. Фикстура Playwright к React отношения не имеет.
+  page: async ({ page }, runTest) => {
+    const navigate = page.goto.bind(page);
+    page.goto = async (url, options) => {
+      const response = await navigate(url, options);
+      await waitForPanel(page, url);
+      return response;
+    };
+    await runTest(page);
+  },
   admin: [
     async ({ page }, use) => {
       await use(await installAdminApi(page));
@@ -279,5 +297,18 @@ export const test = base.extend<{ admin: AdminStub }>({
     { auto: true },
   ],
 });
+
+/**
+ * Редирект на issuer прошёл, код обменян, панель отрисовалась — и вернулась она **на запрошенный
+ * экран**, а не на дашборд. Последнее проверяется здесь, а значит проверяется каждым сценарием:
+ * возврат по returnTo — не отдельный тест, а предусловие всех остальных.
+ */
+async function waitForPanel(page: Page, requested: string): Promise<void> {
+  const wanted = new URL(requested, 'http://localhost:5173').pathname;
+  await page.waitForURL((url) => url.port === '5173' && url.pathname === wanted, {
+    timeout: 30_000,
+  });
+  await page.locator('.ant-layout-sider').first().waitFor({ state: 'visible', timeout: 30_000 });
+}
 
 export { expect } from '@playwright/test';

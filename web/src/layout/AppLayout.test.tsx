@@ -34,21 +34,11 @@ describe('AppLayout menu', () => {
     expect(menu().queryByText('Сообщения')).not.toBeInTheDocument();
   });
 
-  it('warns in the header when the contour runs without SSO and hides the sign-out', () => {
-    renderWithProviders(<AppLayout />, { open: true });
-
-    expect(screen.getByText('SSO не настроен — панель работает без аутентификации')).toBeVisible();
-    expect(screen.queryByText('tester')).not.toBeInTheDocument();
-  });
-
-  it('names the signed-in operator when SSO is configured', () => {
+  it('names the signed-in operator — there is no session without one (ADR-0037)', () => {
     const signOut = vi.fn();
-    renderWithProviders(<AppLayout />, { roles: ['ADMIN'], signOut });
+    renderWithProviders(<AppLayout />, { roles: ['ADMIN'], userName: 'demo', signOut });
 
-    expect(screen.getByText('tester')).toBeInTheDocument();
-    expect(
-      screen.queryByText('SSO не настроен — панель работает без аутентификации'),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText('demo')).toBeInTheDocument();
   });
 });
 

@@ -56,6 +56,11 @@ dependencies {
     testRuntimeOnly(libs.postgresql)
 }
 
+// Экспорт realm'а Keycloak — один файл и на docker compose, и на Testcontainers: если панель
+// закрыта на любом контуре (ADR-0037), то realm, против которого проверяются 401/403/200, обязан
+// быть тем же самым, что поднимает разработчик. Копия разошлась бы молча.
+sourceSets["test"].resources.srcDir(rootProject.file("docker/keycloak"))
+
 tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     archiveFileName.set("notification-hub.jar")
 }

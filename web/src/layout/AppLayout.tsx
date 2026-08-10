@@ -1,5 +1,5 @@
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
-import { Alert, Dropdown, Layout, Menu, Select, Space, Typography } from 'antd';
+import { Dropdown, Layout, Menu, Select, Space, Typography } from 'antd';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -60,36 +60,26 @@ export function AppLayout() {
               onChange={setLanguage}
               options={LANGUAGES.map((lng) => ({ value: lng, label: LANGUAGE_LABELS[lng] }))}
             />
-            {!session.open && (
-              <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'signout',
-                      icon: <LogoutOutlined />,
-                      label: t('auth.signOut'),
-                      onClick: () => session.signOut(),
-                    },
-                  ],
-                }}
-              >
-                <Space style={{ cursor: 'pointer' }}>
-                  <UserOutlined />
-                  {session.userName}
-                </Space>
-              </Dropdown>
-            )}
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'signout',
+                    icon: <LogoutOutlined />,
+                    label: t('auth.signOut'),
+                    onClick: () => session.signOut(),
+                  },
+                ],
+              }}
+            >
+              <Space style={{ cursor: 'pointer' }}>
+                <UserOutlined />
+                {session.userName}
+              </Space>
+            </Dropdown>
           </Space>
         </Layout.Header>
         <Layout.Content style={{ margin: 24 }}>
-          {session.open && (
-            <Alert
-              type="warning"
-              showIcon
-              message={t('auth.openMode')}
-              style={{ marginBottom: 16 }}
-            />
-          )}
           <Outlet />
         </Layout.Content>
       </Layout>

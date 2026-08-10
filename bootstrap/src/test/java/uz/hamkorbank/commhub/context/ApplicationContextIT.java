@@ -138,6 +138,23 @@ class ApplicationContextIT {
     }
 
     @Test
+    @DisplayName("SEC-02/§10.1: the token decoder is wired and no local account exists")
+    void authenticationIsWiredAndNoLocalUserIsGenerated() {
+        // Arrange + Act — the decoder is what makes the admin chain enforceable (ADR-0037), and its
+        // presence is also what stops Boot generating a default user with a password in the log.
+        // A UserDetailsService reappearing here means the Hub has started storing accounts, which
+        // §10.1 forbids: identity comes from the corporate SSO.
+
+        // Assert
+        assertThat(context.getBeanNamesForType(org.springframework.security.oauth2.jwt.JwtDecoder.class))
+                .as("the admin chain cannot validate anything without a decoder")
+                .isNotEmpty();
+        assertThat(context.getBeanNamesForType(org.springframework.security.core.userdetails.UserDetailsService.class))
+                .as("§10.1: the Hub stores no users and no passwords")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("NF-05: liveness knows nothing external, readiness knows the database")
     void healthGroupsAreWiredAsDeployed() {
         // Arrange

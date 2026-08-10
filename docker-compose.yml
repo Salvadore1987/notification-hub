@@ -30,6 +30,38 @@ services:
       timeout: 5s
       retries: 20
 
+  # OIDC-издатель локального контура (SEC-02, ADR-0037). Админ-панель закрыта на любом контуре,
+  # поэтому издатель нужен и локально: демо-администратор — demo/demo, консоль Keycloak на
+  # http://localhost:8180 под admin/admin.
+  #
+  # KC_HOSTNAME намеренно не задан: start-dev выводит issuer из заголовка Host, поэтому и браузер,
+  # и bootRun на хосте, и Testcontainers с проброшенным портом видят согласованный iss.
+  # Тома нет намеренно: dev-БД одноразовая, realm импортируется на каждом up — для демо-realm
+  # это и есть желаемое поведение (правка docker/keycloak/commhub-realm.json применяется рестартом).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.1
+    container_name: commhub-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8180:8080"
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # Образ ubi-micro: в нём нет ни curl, ни wget. Health живёт на management-порту 9000.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000
+          && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+          && grep -q '"status": "UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
   kafka:
     image: apache/kafka:4.2.1
     container_name: commhub-kafka

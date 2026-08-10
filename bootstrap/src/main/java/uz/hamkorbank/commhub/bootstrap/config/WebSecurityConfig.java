@@ -2,11 +2,11 @@ package uz.hamkorbank.commhub.bootstrap.config;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -16,9 +16,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -36,17 +33,17 @@ import uz.hamkorbank.commhub.adapter.in.rest.security.SecurityProperties;
  * authenticate themselves against a shared secret and an address allowlist inside the controller
  * (SEC-07) — an OAuth2 token from Playmobile is not a thing that exists. The management endpoints are
  * scraped by the platform. The admin BFF takes an OIDC token carrying SSO groups and checks a role at
- * every endpoint (SEC-02, SEC-03). Source systems present a client-credentials token or a client
- * certificate. Everything else is refused rather than left to a default nobody reviewed.
+ * every endpoint (SEC-02, SEC-03). Source systems present a client-credentials token. Everything else is
+ * refused rather than left to a default nobody reviewed.
  *
  * <p>All chains are stateless and have CSRF disabled: there is no browser session here — the admin SPA
  * authenticates with a bearer token of its own, which is not a credential a browser attaches
  * automatically and therefore not something a cross-site request can borrow.
  *
- * <p><strong>Authentication is not on by default.</strong> The local stack has no issuer and no CA, and
- * a default that requires a token would mean every developer switching it off — the state in which it
- * would then be deployed. Instead an instance without either mechanism logs a warning naming what is
- * missing, and the Bank's deployment turns on what its standard prescribes (NF-06).
+ * <p><strong>The admin panel is behind OIDC on every contour</strong> (ADR-0037), so an issuer is
+ * mandatory and its absence stops the instance rather than opening the panel. What a contour still
+ * decides is whether <em>source systems</em> must present a token on {@code /api/v1}: the Bank's
+ * networks say yes (NF-06), the local stack says no, and an instance that says no says so in the log.
  */
 @Configuration
 @EnableWebSecurity
@@ -63,10 +60,25 @@ public class WebSecurityConfig {
      */
     private static final String ADMIN_BASE_PATH = AdminApi.BASE;
 
-    public WebSecurityConfig(SecurityProperties properties) {
-        if (!properties.isAuthenticationRequired()) {
-            LOG.warn("Source-system authentication is disabled: neither commhub.security.oauth2-enabled nor "
-                    + "commhub.security.mtls-enabled is set. SEC-01 expects one of them in the Bank's contour.");
+    /**
+     * @param issuerUri OIDC issuer, injected as a parameter rather than read from a field because
+     *     {@code LayerConventionsTest} forbids field injection — and because a value this constructor
+     *     refuses to start without has no business being set after the object exists
+     */
+    public WebSecurityConfig(
+            SecurityProperties properties,
+            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}") String issuerUri) {
+        if (issuerUri == null || issuerUri.isBlank()) {
+            throw new IllegalStateException("spring.security.oauth2.resourceserver.jwt.issuer-uri is required: "
+                    + "the admin panel is behind OIDC on every contour (SEC-02, ADR-0037), and an instance "
+                    + "with no issuer cannot validate a token. Set "
+                    + "SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI; locally that is "
+                    + "http://localhost:8180/realms/commhub after `docker compose up -d keycloak`.");
+        }
+        if (!properties.requireSourceSystemToken()) {
+            LOG.warn("Source-system authentication is disabled: commhub.security.require-source-system-token "
+                    + "is off, so /api/v1 accepts unauthenticated calls. SEC-01 expects a token in the Bank's "
+                    + "contour; the admin panel is unaffected and stays behind OIDC.");
         }
     }
 
@@ -111,39 +123,33 @@ public class WebSecurityConfig {
      * <p>Its own chain rather than a share of the source-system one, because the two callers have
      * nothing in common. A source system presents client credentials and is entitled to its streams; a
      * person presents an OIDC token carrying SSO groups, which map onto the roles of §10.1 and are what
-     * the {@code @PreAuthorize} of each endpoint checks. mTLS is deliberately not offered here: a
-     * certificate identifies a machine, and the panel needs to know which employee is looking.
+     * the {@code @PreAuthorize} of each endpoint checks.
      *
      * <p>Authenticated at the chain and authorised at the method, and both are needed. The chain answers
      * 401 to a caller with no token at all; the method answers 403 to one whose roles do not cover the
      * endpoint. Collapsing them would make "who are you" and "may you" the same answer, which is the
      * difference between a login prompt and a permissions request.
      *
-     * <p>With no issuer configured this chain permits everything and the roles cannot be evaluated —
-     * {@code AdminAccess} logs a warning saying so at startup, the same stance SEC-01 takes for source
-     * systems.
+     * <p>Unconditional, and that is the whole of ADR-0037: there is no configuration under which this
+     * chain lets an anonymous caller reach the kill switch, the routing configuration or a customer's
+     * message. A contour that has not been given an issuer does not open the panel — it fails to start.
      */
     @Bean
     @Order(3)
     public SecurityFilterChain adminSecurityFilterChain(HttpSecurity http, SecurityProperties properties)
             throws Exception {
-        stateless(http.securityMatcher(ADMIN_BASE_PATH + "/**")).authorizeHttpRequests(requests -> {
-            if (properties.oauth2Enabled()) {
-                requests.anyRequest().authenticated();
-            } else {
-                requests.anyRequest().permitAll();
-            }
-        });
+        stateless(http.securityMatcher(ADMIN_BASE_PATH + "/**"))
+                .authorizeHttpRequests(requests -> requests.anyRequest().authenticated());
         return applyAuthentication(http, properties).build();
     }
 
-    /** The API of the source systems: token or certificate, and the stream check of SEC-01 on top. */
+    /** The API of the source systems: a client-credentials token, and the stream check of SEC-01 on top. */
     @Bean
     @Order(4)
     public SecurityFilterChain sourceSystemSecurityFilterChain(HttpSecurity http, SecurityProperties properties)
             throws Exception {
         stateless(http.securityMatcher(ApiV1.BASE + "/**")).authorizeHttpRequests(requests -> {
-            if (properties.isAuthenticationRequired()) {
+            if (properties.requireSourceSystemToken()) {
                 requests.anyRequest().authenticated();
             } else {
                 requests.anyRequest().permitAll();
@@ -158,7 +164,7 @@ public class WebSecurityConfig {
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http, SecurityProperties properties)
             throws Exception {
         stateless(http).authorizeHttpRequests(requests -> {
-            if (properties.isAuthenticationRequired()) {
+            if (properties.requireSourceSystemToken()) {
                 requests.anyRequest().authenticated();
             } else {
                 requests.anyRequest().permitAll();
@@ -173,23 +179,17 @@ public class WebSecurityConfig {
     }
 
     /**
-     * Adds the mechanisms this deployment enabled; both may be on at once.
+     * Attaches the bearer-token mechanism, which every chain but the callbacks one uses.
      *
-     * <p>OAuth2 needs a {@code JwtDecoder}, which Boot builds from
-     * {@code spring.security.oauth2.resourceserver.jwt.issuer-uri}. Enabling OAuth2 without an issuer
-     * fails at startup on purpose: an instance that believes it is authenticating and is not is worse
-     * than one that refuses to start.
+     * <p>Unconditional: the {@code JwtDecoder} Boot builds from
+     * {@code spring.security.oauth2.resourceserver.jwt.issuer-uri} is always there, because the
+     * constructor refuses to start without an issuer. Note that Boot's decoder is a lazy
+     * {@code SupplierJwtDecoder} — discovery happens on the first token, not at startup — so an
+     * unreachable issuer costs 401s and not a boot failure. That is a RUNBOOK symptom, not a bug.
      */
     private HttpSecurity applyAuthentication(HttpSecurity http, SecurityProperties properties) throws Exception {
-        if (properties.oauth2Enabled()) {
-            http.oauth2ResourceServer(oauth2 ->
-                    oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter(properties))));
-        }
-        if (properties.mtlsEnabled()) {
-            http.x509(x509 -> x509.subjectPrincipalRegex("CN=([^,]*)")
-                    .userDetailsService(certificateUserDetailsService(properties)));
-        }
-        return http;
+        return http.oauth2ResourceServer(
+                oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter(properties))));
     }
 
     /**
@@ -199,6 +199,16 @@ public class WebSecurityConfig {
      * call ({@code SCOPE_messages.write}), SSO groups describe what a person is ({@code ROLE_OPERATOR}).
      * The group claim is mapped onto the roles {@code app_role} seeds in §10.1, so the backend decides
      * and the SPA of UI-02 only hides what the backend would refuse anyway.
+     *
+     * <p>The group value is used as written, upper-cased: a group has to be named after the role it
+     * grants ({@code ADMIN}, not {@code /commhub-admin}), which is what the local realm export in
+     * {@code docker/keycloak/} does and what the Bank's SSO mapping has to do too.
+     *
+     * <p>The principal claim is left at Spring's default {@code sub}. Naming an employee for the audit
+     * journal is {@code AuthenticatedCaller}'s job instead, because {@code setPrincipalClaimName} has no
+     * fallback — its principal answers the empty string for a token that lacks the claim, and a
+     * client-credentials token from an IdP that does not mint {@code preferred_username} would then have
+     * no name at all.
      */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter(SecurityProperties properties) {
@@ -220,30 +230,5 @@ public class WebSecurityConfig {
                     .forEach(authorities::add);
         }
         return authorities;
-    }
-
-    /**
-     * mTLS clients (SEC-01), and the reason no local account exists.
-     *
-     * <p>The certificate subject is the identity, and by convention its CN <em>is</em> the stream id —
-     * which is what lets {@link StreamAccessGuard} answer without a second registry to keep in step.
-     * Subjects outside the configured allowlist are refused here rather than at the stream check, so an
-     * unknown certificate never reaches an endpoint at all.
-     *
-     * <p>Declared as a bean even when mTLS is off, because its presence is what stops Spring Boot from
-     * generating a default user and printing its password into the log of every start (§10.1: users come
-     * from SSO, the Hub stores no passwords).
-     */
-    @Bean
-    public UserDetailsService certificateUserDetailsService(SecurityProperties properties) {
-        return subject -> {
-            if (!properties.mtlsEnabled() || !properties.permitsSubject(subject)) {
-                throw new UsernameNotFoundException("client certificate subject is not allowed");
-            }
-            return User.withUsername(subject)
-                    .password("")
-                    .authorities(List.of(new SimpleGrantedAuthority(Roles.authority(Roles.OPERATOR))))
-                    .build();
-        };
     }
 }

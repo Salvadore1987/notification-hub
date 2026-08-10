@@ -6,10 +6,13 @@
  * mapper of {@code mapper}; what goes wrong becomes a {@code problem+json} of {@code problem}, rendered
  * by one of the advices in {@code handlers}.
  *
- * <p>Authentication (mTLS / OAuth2 client credentials, §8.2) is not wired here yet — it arrives with
- * the security phase, and until then the callers of this API are inside the Bank's contour. What the
- * adapter does own already is the caller-facing protection of IR-02: a per-stream rate limit that
- * answers 429 with {@code Retry-After}.
+ * <p>Authentication (an OAuth2 client-credentials token, §8.2) is applied by the chain in
+ * {@code bootstrap} and switched on per contour by {@code commhub.security.require-source-system-token}
+ * — unlike the admin panel, which is closed unconditionally (ADR-0037), because the callers of this API
+ * are inside the Bank's contour and a local stack has to be able to submit a message without minting a
+ * token first. Where the entitlement matters the adapter checks it itself: {@code StreamAccessGuard}
+ * answers SEC-01. What the adapter owns regardless is the caller-facing protection of IR-02: a
+ * per-stream rate limit that answers 429 with {@code Retry-After}.
  *
  * <p>The published contract is {@code resources/openapi/comm-hub-api-v1.yaml} (IR-03); a test walks
  * the controller mappings and fails if the document has drifted from them.

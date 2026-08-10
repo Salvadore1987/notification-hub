@@ -1241,8 +1241,15 @@ components:
       type: openIdConnect
       openIdConnectUrl: https://sso.hamkorbank.uz/realms/commhub/.well-known/openid-configuration
       description: |
-        Токен корпоративного SSO (SEC-02). Группы из claim'а `groups` отображаются на роли
-        `app_role` из §10.1 и проверяются на бэкенде (SEC-03, FR-7.2).
+        Токен корпоративного SSO (SEC-02). Требуется всегда: конфигурации, при которой этот API
+        отвечает анонимному вызову, не существует, а инстанс без настроенного издателя не стартует
+        (ADR-0037). Вызов без токена — 401, с токеном без нужной роли — 403.
+
+        Роли берутся из claim'а `groups` (имя claim'а — `commhub.security.roles-claim`) и
+        проверяются на бэкенде (SEC-03, FR-7.2). Группа приходит **коротким именем, без пути**, и
+        совпадает с именем роли §10.1: `ADMIN`, `OPERATOR`, `TEMPLATE_MANAGER`, `ANALYST`,
+        `VIEWER`, `SECURITY_AUDITOR`. Claim присутствует и в access-, и в id-токене: первый читает
+        бэкенд, второй — панель.
 
   parameters:
     From:

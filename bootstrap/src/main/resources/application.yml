@@ -40,11 +40,11 @@ spring:
         await-termination: true
         await-termination-period: 20s
 
-  # SEC-01/SEC-02: издатель OIDC Банка задаётся переменной окружения и намеренно НЕ объявлен здесь —
-  # spring.security.oauth2.resourceserver.jwt.issuer-uri включает автоконфигурацию самим фактом
-  # присутствия, и пустое значение в yaml подняло бы резолвер токенов без издателя:
+  # SEC-02: издатель OIDC ОБЯЗАТЕЛЕН и задаётся окружением — здесь его нет намеренно, чтобы значения
+  # по умолчанию не существовало: админ-панель за OIDC на любом контуре (ADR-0037), и инстанс без
+  # издателя не стартует, а не открывает панель.
   #   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://sso.hamkorbank.uz/realms/commhub
-  # вместе с commhub.security.oauth2-enabled=true.
+  # Локальный запуск берёт его из config/application.yml (Keycloak из docker compose, demo/demo).
 
 commhub:
   # Kafka (§8.1). Namespace свой, а не spring.kafka: в Spring Boot 4 автоконфигурация Kafka вынесена
@@ -112,20 +112,20 @@ commhub:
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
       max-passes-per-tick: ${OUTBOX_RELAY_MAX_PASSES:10}
 
-  # SEC-01/SEC-03: аутентификация систем-источников и RBAC. Оба механизма выключены по умолчанию —
-  # локально нет ни издателя, ни CA, — и инстанс без единого включённого пишет предупреждение на
-  # старте. В контуре Банка включается то, что предписывает стандарт; можно и оба сразу.
+  # SEC-01/SEC-03. Здесь НЕТ переключателя аутентификации админ-панели: она за OIDC всегда
+  # (ADR-0037), издатель обязателен, инстанс без него не стартует. Ниже — только то, что вправе
+  # решать контур: обязан ли токен системам-источникам и как называются claim'ы.
   security:
-    oauth2-enabled: ${COMMHUB_OAUTH2_ENABLED:false}
-    mtls-enabled: ${COMMHUB_MTLS_ENABLED:false}
+    # SEC-01: требовать ли токен на /api/v1. Панели это не касается — она закрыта в любом случае.
+    # Локально выключено: разработчику, отправляющему тестовое сообщение, иначе нужен
+    # client-credentials токен, чтобы увидеть уход одной SMS.
+    require-source-system-token: ${COMMHUB_REQUIRE_SOURCE_SYSTEM_TOKEN:false}
     # Claim со списком потоков, за которые клиент вправе слать и которые вправе читать (SEC-01).
-    # Для mTLS роль этого claim играет CN сертификата: по соглашению CN — это streamId.
     stream-claim: ${COMMHUB_STREAM_CLAIM:commhub_streams}
-    # Claim с группами SSO; маппится на роли app_role из §10.1 (FR-7.2).
+    # Claim с группами SSO; маппится на роли app_role из §10.1 (FR-7.2). Имя группы = имя роли:
+    # значение claim'а идёт как есть, в верхнем регистре (см. docker/keycloak/commhub-realm.json).
     roles-claim: ${COMMHUB_ROLES_CLAIM:groups}
     scope-claim: ${COMMHUB_SCOPE_CLAIM:scope}
-    # Пустой список — принимается любой сертификат, прошедший проверку цепочки на уровне TLS.
-    mtls-allowed-subjects: ${COMMHUB_MTLS_SUBJECTS:}
     # true — штатное развёртывание, где management-порт доступен только из namespace мониторинга.
     anonymous-metrics: ${COMMHUB_ANONYMOUS_METRICS:true}
     management-base-path: ${management.endpoints.web.base-path:/actuator}

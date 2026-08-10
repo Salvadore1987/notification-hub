@@ -113,6 +113,19 @@ public class StatisticsController {
                 String.format(java.util.Locale.ROOT, "%.4f", row.deliveryRate()));
     }
 
-    /** The narrowing filters, grouped so the handler stays inside the eight parameters this project allows. */
-    public record Filters(String channel, String streamId, String provider, String batchId, boolean includeTest) {}
+    /**
+     * The narrowing filters, grouped so the handler stays inside the eight parameters this project allows.
+     *
+     * <p>{@code includeTest} is boxed and defaulted for the same reason the request bodies of this API
+     * box their optional flags: an absent query parameter is {@code null}, and Spring's binder refuses
+     * to convert {@code null} to a primitive — the whole screen would answer 500 to the request every
+     * operator makes first, which is the one with no parameters at all (FR-7.4: a test send is a
+     * dimension, and its default is "not shown").
+     */
+    public record Filters(String channel, String streamId, String provider, String batchId, Boolean includeTest) {
+
+        public Filters {
+            includeTest = includeTest != null && includeTest;
+        }
+    }
 }

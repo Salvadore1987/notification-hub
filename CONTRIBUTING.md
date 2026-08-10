@@ -27,7 +27,7 @@
 ## Локальное окружение
 
 ```bash
-docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, WireMock, GreenMail
+docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak, WireMock, GreenMail
 docker compose down -v    # останов с удалением данных
 ```
 
@@ -36,11 +36,17 @@ docker compose down -v    # останов с удалением данных
 | PostgreSQL | `localhost:5432/commhub` | `commhub` / `commhub` |
 | Kafka | `localhost:9092` | без auth (локально) |
 | Schema Registry | `http://localhost:8081` | — |
+| Keycloak (realm `commhub`) | `http://localhost:8180` | консоль `admin` / `admin`; панель `demo` / `demo` |
 | WireMock (стабы провайдеров) | `http://localhost:8089` | — |
 | GreenMail SMTP / IMAP / UI | `3025` / `3143` / `http://localhost:8085` | без auth |
 
 Приложение читает настройки из `bootstrap/src/main/resources/application.yml`; значения по умолчанию
 совпадают с `docker-compose.yml` и переопределяются переменными окружения (`DB_URL`, `KAFKA_BOOTSTRAP_SERVERS`, …).
+
+Keycloak нужен и приложению, и тестам: админ-панель за OIDC на любом контуре (ADR-0037), инстанс без
+`issuer-uri` не стартует, а `./gradlew integrationTest` поднимает свой контейнер с тем же
+`docker/keycloak/commhub-realm.json` — первый прогон скачивает образ (~460 МБ). `npm run test:e2e`
+логинится в compose-Keycloak по-настоящему, поэтому требует поднятого сервиса.
 
 ### Схема исходящих статусов в Schema Registry (NF-08)
 

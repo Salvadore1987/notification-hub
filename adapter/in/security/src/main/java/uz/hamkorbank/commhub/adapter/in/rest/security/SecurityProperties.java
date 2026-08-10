@@ -1,19 +1,24 @@
 package uz.hamkorbank.commhub.adapter.in.rest.security;
 
-import java.util.Locale;
-import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * How callers prove who they are and what that entitles them to (SEC-01, SEC-02, SEC-03).
  *
- * <p>Two mechanisms, independently switchable, because the Bank's standard allows either and some
- * contours use both: OAuth2 client credentials (a JWT the resource server validates against the issuer
- * of {@code spring.security.oauth2.resourceserver.jwt.issuer-uri}) and mutual TLS (a client certificate
- * terminated by the platform or by the JVM). Neither is on by default — the local stack has no issuer
- * and no CA — and an instance started with both off logs a warning at startup instead of pretending it
- * is protected.
+ * <p>There is one mechanism and it is always configured: an OIDC token validated against
+ * {@code spring.security.oauth2.resourceserver.jwt.issuer-uri}, which is mandatory on every contour
+ * because the admin panel is behind SSO on every contour (ADR-0037). Nothing here can switch that off —
+ * the only question this record answers is whether <em>source systems</em> on {@code /api/v1} must also
+ * present one, which is a property of the contour: in the Bank's networks they do, and on the local
+ * stack a developer submitting a test message would otherwise need a client-credentials token to see a
+ * single SMS leave.
  *
+ * <p>mTLS is deliberately gone. It was never offered to the panel — a certificate identifies a machine,
+ * and the panel needs to know which employee is looking — and for source systems it was a mechanism
+ * without a CA, whose empty subject allowlist meant "any trusted certificate names its own stream".
+ *
+ * @param requireSourceSystemToken whether {@code /api/v1} refuses an unauthenticated call; the admin BFF
+ *     is unaffected and always requires a token
  * @param streamClaim claim carrying the stream ids a source system may submit for; SEC-01 asks that a
  *     stream sees only its own data, and this is where "its own" is written down
  * @param rolesClaim claim carrying the SSO groups of an admin user; mapped onto the roles of §10.1
@@ -26,12 +31,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("commhub.security")
 public record SecurityProperties(
-        boolean oauth2Enabled,
-        boolean mtlsEnabled,
+        boolean requireSourceSystemToken,
         String streamClaim,
         String rolesClaim,
         String scopeClaim,
-        Set<String> mtlsAllowedSubjects,
         boolean anonymousMetrics,
         String managementBasePath) {
 
@@ -51,26 +54,11 @@ public record SecurityProperties(
         rolesClaim = blankTo(rolesClaim, DEFAULT_ROLES_CLAIM);
         scopeClaim = blankTo(scopeClaim, DEFAULT_SCOPE_CLAIM);
         managementBasePath = blankTo(managementBasePath, DEFAULT_MANAGEMENT_BASE_PATH);
-        mtlsAllowedSubjects = mtlsAllowedSubjects == null ? Set.of() : Set.copyOf(mtlsAllowedSubjects);
     }
 
+    /** Defaults with source systems left open, which is what the local stack and the tests run with. */
     public static SecurityProperties disabled() {
-        return new SecurityProperties(false, false, null, null, null, null, true, null);
-    }
-
-    /** Whether any authentication at all is required of source systems. */
-    public boolean isAuthenticationRequired() {
-        return oauth2Enabled || mtlsEnabled;
-    }
-
-    /** Whether a client certificate with this subject may talk to the API; empty allowlist means any. */
-    public boolean permitsSubject(String subject) {
-        if (mtlsAllowedSubjects.isEmpty()) {
-            return true;
-        }
-        String wanted = subject == null ? "" : subject.trim().toLowerCase(Locale.ROOT);
-        return mtlsAllowedSubjects.stream()
-                .anyMatch(allowed -> allowed.trim().toLowerCase(Locale.ROOT).equals(wanted));
+        return new SecurityProperties(false, null, null, null, true, null);
     }
 
     private static String blankTo(String value, String fallback) {

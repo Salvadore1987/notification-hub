@@ -68,7 +68,8 @@
 | [0028](ADR-0028-quotas-and-limits-fallback.md) | Квоты в трёх измерениях; ограничитель не останавливает отправку | FR-2.6, IR-02 |
 | [0029](ADR-0029-kill-switch-polarity.md) | Kill switch: нечитаемая конфигурация означает «стоп» | FR-3.2 |
 | [0030](ADR-0030-metrics-port-no-logger.md) | В прикладном слое нет логгера: всё через `MetricsPort` | OBS-01, OBS-03 |
-| [0031](ADR-0031-security-off-by-default.md) | Защита выключена по умолчанию и предупреждает при старте | SEC-01, SEC-02 |
+| [0031](ADR-0031-security-off-by-default.md) | ~~Защита выключена по умолчанию и предупреждает при старте~~ · частично заменено [0037](ADR-0037-admin-panel-always-behind-oidc.md) | SEC-01, SEC-02 |
+| [0037](ADR-0037-admin-panel-always-behind-oidc.md) | Админ-панель за OIDC на любом контуре; Keycloak в локальной поставке, mTLS удалён | SEC-02, SEC-03, §10.1 |
 | [0032](ADR-0032-health-groups.md) | Health-группы неравны: liveness не знает ничего внешнего | NF-05 |
 | [0034](ADR-0034-testing-strategy.md) | Тесты разделены по вопросу, на который отвечают | QA-01…QA-08 |
 | [0035](ADR-0035-campaigns-out-of-scope.md) | Кампании без списка получателей вне объёма; в ядре остаётся порт | FR-8.11 |
