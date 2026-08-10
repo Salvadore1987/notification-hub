@@ -60,6 +60,15 @@ public class MessagePersistenceAdapter implements MessageRepository {
             "'ACCEPTED', 'VALIDATED', 'ROUTED', 'QUEUED', 'SENDING', 'SENT_TO_PROVIDER', 'RETRYING'";
 
     /**
+     * Push is finished at {@code SENT_TO_PROVIDER} — no platform ever reports a delivery (PU-12).
+     *
+     * <p>The aggregate knows this ({@code Message.isTerminalForChannel}), and that is where the rule is
+     * enforced; here it only keeps the TTL sweep from reading every delivered push on every pass, and
+     * lets a push batch reach {@code COMPLETED} at all.
+     */
+    private static final String NOT_DELIVERED_PUSH = "NOT (status = 'SENT_TO_PROVIDER' AND selected_channel = 'PUSH')";
+
+    /**
      * One pass of the dispatcher of a traffic class: take a page and stamp the lease on it (ADR-0039).
      *
      * <p>{@code FOR UPDATE SKIP LOCKED} inside the CTE is what makes instances share the queue instead of
@@ -292,6 +301,7 @@ public class MessagePersistenceAdapter implements MessageRepository {
         List<PartialMessage> rows = jdbcClient
                 .sql(SELECT_MESSAGE
                         + " WHERE status IN (" + NON_TERMINAL_STATUSES + ")"
+                        + "   AND " + NOT_DELIVERED_PUSH
                         + "   AND ((timing ->> 'sendBefore')::timestamptz <= :now"
                         + "        OR accepted_at + make_interval(secs => (timing ->> 'ttlSeconds')::bigint) <= :now)"
                         + " ORDER BY accepted_at"
@@ -338,8 +348,9 @@ public class MessagePersistenceAdapter implements MessageRepository {
     @Transactional(readOnly = true)
     public long countTerminalByBatch(BatchId batchId) {
         return jdbcClient
-                .sql("SELECT count(*) FROM message WHERE batch_id = :batchId" + " AND status NOT IN ("
-                        + NON_TERMINAL_STATUSES + ")")
+                .sql("SELECT count(*) FROM message WHERE batch_id = :batchId"
+                        + " AND (status NOT IN (" + NON_TERMINAL_STATUSES + ")"
+                        + "      OR NOT " + NOT_DELIVERED_PUSH + ")")
                 .param("batchId", batchId.value())
                 .query(Long.class)
                 .single();

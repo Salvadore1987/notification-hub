@@ -181,7 +181,9 @@ public final class Message extends AggregateRoot<MessageId> {
         this.status = next;
         this.statusReason = reason;
         this.statusHistory.add(change);
-        if (next.isTerminal()) {
+        // Терминальность по каналу, а не по статусу: push заканчивается на SENT_TO_PROVIDER (PU-12),
+        // и без отметки времени он не попал бы ни в витрину FR-6.4, ни в «завершено» на карточке.
+        if (isTerminalForChannel()) {
             this.terminalAt = occurredAt;
         } else {
             this.terminalAt = null;
@@ -343,7 +345,23 @@ public final class Message extends AggregateRoot<MessageId> {
 
     /** Whether the TTL or the send window has elapsed while the message is still in flight (FR-3.4). */
     public boolean isExpiredAt(Instant now) {
-        return status.isInFlight() && timing.isExpiredAt(now, acceptedAt);
+        return !isTerminalForChannel() && status.isInFlight() && timing.isExpiredAt(now, acceptedAt);
+    }
+
+    /**
+     * Whether the message is finished <em>for the channel it went out on</em> (PU-12, ST-03).
+     *
+     * <p>Push is the exception the status enum cannot express: neither APNs nor FCM ever reports a
+     * delivery, so {@code SENT_TO_PROVIDER} is where a push message ends. Without this distinction the
+     * TTL sweep picks up every successfully sent push and stamps it {@code EXPIRED}, and that lie
+     * travels to the source system as a status event.
+     *
+     * <p>{@code MessageStatus.isTerminal()} is deliberately left alone: being finished here is a
+     * statement about this message and its channel, not about the status in general — the very same
+     * status on an SMS means the provider has yet to report.
+     */
+    public boolean isTerminalForChannel() {
+        return status.isTerminal() || (status == MessageStatus.SENT_TO_PROVIDER && selectedChannel == Channel.PUSH);
     }
 
     /** Whether the message can be delivered over the channel: plan, content and address all agree. */
