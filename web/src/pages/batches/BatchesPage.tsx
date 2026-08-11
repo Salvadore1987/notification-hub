@@ -181,6 +181,7 @@ export function BatchesPage() {
             render: (_, row) => <Tag color={batchStatusColor(row.status)}>{row.status}</Tag>,
           },
           { title: t('batches.total'), dataIndex: 'total' },
+          { title: t('batches.sent'), render: (_, row) => row.progress?.sent ?? 0 },
           {
             title: t('batches.progress'),
             width: 200,
