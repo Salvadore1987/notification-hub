@@ -951,7 +951,8 @@ export interface paths {
         put?: never;
         /**
          * Зарегистрировать профиль провайдера
-         * @description ADMIN (FR-2.1). `credentialsRef` — ссылка в секрет-хранилище, не сам секрет (SEC-04).
+         * @description ADMIN (FR-2.1). Кредов провайдера здесь нет и быть не может: они приходят переменными
+         *     окружения контура (SEC-04, ADR-0044).
          */
         post: {
             parameters: {
@@ -3072,7 +3073,6 @@ export interface components {
              */
             clearQuietHours: boolean;
             rateLimit?: components["schemas"]["RateLimit"];
-            credentialsRef?: string;
         };
         ChannelConfig: {
             channel?: components["schemas"]["Channel"];
@@ -3119,8 +3119,6 @@ export interface components {
                 health?: components["schemas"]["ProviderHealthStatus"];
                 readonly selectable?: boolean;
                 quota?: components["schemas"]["Quota"];
-                /** @description Ссылка в секрет-хранилище; сам секрет наружу не выходит (SEC-04) */
-                credentialsRef?: string;
                 endpointConfig?: {
                     [key: string]: string;
                 };
@@ -3138,7 +3136,6 @@ export interface components {
             tariff?: components["schemas"]["Tariff"];
             rateLimit?: components["schemas"]["RateLimit"];
             quota?: components["schemas"]["Quota"];
-            credentialsRef?: string;
             endpointConfig?: {
                 [key: string]: string;
             };

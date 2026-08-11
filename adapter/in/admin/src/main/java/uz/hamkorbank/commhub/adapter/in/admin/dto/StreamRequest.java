@@ -18,8 +18,7 @@ public record StreamRequest(
         QuotaDto quota,
         QuietHoursDto quietHours,
         Boolean clearQuietHours,
-        RateLimitDto rateLimit,
-        String credentialsRef) {
+        RateLimitDto rateLimit) {
 
     public StreamRequest {
         clearQuietHours = clearQuietHours != null && clearQuietHours;

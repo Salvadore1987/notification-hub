@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +31,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.PushSubmission;
 import uz.hamkorbank.commhub.application.port.out.provider.SubmissionContext;
@@ -246,7 +244,6 @@ class FcmPushAdapterIT {
                         new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
                         throttle,
                         ProviderRuntimeSettings.configurationOnly(),
-                        serviceAccountSecrets(),
                         FixedClock.standard(),
                         new ProviderRestClients()));
     }
@@ -255,7 +252,7 @@ class FcmPushAdapterIT {
         return new FcmProperties(
                 true,
                 "FCM",
-                "fcm/service-account.json",
+                new FcmProperties.Credentials(serviceAccount()),
                 new FcmProperties.Sending(null, Duration.ofMinutes(10), iosDelivery, true),
                 new FcmProperties.OAuth(google.baseUrl() + TOKEN_PATH, null),
                 rateLimit,
@@ -264,7 +261,7 @@ class FcmPushAdapterIT {
     }
 
     /** A service account key of the shape Google hands out, with a throwaway RSA key. */
-    private SecretResolverPort serviceAccountSecrets() {
+    private String serviceAccount() {
         String privateKey;
         try {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
@@ -282,18 +279,7 @@ class FcmPushAdapterIT {
                  "client_email":"push@hamkor-mobile.iam.gserviceaccount.com",
                  "token_uri":"%s","private_key":"%s"}
                 """.formatted(google.baseUrl() + TOKEN_PATH, privateKey);
-        return new SecretResolverPort() {
-
-            @Override
-            public Optional<String> resolve(String secretRef) {
-                return "fcm/service-account.json".equals(secretRef) ? Optional.of(document) : Optional.empty();
-            }
-
-            @Override
-            public String require(String secretRef) {
-                return resolve(secretRef).orElseThrow(() -> new IllegalStateException("no secret for " + secretRef));
-            }
-        };
+        return document;
     }
 
     private static PushSubmission submission(PushPlatform platform, TrafficClass trafficClass, boolean test) {

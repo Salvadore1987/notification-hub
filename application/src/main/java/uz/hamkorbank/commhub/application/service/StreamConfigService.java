@@ -81,9 +81,6 @@ public class StreamConfigService implements ManageStreams {
         if (command.quietHours() != null || command.clearQuietHours()) {
             stream.updateQuietHours(command.quietHours());
         }
-        if (command.credentialsRef() != null) {
-            stream.updateCredentialsRef(command.credentialsRef());
-        }
         streams.save(stream);
         auditor.record(command.actor(), "stream.update", ENTITY, stream.id().value(), before, describe(stream));
         return mapper.toView(stream, clock.now());

@@ -134,7 +134,7 @@
 | SG-01 | SMS Gate реализует тот же `SmsProviderPort`; отсутствующие у провайдера возможности компенсируются Модулем | ✅ | `:adapter:out:provider:smsgate`; шаблон подставляется до отправки |
 | SG-02 | Маппинг состояний элементов батча на канонические статусы и причины | ✅ | `SmsGateResponseCatalog`, `SmsGateStatusCatalog` (§18.2) |
 | SG-03 | Реконсиляция статусов без DLR через `/api/v2/search` | ✅ | `SmsGateReconciler`; код 6 (Unknown) сознательно применяется как ничто и оставляется реконсиляции |
-| SG-04 | Секрет `key` — в секрет-хранилище, в логах маскируется | ✅ | `:adapter:out:secret` (ссылка `env:SMSGATE_KEY`, [ADR-0036](adr/ADR-0036-secrets-from-environment.md)) + `Masking` |
+| SG-04 | Секрет `key` — в секрет-хранилище, в логах маскируется | ✅ | Значение переменной `SMSGATE_KEY` ([ADR-0044](adr/ADR-0044-secrets-as-plain-values.md)) + `Masking`, в том числе в `toString` записи с кредами |
 | EM-01 | SMTP: TLS, пул соединений, лимит скорости, HTML+plain, вложения, заголовок `X-Comm-Message-Id` | ✅ | `:adapter:out:provider:smtp`; размер пула и есть лимит параллелизма канала; потолки вложений проверяются на валидации, а не в адаптере |
 | EM-02 | Обработка bounce; hard bounce → suppression | ✅ | `EmailBouncePoller` (IMAP) кормит `ProcessProviderStatus`; адрес подавляется только на явном «нет такого ящика» (`5.1.x`, `5.2.1`) |
 | EM-03 | Поддержка DKIM при необходимости | ✅ | `DkimSigner` (RFC 6376, relaxed/relaxed, rsa-sha256), выключен по умолчанию |

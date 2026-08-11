@@ -508,7 +508,9 @@ paths:
     post:
       tags: [providers]
       summary: Зарегистрировать профиль провайдера
-      description: ADMIN (FR-2.1). `credentialsRef` — ссылка в секрет-хранилище, не сам секрет (SEC-04).
+      description: |
+        ADMIN (FR-2.1). Кредов провайдера здесь нет и быть не может: они приходят переменными
+        окружения контура (SEC-04, ADR-0044).
       parameters:
         - $ref: '#/components/parameters/ProviderProfileCodePath'
       requestBody:
@@ -1880,7 +1882,6 @@ components:
             Снять окно тишины. Отдельный флаг, потому что «окна нет» и «окно не трогать» —
             оба осмысленны, и пропуск поля не может значить и то и другое.
         rateLimit: { $ref: '#/components/schemas/RateLimit' }
-        credentialsRef: { type: string }
 
     ChannelConfig:
       type: object
@@ -1941,9 +1942,6 @@ components:
             health: { $ref: '#/components/schemas/ProviderHealthStatus' }
             selectable: { type: boolean, readOnly: true }
             quota: { $ref: '#/components/schemas/Quota' }
-            credentialsRef:
-              type: string
-              description: Ссылка в секрет-хранилище; сам секрет наружу не выходит (SEC-04)
             endpointConfig:
               type: object
               additionalProperties: { type: string }
@@ -1963,7 +1961,6 @@ components:
         tariff: { $ref: '#/components/schemas/Tariff' }
         rateLimit: { $ref: '#/components/schemas/RateLimit' }
         quota: { $ref: '#/components/schemas/Quota' }
-        credentialsRef: { type: string }
         endpointConfig:
           type: object
           additionalProperties: { type: string }

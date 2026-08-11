@@ -103,8 +103,7 @@ public interface AdminCommandMapper {
                 toQuota(request.quota()),
                 toQuietHours(request.quietHours()),
                 request.clearQuietHours(),
-                toRateLimit(request.rateLimit()),
-                request.credentialsRef());
+                toRateLimit(request.rateLimit()));
     }
 
     // ---------------------------------------------------------------- channels and providers
@@ -129,7 +128,6 @@ public interface AdminCommandMapper {
                         request.weight() == null ? Provider.DEFAULT_WEIGHT : request.weight(),
                         toTariff(request),
                         toRateLimit(request.rateLimit()),
-                        request.credentialsRef(),
                         true),
                 toQuota(request.quota()),
                 request.endpointConfig() == null ? Map.of() : request.endpointConfig());
@@ -143,7 +141,6 @@ public interface AdminCommandMapper {
                 toTariff(request),
                 toRateLimit(request.rateLimit()),
                 toQuota(request.quota()),
-                request.credentialsRef(),
                 request.endpointConfig());
     }
 

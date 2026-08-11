@@ -11,7 +11,6 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Properties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +21,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.application.dto.ProcessProviderStatusResult;
 import uz.hamkorbank.commhub.application.port.in.ProcessProviderStatus;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
@@ -52,12 +50,7 @@ class EmailBounceIT {
         applied.clear();
         mailbox = GREEN_MAIL.setUser(MAILBOX, "bounces", "secret");
         poller = new EmailBouncePoller(
-                properties(),
-                SmtpProperties.defaults(),
-                new BounceCodec(),
-                recordingUseCase(),
-                secrets(),
-                FixedClock.standard());
+                properties(), SmtpProperties.defaults(), new BounceCodec(), recordingUseCase(), FixedClock.standard());
     }
 
     @Test
@@ -148,32 +141,13 @@ class EmailBounceIT {
         };
     }
 
-    private static SecretResolverPort secrets() {
-        return new SecretResolverPort() {
-
-            @Override
-            public Optional<String> resolve(String secretRef) {
-                return switch (secretRef) {
-                    case "bounce/username" -> Optional.of("bounces");
-                    case "bounce/password" -> Optional.of("secret");
-                    default -> Optional.empty();
-                };
-            }
-
-            @Override
-            public String require(String secretRef) {
-                return resolve(secretRef).orElseThrow(() -> new IllegalStateException("no secret " + secretRef));
-            }
-        };
-    }
-
     private static SmtpBounceProperties properties() {
         return new SmtpBounceProperties(
                 true,
                 "127.0.0.1",
                 GREEN_MAIL.getImap().getPort(),
                 false,
-                new SmtpBounceProperties.Credentials("bounce/username", "bounce/password"),
+                new SmtpBounceProperties.Credentials("bounces", "secret"),
                 "INBOX",
                 200,
                 new SmtpBounceProperties.Settings(null, null, null, false));

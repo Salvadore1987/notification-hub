@@ -1,7 +1,6 @@
 package uz.hamkorbank.commhub.support;
 
 import java.util.List;
-import java.util.Locale;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
 import uz.hamkorbank.commhub.application.port.out.StreamRepository;
 import uz.hamkorbank.commhub.domain.model.ChannelConfig;
@@ -72,11 +71,6 @@ public final class HubConfiguration {
                 code,
                 Channel.SMS,
                 AdapterType.of(adapterType),
-                new Provider.Settings(
-                        10,
-                        Tariff.perSegment(Money.of("120.5000", "UZS")),
-                        RateLimit.unlimited(),
-                        "providers/" + code.value().toLowerCase(Locale.ROOT),
-                        true));
+                new Provider.Settings(10, Tariff.perSegment(Money.of("120.5000", "UZS")), RateLimit.unlimited(), true));
     }
 }

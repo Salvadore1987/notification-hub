@@ -26,7 +26,6 @@ dependencies {
     api(project(":adapter:out:metrics"))
     api(project(":adapter:out:persistence"))
     api(project(":adapter:out:policy"))
-    api(project(":adapter:out:secret"))
     api(project(":adapter:out:time"))
 
     api(project(":adapter:out:provider:apns"))

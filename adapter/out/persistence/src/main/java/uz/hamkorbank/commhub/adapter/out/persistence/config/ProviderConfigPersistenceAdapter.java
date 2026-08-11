@@ -51,16 +51,15 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
 
     private static final String SELECT_PROVIDER = """
             SELECT id, code, channel, adapter_type, weight, tariff, rate_limit_config, quota_config,
-                   credentials_ref, enabled, maintenance, health_status, health_checked_at
+                   enabled, maintenance, health_status, health_checked_at
             FROM provider
             """;
 
     private static final String UPSERT_PROVIDER = """
             INSERT INTO provider (id, code, channel, adapter_type, weight, tariff, rate_limit_config,
-                                  quota_config, credentials_ref, enabled, maintenance, health_status,
-                                  health_checked_at)
+                                  quota_config, enabled, maintenance, health_status, health_checked_at)
             VALUES (:id, :code, :channel, :adapterType, :weight, CAST(:tariff AS jsonb),
-                    CAST(:rateLimit AS jsonb), CAST(:quota AS jsonb), :credentialsRef, :enabled,
+                    CAST(:rateLimit AS jsonb), CAST(:quota AS jsonb), :enabled,
                     :maintenance, :health, :healthCheckedAt)
             ON CONFLICT (id) DO UPDATE SET
                 code = EXCLUDED.code,
@@ -70,7 +69,6 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
                 tariff = EXCLUDED.tariff,
                 rate_limit_config = EXCLUDED.rate_limit_config,
                 quota_config = EXCLUDED.quota_config,
-                credentials_ref = EXCLUDED.credentials_ref,
                 enabled = EXCLUDED.enabled,
                 maintenance = EXCLUDED.maintenance,
                 health_status = EXCLUDED.health_status,
@@ -295,7 +293,6 @@ public class ProviderConfigPersistenceAdapter implements ProviderConfigRepositor
                 .param("tariff", jsonCodec.write(TariffJson.of(provider.tariff().orElse(null))))
                 .param("rateLimit", jsonCodec.write(RateLimitJson.of(provider.rateLimit())))
                 .param("quota", jsonCodec.write(QuotaConfigJson.of(provider.quota())))
-                .param("credentialsRef", provider.credentialsRef().orElse(null))
                 .param("enabled", provider.isEnabled())
                 .param("maintenance", provider.isInMaintenance())
                 .param("health", provider.health().name())

@@ -78,9 +78,6 @@ public class ProviderConfigService implements ManageProviders {
         if (command.quota() != null) {
             provider.updateQuota(command.quota());
         }
-        if (command.credentialsRef() != null) {
-            provider.updateCredentialsRef(command.credentialsRef());
-        }
         providers.save(provider);
         if (command.endpointConfig() != null) {
             providers.saveEndpointConfig(provider.id(), command.endpointConfig());
@@ -157,14 +154,9 @@ public class ProviderConfigService implements ManageProviders {
         return mapper.toView(provider, providers.endpointConfig(provider.id()));
     }
 
-    /** Compact rendering for the audit trail; never includes a secret, only its reference (SEC-04). */
+    /** Compact rendering for the audit trail; the profile carries no credential to leak (SEC-04). */
     private static String describe(Provider provider) {
-        return "weight=%d, enabled=%s, maintenance=%s, health=%s, credentialsRef=%s"
-                .formatted(
-                        provider.weight(),
-                        provider.isEnabled(),
-                        provider.isInMaintenance(),
-                        provider.health(),
-                        provider.credentialsRef().orElse("-"));
+        return "weight=%d, enabled=%s, maintenance=%s, health=%s"
+                .formatted(provider.weight(), provider.isEnabled(), provider.isInMaintenance(), provider.health());
     }
 }

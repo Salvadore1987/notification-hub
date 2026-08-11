@@ -214,7 +214,6 @@ public interface AdminViewMapper {
                         view.state().health().name(),
                         view.state().selectable(),
                         toQuota(view.state().quota()),
-                        view.state().credentialsRef(),
                         view.state().endpointConfig()));
     }
 

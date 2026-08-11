@@ -53,7 +53,6 @@ public class StreamRowMapper implements RowMapper<Stream> {
                 RateLimitJson.toDomain(jsonCodec.read(rs.getString("rate_limit_config"), RateLimitJson.class)));
         stream.updateQuietHours(
                 QuietHoursJson.toDomain(jsonCodec.read(rs.getString("quiet_hours"), QuietHoursJson.class)));
-        stream.updateCredentialsRef(rs.getString("credentials_ref"));
         if (SqlValues.instant(rs, "last_activity_at") != null) {
             stream.touch(SqlValues.instant(rs, "last_activity_at"));
         }

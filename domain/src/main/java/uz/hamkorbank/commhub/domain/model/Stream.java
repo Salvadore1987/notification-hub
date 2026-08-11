@@ -39,7 +39,6 @@ public final class Stream extends AggregateRoot<StreamId> {
     private RateLimit rateLimit;
     private QuietHours quietHours;
     private StreamStatus status;
-    private String credentialsRef;
     private Instant lastActivityAt;
 
     private Stream(StreamId id, String name, IntegrationType integrationType, Defaults defaults) {
@@ -90,11 +89,6 @@ public final class Stream extends AggregateRoot<StreamId> {
 
     public void updateQuietHours(QuietHours newQuietHours) {
         this.quietHours = newQuietHours;
-    }
-
-    /** Reference to the credentials of this stream in the secret store (SEC-01, SEC-04). */
-    public void updateCredentialsRef(String newCredentialsRef) {
-        this.credentialsRef = newCredentialsRef;
     }
 
     /** Records activity of the source system; drives the connection status (FR-1.3). */
@@ -182,10 +176,6 @@ public final class Stream extends AggregateRoot<StreamId> {
 
     public StreamStatus status() {
         return status;
-    }
-
-    public Optional<String> credentialsRef() {
-        return Optional.ofNullable(credentialsRef);
     }
 
     public Optional<Instant> lastActivityAt() {

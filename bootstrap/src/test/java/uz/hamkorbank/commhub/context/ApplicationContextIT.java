@@ -1,14 +1,12 @@
 package uz.hamkorbank.commhub.context;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -22,7 +20,6 @@ import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestPropertySource;
 import uz.hamkorbank.commhub.application.dto.DeployedAdapterView;
 import uz.hamkorbank.commhub.application.port.in.GetDeployedAdapters;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.bootstrap.NotificationHubApplication;
 import uz.hamkorbank.commhub.support.HubTestContainers;
 
@@ -71,12 +68,10 @@ class ApplicationContextIT {
 
     private final ApplicationContext context;
     private final JdbcClient jdbc;
-    private final SecretResolverPort secrets;
 
-    ApplicationContextIT(ApplicationContext context, JdbcClient jdbc, SecretResolverPort secrets) {
+    ApplicationContextIT(ApplicationContext context, JdbcClient jdbc) {
         this.context = context;
         this.jdbc = jdbc;
-        this.secrets = secrets;
     }
 
     @DynamicPropertySource
@@ -209,20 +204,16 @@ class ApplicationContextIT {
     }
 
     @Test
-    @DisplayName("SEC-04: the resolver in a started context reads the real process environment")
-    void secretsComeFromTheProcessEnvironment() {
-        // Arrange: the credentials of every provider are env: references (ADR-0036), and the one link
-        // a unit test cannot cover is whether the wired bean is the real System.getenv. PATH is simply
-        // a variable that is always set; nothing about it is a secret.
-        String path = System.getenv("PATH");
-        assumeTrue(path != null && !path.isBlank(), "PATH is not set in this environment");
-
-        // Act
-        Optional<String> resolved = secrets.resolve("env:PATH");
+    @DisplayName("SEC-04: the endpoints that would print a credential are not exposed")
+    void credentialsHaveNoHttpPath() {
+        // Arrange: since ADR-0044 a credential is an ordinary property, so the two actuator endpoints
+        // that render @ConfigurationProperties are what would leak one. Neither is published, and that
+        // is a decision rather than a default — Boot exposes health and info on its own.
+        String exposed = context.getEnvironment().getProperty("management.endpoints.web.exposure.include");
 
         // Assert
-        assertThat(resolved).contains(path.strip());
-        assertThat(secrets.resolve("env:COMMHUB_NO_SUCH_VARIABLE")).isEmpty();
+        assertThat(exposed).isNotNull();
+        assertThat(exposed).doesNotContain("env").doesNotContain("configprops");
     }
 
     private boolean hasBean(String className) {

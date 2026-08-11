@@ -163,7 +163,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
                 new Stream.Defaults(Channel.SMS, provider.ref(), TrafficClass.TRANSACTIONAL, Priority.HIGH, null));
         stream.updateQuota(QuotaConfig.ofCounts(1_000L, 20_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
         stream.updateQuietHours(QuietHours.rejecting(LocalTime.of(22, 0), LocalTime.of(7, 0)));
-        stream.updateCredentialsRef("vault://streams/mobile-app");
         stream.touch(Instant.parse("2026-08-08T10:15:30Z"));
         stream.suspend();
 
@@ -179,7 +178,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
         assertThat(restored.defaults().priority()).isEqualTo(Priority.HIGH);
         assertThat(restored.quota().dailyCountLimit()).contains(1_000L);
         assertThat(restored.quietHours()).isPresent();
-        assertThat(restored.credentialsRef()).contains("vault://streams/mobile-app");
         assertThat(restored.lastActivityAt()).contains(Instant.parse("2026-08-08T10:15:30Z"));
     }
 
@@ -331,7 +329,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
                         30,
                         Tariff.perSegment(Money.of(new BigDecimal("120.5000"), UZS)),
                         new RateLimit(50, 1_000, 5),
-                        "vault://providers/playmobile",
                         true));
     }
 

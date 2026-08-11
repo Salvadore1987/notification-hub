@@ -73,7 +73,7 @@ class PlaymobileSmsAdapterIT {
         PlaymobileProperties properties = new PlaymobileProperties(
                 true,
                 "PLAYMOBILE",
-                new Credentials("playmobile/username", "playmobile/password"),
+                new Credentials("hamkor", "s3cr3t"),
                 new Sending("3700", "HB", null, null),
                 RateLimit.unlimited(),
                 new ProviderHttpProperties(
@@ -89,7 +89,6 @@ class PlaymobileSmsAdapterIT {
                         new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
                         new ProviderThrottle(),
                         ProviderRuntimeSettings.configurationOnly(),
-                        ProviderStubs.secrets("playmobile/username", "hamkor", "playmobile/password", "s3cr3t"),
                         FixedClock.standard(),
                         new ProviderRestClients()));
     }

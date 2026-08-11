@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
@@ -66,11 +67,21 @@ public record SmsGateProperties(
         return new SmsGateProperties(null, null, null, null, null, null, null, null);
     }
 
-    /** References of {@code login} and {@code key}, which travel in every request (§9.2, SG-04). */
-    public record Credentials(String loginRef, String keyRef) {
+    /**
+     * {@code login} and {@code key}, which travel in every request (§9.2, SG-04).
+     *
+     * <p>Values filled from the environment of the pod (ADR-0044), so {@code toString} is masked: a
+     * record prints its components, and this one is part of a properties tree something may log whole.
+     */
+    public record Credentials(String login, String key) {
 
         public boolean isConfigured() {
-            return loginRef != null && !loginRef.isBlank() && keyRef != null && !keyRef.isBlank();
+            return login != null && !login.isBlank() && key != null && !key.isBlank();
+        }
+
+        @Override
+        public String toString() {
+            return "Credentials[login=%s, key=%s]".formatted(Masking.secret(login), Masking.secret(key));
         }
     }
 

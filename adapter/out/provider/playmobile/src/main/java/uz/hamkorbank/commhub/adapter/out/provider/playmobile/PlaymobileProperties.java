@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
@@ -18,9 +19,9 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
  * between deploys — the alpha-name, the {@code message-id} prefix, the default TTL and the priority
  * mapping — are overlaid from {@code provider.endpoint_config} through
  * {@link uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings}, so changing them
- * needs no restart (AD-07, NF-07). Credentials never make that move: they stay references resolved
- * through {@code SecretResolverPort} (SEC-04), and neither do base URL, timeouts or breaker windows,
- * which decide how the HTTP client itself is built.
+ * needs no restart (AD-07, NF-07). Credentials never make that move: they arrive as values filled from
+ * the process environment and are never stored by the Hub (SEC-04, ADR-0044), and neither do base URL,
+ * timeouts or breaker windows, which decide how the HTTP client itself is built.
  *
  * @param enabled whether the adapter is deployed at all; off leaves the bean uncreated and the router
  *     without a Playmobile adapter, which the sending saga reports as "no adapter" rather than failing
@@ -61,15 +62,21 @@ public record PlaymobileProperties(
     }
 
     /**
-     * References of the Basic auth credentials (§9.1, SEC-04).
+     * Basic auth credentials of §9.1, filled from the environment of the pod (SEC-04, ADR-0044).
      *
-     * <p>References, not values: nothing in this record is a secret, so it may be logged, stored and
-     * shown in the admin panel like any other setting.
+     * <p>Values, so {@code toString} is overridden: a record prints its components, and this one is a
+     * component of the properties tree that a startup banner or a diagnostic log would print whole.
      */
-    public record Credentials(String usernameRef, String passwordRef) {
+    public record Credentials(String username, String password) {
 
         public boolean isConfigured() {
-            return usernameRef != null && !usernameRef.isBlank() && passwordRef != null && !passwordRef.isBlank();
+            return username != null && !username.isBlank() && password != null && !password.isBlank();
+        }
+
+        @Override
+        public String toString() {
+            return "Credentials[username=%s, password=%s]"
+                    .formatted(Masking.secret(username), Masking.secret(password));
         }
     }
 

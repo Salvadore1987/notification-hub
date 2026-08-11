@@ -54,7 +54,7 @@
 |---|---|---|
 | [0020](ADR-0020-provider-ack-contract.md) | Ответ провайдера возвращается, отсутствие ответа бросается | PR-01, AR-04 |
 | [0021](ADR-0021-secrets-by-reference.md) | ~~Секреты — ссылками, значение из каталога~~ · заменено [0036](ADR-0036-secrets-from-environment.md) | SEC-04 |
-| [0036](ADR-0036-secrets-from-environment.md) | Секреты — ссылками, значение из переменной окружения; `base64:` для блобов | SEC-04, SG-04 |
+| [0036](ADR-0036-secrets-from-environment.md) | ~~Секреты — ссылками, значение из переменной окружения~~ · заменено [0044](ADR-0044-secrets-as-plain-values.md) | SEC-04, SG-04 |
 | [0022](ADR-0022-passive-provider-health.md) | Пассивное здоровье провайдера и возврат через испытательный срок | FR-6.3, PR-02 |
 | [0023](ADR-0023-no-smpp.md) | SMPP-адаптер не реализуется | PM-04 |
 | [0024](ADR-0024-email-smtp-decisions.md) | Email: пул как предел канала, свой Message-ID, возвраты через IMAP | EM-01…EM-03 |
@@ -74,6 +74,7 @@
 | [0031](ADR-0031-security-off-by-default.md) | ~~Защита выключена по умолчанию и предупреждает при старте~~ · частично заменено [0037](ADR-0037-admin-panel-always-behind-oidc.md) | SEC-01, SEC-02 |
 | [0037](ADR-0037-admin-panel-always-behind-oidc.md) | Админ-панель за OIDC на любом контуре; Keycloak в локальной поставке, mTLS удалён | SEC-02, SEC-03, §10.1 |
 | [0043](ADR-0043-panel-login-form.md) | Форма входа в самой панели: direct access grant вместо редиректа на издателя | SEC-02, UI-02, §11.2 |
+| [0044](ADR-0044-secrets-as-plain-values.md) | Секрет — значение свойства из переменной окружения; резолвер и `credentialsRef` удалены | SEC-04, SG-04 |
 | [0032](ADR-0032-health-groups.md) | Health-группы неравны: liveness не знает ничего внешнего | NF-05 |
 | [0034](ADR-0034-testing-strategy.md) | Тесты разделены по вопросу, на который отвечают | QA-01…QA-08 |
 | [0035](ADR-0035-campaigns-out-of-scope.md) | Кампании без списка получателей вне объёма; в ядре остаётся порт | FR-8.11 |

@@ -58,7 +58,6 @@ import uz.hamkorbank.commhub.application.port.in.command.AddBatchItemsCommand;
 import uz.hamkorbank.commhub.application.port.in.command.BatchActionCommand;
 import uz.hamkorbank.commhub.application.port.in.command.CreateBatchCommand;
 import uz.hamkorbank.commhub.application.port.in.command.SubmitMessageCommand;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
@@ -248,17 +247,7 @@ class InboundKafkaIT {
          */
         @Bean
         KafkaSecurityConfigurer kafkaSecurityConfigurer() {
-            return new KafkaSecurityConfigurer(KafkaSecurityProperties.none(), new SecretResolverPort() {
-                @Override
-                public java.util.Optional<String> resolve(String secretRef) {
-                    return java.util.Optional.empty();
-                }
-
-                @Override
-                public String require(String secretRef) {
-                    throw new IllegalStateException("no secret store in the integration context");
-                }
-            });
+            return new KafkaSecurityConfigurer(KafkaSecurityProperties.none());
         }
 
         @Bean

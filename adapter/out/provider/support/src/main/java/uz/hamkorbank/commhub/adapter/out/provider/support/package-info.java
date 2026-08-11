@@ -17,7 +17,9 @@
  * <p>Configuration of a provider lives in the properties of its own package for now
  * ({@code commhub.provider.<code>}); Phase 8 moves the transport settings into
  * {@code provider.endpoint_config} so an operator can change them from the admin panel without a
- * restart (AD-07, NF-07). Credentials never move there — they stay references resolved through
- * {@code SecretResolverPort} (SEC-04, SG-04).
+ * restart (AD-07, NF-07). Credentials never move there — they arrive as values from the environment of
+ * the pod, and {@link uz.hamkorbank.commhub.adapter.out.provider.support.Blobs} is what lets a
+ * multi-line one (the FCM service account, the APNs {@code .p8}) travel in a variable (SEC-04, SG-04,
+ * ADR-0044).
  */
 package uz.hamkorbank.commhub.adapter.out.provider.support;

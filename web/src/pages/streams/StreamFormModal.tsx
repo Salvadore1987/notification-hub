@@ -104,13 +104,6 @@ export function StreamFormModal({
         >
           <Select options={enumOptions(['REST', 'KAFKA'])} />
         </Form.Item>
-        <Form.Item
-          name="credentialsRef"
-          label={t('streams.credentialsRef')}
-          tooltip={t('streams.credentialsRefHint')}
-        >
-          <Input placeholder="env:… / file:… / prop:…" />
-        </Form.Item>
 
         <Divider plain>{t('streams.defaults')}</Divider>
         {/* Приоритет уровней виден только при наведении на «?», а его пропускает как раз тот,

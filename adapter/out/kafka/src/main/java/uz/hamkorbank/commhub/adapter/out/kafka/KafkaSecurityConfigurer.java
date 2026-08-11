@@ -7,7 +7,6 @@ import org.apache.kafka.common.config.SslConfigs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -18,9 +17,9 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * discover. Nothing is applied when nothing is configured, which is the local stack.
  *
  * <p>The JAAS configuration is assembled here rather than pasted into a ConfigMap, so the password
- * reaches the client from the secret store and never from a file the platform renders (SEC-04, NF-06).
- * It is also the reason this is a bean and not a static helper: resolving a reference needs the
- * resolver.
+ * reaches the client from the environment of the pod and never from a file the platform renders
+ * (SEC-04, NF-06, ADR-0044). A bean rather than a static helper because the producer and the consumer
+ * factories both take it, and one configured principal is the point.
  */
 @Component
 public class KafkaSecurityConfigurer {
@@ -32,11 +31,9 @@ public class KafkaSecurityConfigurer {
     private static final String PLAIN_LOGIN_MODULE = "org.apache.kafka.common.security.plain.PlainLoginModule";
 
     private final KafkaSecurityProperties properties;
-    private final SecretResolverPort secrets;
 
-    public KafkaSecurityConfigurer(KafkaSecurityProperties properties, SecretResolverPort secrets) {
+    public KafkaSecurityConfigurer(KafkaSecurityProperties properties) {
         this.properties = Guard.notNull(properties, "properties");
-        this.secrets = Guard.notNull(secrets, "secrets");
     }
 
     /** Adds protocol, SASL and TLS settings to the client configuration, in place. */
@@ -60,30 +57,41 @@ public class KafkaSecurityConfigurer {
         }
     }
 
+    /**
+     * The JAAS entry, refusing to be built without a password.
+     *
+     * <p>A blank one used to be impossible — the resolver threw on a reference that led nowhere. Now it
+     * is an unset variable, and a client configured with {@code password=""} fails at the first publish
+     * with a broker-side authentication error that names neither the pod nor the property.
+     */
     private String jaasConfig() {
+        if (!KafkaSecurityProperties.notBlank(properties.password())) {
+            throw new IllegalStateException(
+                    "commhub.kafka.security.password is required when SASL is configured (SEC-01)");
+        }
         String module =
                 properties.mechanism().toUpperCase(java.util.Locale.ROOT).startsWith("SCRAM")
                         ? SCRAM_LOGIN_MODULE
                         : PLAIN_LOGIN_MODULE;
         return "%s required username=\"%s\" password=\"%s\";"
-                .formatted(module, properties.username(), secrets.require(properties.passwordRef()));
+                .formatted(module, properties.username(), properties.password());
     }
 
     private void applySsl(Map<String, Object> config) {
         if (KafkaSecurityProperties.notBlank(properties.truststoreLocation())) {
             config.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, properties.truststoreLocation());
-            putSecret(config, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, properties.truststorePasswordRef());
+            putPassword(config, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, properties.truststorePassword());
         }
         if (KafkaSecurityProperties.notBlank(properties.keystoreLocation())) {
             config.put(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, properties.keystoreLocation());
-            putSecret(config, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, properties.keystorePasswordRef());
-            putSecret(config, SslConfigs.SSL_KEY_PASSWORD_CONFIG, properties.keystorePasswordRef());
+            putPassword(config, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, properties.keystorePassword());
+            putPassword(config, SslConfigs.SSL_KEY_PASSWORD_CONFIG, properties.keystorePassword());
         }
     }
 
-    private void putSecret(Map<String, Object> config, String key, String ref) {
-        if (KafkaSecurityProperties.notBlank(ref)) {
-            config.put(key, secrets.require(ref));
+    private static void putPassword(Map<String, Object> config, String key, String password) {
+        if (KafkaSecurityProperties.notBlank(password)) {
+            config.put(key, password);
         }
     }
 }

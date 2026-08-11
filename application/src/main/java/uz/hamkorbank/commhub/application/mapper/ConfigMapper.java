@@ -45,7 +45,6 @@ public interface ConfigMapper {
                         provider.health(),
                         provider.isSelectable(),
                         provider.quota(),
-                        provider.credentialsRef().orElse(null),
                         endpointConfig));
     }
 

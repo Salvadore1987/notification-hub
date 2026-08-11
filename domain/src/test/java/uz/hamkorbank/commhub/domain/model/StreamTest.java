@@ -39,7 +39,6 @@ class StreamTest {
         assertThat(stream.integrationType()).isEqualTo(IntegrationType.KAFKA);
         assertThat(stream.name()).isEqualTo("Mobile application");
         assertThat(stream.quietHours()).isEmpty();
-        assertThat(stream.credentialsRef()).isEmpty();
         assertThat(stream.lastActivityAt()).isEmpty();
     }
 
@@ -133,13 +132,11 @@ class StreamTest {
         // Act
         stream.updateQuota(QuotaConfig.ofCounts(1_000L, 10_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
         stream.updateQuietHours(QuietHours.deferring(LocalTime.of(22, 0), LocalTime.of(8, 0)));
-        stream.updateCredentialsRef("vault://streams/crm");
         stream.updateDefaults(Stream.Defaults.of(Channel.EMAIL, TrafficClass.TRANSACTIONAL));
 
         // Assert
         assertThat(stream.quota().dailyCountLimit()).contains(1_000L);
         assertThat(stream.quietHours()).isPresent();
-        assertThat(stream.credentialsRef()).contains("vault://streams/crm");
         assertThat(stream.defaults().channelOptional()).contains(Channel.EMAIL);
     }
 

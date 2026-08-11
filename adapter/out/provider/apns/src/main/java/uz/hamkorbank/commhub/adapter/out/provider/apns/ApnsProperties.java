@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
@@ -75,17 +76,18 @@ public record ApnsProperties(
      * Token-based authentication of the provider API (PU-06, SEC-04).
      *
      * <p>Token-based rather than certificate-based on purpose: a {@code .p8} key does not expire, is one
-     * secret rather than a keystore, and is the form Apple documents for new integrations. The key
-     * itself never leaves the secret store — {@link #privateKeyRef} is a reference resolved per call, so
-     * a rotation applies without a restart.
+     * secret rather than a keystore, and is the form Apple documents for new integrations. The key comes
+     * from the environment of the pod (ADR-0044) — as the PEM itself or the same PEM in base64, since a
+     * variable carries one line well and a PEM is many.
      *
      * @param teamId Apple developer team; the {@code iss} claim of the JWT
      * @param keyId identifier of the {@code .p8} key; the {@code kid} header of the JWT
+     * @param privateKey the PKCS#8 key itself; never logged — {@code toString} is masked
      * @param refreshInterval how often the JWT is re-signed; PU-06 requires between 20 and 60 minutes,
      *     and Apple refuses both a token younger than 20 minutes on a new connection and one older than
      *     an hour
      */
-    public record Credentials(String teamId, String keyId, String privateKeyRef, Duration refreshInterval) {
+    public record Credentials(String teamId, String keyId, String privateKey, Duration refreshInterval) {
 
         public static final Duration DEFAULT_REFRESH_INTERVAL = Duration.ofMinutes(40);
 
@@ -96,13 +98,19 @@ public record ApnsProperties(
             refreshInterval = clamp(refreshInterval);
         }
 
+        @Override
+        public String toString() {
+            return "Credentials[teamId=%s, keyId=%s, privateKey=%s, refreshInterval=%s]"
+                    .formatted(teamId, keyId, Masking.secret(privateKey), refreshInterval);
+        }
+
         public boolean isConfigured() {
             return teamId != null
                     && !teamId.isBlank()
                     && keyId != null
                     && !keyId.isBlank()
-                    && privateKeyRef != null
-                    && !privateKeyRef.isBlank();
+                    && privateKey != null
+                    && !privateKey.isBlank();
         }
 
         /**

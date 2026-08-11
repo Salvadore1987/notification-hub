@@ -19,7 +19,7 @@
 | `bootstrap/build/libs/notification-hub.jar` | исполняемый Spring Boot jar (backend целиком, включая Flyway-миграции и admin BFF) | `./gradlew :bootstrap:bootJar` |
 | Docker-образ | jar в two-stage образе (Temurin 25 JRE, non-root uid 10001) | `docker build` от корня репозитория |
 | `web/dist/` | статика админ-панели (SPA) | `cd web && npm run build` |
-| `deploy/k8s/deployment.yaml` | манифест-образец: пробы, graceful shutdown, секреты каталогом | правится под контур |
+| `deploy/k8s/deployment.yaml` | манифест-образец: пробы, graceful shutdown, секреты переменными окружения | правится под контур |
 | `deploy/observability/` | правила алертов Prometheus (OBS-04) и дашборды Grafana (OBS-05) | подключаются в мониторинг контура |
 
 Схема БД создаётся и версионируется самим приложением (Flyway, схема `comm_hub`) — отдельного
@@ -124,13 +124,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
 умолчания — см. §5.3.
 
 Провайдеры по умолчанию выключены (`PLAYMOBILE_ENABLED=false` и т.д.). Для проверки отправки
-против WireMock-стабов включайте нужный и указывайте кредам-ссылкам схему `env:`, например:
+против WireMock-стабов включайте нужный и задавайте креды переменными окружения, например:
 
 ```bash
 export PLAYMOBILE_ENABLED=true
-export PLAYMOBILE_USERNAME_REF=env:PLAYMOBILE_STUB_USER
-export PLAYMOBILE_PASSWORD_REF=env:PLAYMOBILE_STUB_PASSWORD
-export PLAYMOBILE_STUB_USER=stub PLAYMOBILE_STUB_PASSWORD=stub
+export PLAYMOBILE_USERNAME=stub PLAYMOBILE_PASSWORD=stub
 ```
 
 (база URL уже смотрит в WireMock: `http://localhost:8089/broker-api`).
@@ -209,33 +207,33 @@ cd web && npm ci && npm run build   # -> web/dist/
 партиции, retention, ACL; `KAFKA_CREATE_TOPICS` остаётся `false`. Субъект схемы статусов
 регистрируется в Schema Registry контура (см. §3.3), режим совместимости `BACKWARD`.
 
-### 5.2. Секреты (SEC-04, ADR-0036)
+### 5.2. Секреты (SEC-04, ADR-0044)
 
-Секреты приходят **переменными окружения**. В БД и в yaml лежат только ссылки; ссылка называет свой
-источник: `env:ИМЯ` (основная схема), `prop:ключ` (свойство Spring) или без схемы — литерал из
-`commhub.secrets.values`, который существует для локального стенда и тестов. Каталога секретов и
-схемы `file:` больше нет. Hub сам в Vault не ходит: значение в окружение пода кладёт платформа
-(K8s Secret, инжектор Vault, CSI-драйвер).
+Секреты приходят **переменными окружения и значениями**: свойство в `application.yml` — это обычный
+плейсхолдер (`password: ${PLAYMOBILE_PASSWORD:}`), никаких ссылок, схем и резолвера больше нет. Hub сам
+в Vault не ходит: значение в окружение пода кладёт платформа (K8s Secret, инжектор Vault, CSI-драйвер).
 
-Многострочные блобы — JSON сервис-аккаунта FCM и `.p8`-ключ APNs — переносятся в base64, и ссылка на
-них объявляется с модификатором: `env:base64:FCM_SERVICE_ACCOUNT`. Значение, объявленное `base64:`,
-но им не являющееся, не разрешается вовсе (отказ отправки вместо отправки с искажённым ключом).
+Многострочные блобы — JSON сервис-аккаунта FCM, `.p8` APNs, ключ DKIM — принимаются и как есть, и в
+base64: одной строкой они переживают переменную окружения надёжнее. Распознаётся base64 узким правилом
+(результат должен начинаться с `{` или `-----BEGIN`), поэтому обычный пароль оно не трогает.
 
-Умолчания ссылок в `application.yml` уже указывают на окружение, поэтому в контуре достаточно задать
-сами переменные:
+Пустая переменная — это **не** «отправка без учётных данных», а блокирующий отказ вызова
+(`NO_CREDENTIALS`) с failover'ом. Одно ограничение синтаксиса: значение секрета не должно содержать
+`${` — Spring разбирает плейсхолдеры и внутри подставленного значения; для блоба это снимается base64.
+
+В контуре достаточно задать сами переменные:
 
 | Провайдер | Переменные |
 |---|---|
 | Playmobile | `PLAYMOBILE_USERNAME`, `PLAYMOBILE_PASSWORD` |
 | SMS Gate | `SMSGATE_LOGIN`, `SMSGATE_KEY` |
-| FCM | `FCM_SERVICE_ACCOUNT` (base64 JSON) |
-| APNs | `APNS_PRIVATE_KEY` (base64 PEM) |
+| FCM | `FCM_SERVICE_ACCOUNT` (JSON целиком или он же в base64) |
+| APNs | `APNS_PRIVATE_KEY` (PEM целиком или он же в base64) |
 
-Там, где умолчание ссылки пустое (пустое = «без аутентификации»), задаётся и она сама, и переменная:
-`SMTP_USERNAME_REF=env:SMTP_USERNAME`, `SMTP_PASSWORD_REF=env:SMTP_PASSWORD`,
-`SMTP_BOUNCE_USERNAME_REF` / `SMTP_BOUNCE_PASSWORD_REF` (EM-02),
-`SMTP_DKIM_KEY_REF=env:base64:SMTP_DKIM_KEY` (EM-03), `KAFKA_SASL_PASSWORD_REF`,
-`KAFKA_TRUSTSTORE_PASSWORD_REF`, `KAFKA_KEYSTORE_PASSWORD_REF`.
+Остальные — там, где пустое значение означает «без аутентификации» и это законная конфигурация:
+`SMTP_USERNAME` / `SMTP_PASSWORD`, `SMTP_BOUNCE_USERNAME` / `SMTP_BOUNCE_PASSWORD` (EM-02),
+`SMTP_DKIM_KEY` (EM-03, PEM или base64), `KAFKA_SASL_PASSWORD`, `KAFKA_TRUSTSTORE_PASSWORD`,
+`KAFKA_KEYSTORE_PASSWORD`.
 
 **Ротация требует rolling restart** — переменную окружения живого процесса сменить нельзя. Простоя при
 этом нет (`maxUnavailable: 0`), но и мгновенной ротация не будет; процедура — в
@@ -264,9 +262,9 @@ COMMHUB_REQUIRE_SOURCE_SYSTEM_TOKEN=true
 `full.path=false`). Если имена групп Банка отличаются от имён ролей, отображение задаётся в
 `groupRoles` файла `public/config.json` панели и в `COMMHUB_ROLES_CLAIM` на backend'е.
 
-Секреты callback'ов провайдеров — `PLAYMOBILE_CALLBACK_SECRET_REF` / `SMSGATE_CALLBACK_SECRET_REF`
-(SEC-07, форма `env:PLAYMOBILE_CALLBACK_SECRET`), плюс списки разрешённых IP, согласованные с
-провайдерами.
+Секреты callback'ов провайдеров — `PLAYMOBILE_CALLBACK_SECRET` / `SMSGATE_CALLBACK_SECRET` (SEC-07),
+плюс списки разрешённых IP, согласованные с провайдерами. Пустое значение выключает проверку секрета —
+это решение эксплуатации, а не умолчание.
 
 ### 5.4. Провайдеры
 

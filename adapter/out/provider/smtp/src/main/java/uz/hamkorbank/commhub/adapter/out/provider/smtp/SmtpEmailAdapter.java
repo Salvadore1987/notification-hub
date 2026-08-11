@@ -15,7 +15,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSetting
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailSubmission;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
@@ -68,7 +67,6 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
     private final ProviderCallExecutor executor;
     private final ProviderThrottle throttle;
     private final ProviderRuntimeSettings runtimeSettings;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final Session session;
 
@@ -82,10 +80,9 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
         this.executor = support.executor();
         this.throttle = support.throttle();
         this.runtimeSettings = support.runtimeSettings();
-        this.secrets = support.secrets();
         this.clock = support.clock();
         this.pool = new SmtpTransportPool(properties);
-        this.dkim = new DkimSigner(properties.dkim(), support.secrets(), support.clock());
+        this.dkim = new DkimSigner(properties.dkim(), support.clock());
         this.session = pool.session();
         if (properties.server().security() == SmtpProperties.Security.NONE) {
             LOG.warn(
@@ -205,7 +202,7 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
     }
 
     /**
-     * Relay credentials, resolved per call so a rotation applies without a restart (SEC-04).
+     * Relay credentials of the deployment settings, read per call (SEC-04, ADR-0044).
      *
      * @return {@code null} for a relay that does not authenticate, which is normal inside the Bank's network
      */
@@ -214,8 +211,7 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
         if (!configured.isConfigured()) {
             return null;
         }
-        return new SmtpCredentials(
-                secrets.require(configured.usernameRef()), secrets.require(configured.passwordRef()));
+        return new SmtpCredentials(configured.username(), configured.password());
     }
 
     /** Closes the pooled connections on shutdown; the relay sees a QUIT rather than a dropped socket (NF-05). */

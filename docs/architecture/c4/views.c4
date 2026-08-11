@@ -162,7 +162,6 @@ views {
       hub.app.smtpAdapter,
       hub.app.fcmAdapter,
       hub.app.apnsAdapter,
-      hub.app.secretAdapter,
       playmobile,
       smsGate,
       mailRelay,

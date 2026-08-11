@@ -68,10 +68,8 @@ import uz.hamkorbank.commhub.support.ProviderStub;
             "commhub.metrics.backlog-refresh-interval=1h",
             "commhub.provider.playmobile.enabled=true",
             "commhub.provider.playmobile.sending.originator=3700",
-            "commhub.provider.playmobile.credentials.username-ref=playmobile/username",
-            "commhub.provider.playmobile.credentials.password-ref=playmobile/password",
-            "commhub.secrets.values.playmobile/username=hamkor",
-            "commhub.secrets.values.playmobile/password=s3cr3t",
+            "commhub.provider.playmobile.credentials.username=hamkor",
+            "commhub.provider.playmobile.credentials.password=s3cr3t",
             "commhub.kafka.outbound.create-topics=true",
             "commhub.rest.rate-limit.enabled=false"
         })

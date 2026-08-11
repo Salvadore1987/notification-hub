@@ -17,8 +17,8 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * from now: the throughput limits and the adapter's own transport keys are read from the database and
  * applied without a restart, with the deployment's yaml behind them as the default.
  *
- * <p>What deliberately does <b>not</b> move here: credentials, which stay references resolved through
- * {@code SecretResolverPort} (SEC-04), and the settings that decide how the HTTP client itself is
+ * <p>What deliberately does <b>not</b> move here: credentials, which arrive as deployment settings from
+ * the environment of the pod (SEC-04, ADR-0044), and the settings that decide how the HTTP client is
  * built — base URL, connect and read timeouts, retry and breaker windows. Those are deployment
  * topology rather than routing configuration, and changing them at runtime means rebuilding a client
  * on the sending path; they stay in yaml, where a change is a deploy and is reviewed as one.

@@ -13,9 +13,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * addresses and their own secret with the Bank, and one shared credential would mean a leak at either
  * of them lets the other's traffic be forged.
  *
- * <p>The secret is a reference in production — {@link Provider#secretRef()} is resolved through
- * {@code SecretResolverPort} against the Bank's secret store (SG-04) — and a literal
- * ({@link Provider#secret()}) only in the local stack. Either way it is never logged.
+ * <p>The secret ({@link Provider#secret()}) arrives as a value from the environment of the pod on any
+ * contour (SG-04, ADR-0044) and is never logged.
  *
  * @param base path the endpoints hang under; kept out of {@code /api/v1}, which is the contract of the
  *     source systems and versioned on their schedule
@@ -51,13 +50,10 @@ public record CallbackProperties(String base, Map<String, Provider> providers) {
      * @param allowedIps addresses agreed with the provider; empty means the check is delegated to the
      *     network — an explicit decision an operator has to make, not a default
      * @param secretHeader header the shared secret arrives in
-     * @param secret expected value of that header, for the local stack; empty disables the check unless
-     *     {@link #secretRef()} is set
-     * @param secretRef reference to the expected value in the secret store, which is what the Bank's
-     *     contour uses (SEC-04, SG-04); takes precedence over {@link #secret()}
+     * @param secret expected value of that header; empty disables the check, which is a decision an
+     *     operator makes rather than something a missing property does quietly (SEC-04, SG-04)
      */
-    public record Provider(
-            Boolean enabled, List<String> allowedIps, String secretHeader, String secret, String secretRef) {
+    public record Provider(Boolean enabled, List<String> allowedIps, String secretHeader, String secret) {
 
         public static final String DEFAULT_SECRET_HEADER = "X-Commhub-Callback-Secret";
 
@@ -72,11 +68,13 @@ public record CallbackProperties(String base, Map<String, Provider> providers) {
         }
 
         public boolean checksSecret() {
-            return hasSecretRef() || (secret != null && !secret.isBlank());
+            return secret != null && !secret.isBlank();
         }
 
-        public boolean hasSecretRef() {
-            return secretRef != null && !secretRef.isBlank();
+        @Override
+        public String toString() {
+            return "Provider[enabled=%s, allowedIps=%s, secretHeader=%s, secret=***]"
+                    .formatted(enabled, allowedIps, secretHeader);
         }
     }
 }

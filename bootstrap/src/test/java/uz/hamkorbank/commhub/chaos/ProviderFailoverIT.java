@@ -82,16 +82,12 @@ import uz.hamkorbank.commhub.support.ProviderStub;
             "commhub.provider.playmobile.resilience.max-attempts=1",
             "commhub.provider.smsgate.enabled=true",
             "commhub.provider.smsgate.sending.sender=HAMKORBANK",
-            // Креды: в контуре ссылка указывает на переменную окружения (ADR-0036), в тесте — на
-            // литерал, потому что переменную окружения JVM изнутри теста не задать.
-            "commhub.provider.playmobile.credentials.username-ref=playmobile/username",
-            "commhub.provider.playmobile.credentials.password-ref=playmobile/password",
-            "commhub.provider.smsgate.credentials.login-ref=smsgate/login",
-            "commhub.provider.smsgate.credentials.key-ref=smsgate/key",
-            "commhub.secrets.values.playmobile/username=hamkor",
-            "commhub.secrets.values.playmobile/password=s3cr3t",
-            "commhub.secrets.values.smsgate/login=hamkor",
-            "commhub.secrets.values.smsgate/key=s3cr3t",
+            // Креды: в контуре значение приходит переменной окружения (ADR-0044), здесь — свойством,
+            // потому что переменную окружения JVM изнутри теста не задать.
+            "commhub.provider.playmobile.credentials.username=hamkor",
+            "commhub.provider.playmobile.credentials.password=s3cr3t",
+            "commhub.provider.smsgate.credentials.login=hamkor",
+            "commhub.provider.smsgate.credentials.key=s3cr3t",
             "commhub.kafka.outbound.create-topics=true",
             "commhub.rest.rate-limit.enabled=false"
         })

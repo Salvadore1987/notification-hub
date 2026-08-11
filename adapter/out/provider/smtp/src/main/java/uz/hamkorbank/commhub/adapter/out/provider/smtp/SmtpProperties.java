@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
 
@@ -130,15 +131,24 @@ public record SmtpProperties(
     }
 
     /**
-     * References of the relay credentials (SEC-04).
+     * Relay credentials, filled from the environment of the pod (SEC-04, ADR-0044).
      *
      * <p>An unauthenticated relay is normal inside a bank network — the segment is the authentication — so
      * both being absent is a supported configuration and not a misconfiguration.
+     *
+     * <p>{@code toString} is masked: a record prints its components, and this one is part of a properties
+     * tree something may log whole.
      */
-    public record Credentials(String usernameRef, String passwordRef) {
+    public record Credentials(String username, String password) {
 
         public boolean isConfigured() {
-            return usernameRef != null && !usernameRef.isBlank() && passwordRef != null && !passwordRef.isBlank();
+            return username != null && !username.isBlank() && password != null && !password.isBlank();
+        }
+
+        @Override
+        public String toString() {
+            return "Credentials[username=%s, password=%s]"
+                    .formatted(Masking.secret(username), Masking.secret(password));
         }
     }
 
@@ -246,10 +256,11 @@ public record SmtpProperties(
      * when it talks to a relay that does not, or when the Bank wants the Hub's own selector on its
      * notifications.
      *
-     * @param privateKeyRef reference to the PKCS#8 private key in the secret store (SEC-04); never the key
+     * @param privateKey the PKCS#8 private key itself, from the environment of the pod (SEC-04); PEM or
+     *     the same PEM in base64, which is what makes a multi-line key survive a variable (ADR-0044)
      * @param headers headers covered by the signature, in the order they enter the hash
      */
-    public record Dkim(Boolean enabled, String domain, String selector, String privateKeyRef, List<String> headers) {
+    public record Dkim(Boolean enabled, String domain, String selector, String privateKey, List<String> headers) {
 
         /**
          * Headers a signature covers by default.
@@ -272,12 +283,18 @@ public record SmtpProperties(
             if (enabled) {
                 requireConfigured(domain, "commhub.provider.smtp.dkim.domain");
                 requireConfigured(selector, "commhub.provider.smtp.dkim.selector");
-                requireConfigured(privateKeyRef, "commhub.provider.smtp.dkim.private-key-ref");
+                requireConfigured(privateKey, "commhub.provider.smtp.dkim.private-key");
             }
         }
 
         public static Dkim disabled() {
             return new Dkim(null, null, null, null, null);
+        }
+
+        @Override
+        public String toString() {
+            return "Dkim[enabled=%s, domain=%s, selector=%s, privateKey=%s, headers=%s]"
+                    .formatted(enabled, domain, selector, Masking.secret(privateKey), headers);
         }
 
         private static void requireConfigured(String value, String key) {

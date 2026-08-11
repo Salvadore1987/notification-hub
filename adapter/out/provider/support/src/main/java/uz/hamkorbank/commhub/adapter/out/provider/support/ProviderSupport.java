@@ -1,7 +1,6 @@
 package uz.hamkorbank.commhub.adapter.out.provider.support;
 
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -9,7 +8,7 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  *
  * <p>Each adapter is a thin translation of the Hub's contract into one provider's API; everything
  * around that translation — retry and breaker, throughput limits, the runtime half of the provider
- * profile, secret resolution, the clock and the HTTP client factory — is the same for all of them.
+ * profile, the clock and the HTTP client factory — is the same for all of them.
  * Passing them individually made the constructors grow with every capability the framework gained, so
  * they travel together and an adapter's own constructor stays about that adapter.
  *
@@ -17,14 +16,12 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  *     answer and throws only when there was none (PR-01)
  * @param throttle sustained rate, per-minute ceiling and the per-recipient anti-spam rule (FR-2.5)
  * @param runtimeSettings limits and endpoint settings read from the provider profile (AD-07)
- * @param secrets credential references resolved per call, so a rotation applies without a restart
  * @param clients JDK HTTP clients on virtual threads with mandatory timeouts (AR-07)
  */
 public record ProviderSupport(
         ProviderCallExecutor executor,
         ProviderThrottle throttle,
         ProviderRuntimeSettings runtimeSettings,
-        SecretResolverPort secrets,
         ClockPort clock,
         ProviderRestClients clients) {
 
@@ -32,7 +29,6 @@ public record ProviderSupport(
         Guard.notNull(executor, "ProviderSupport.executor");
         Guard.notNull(throttle, "ProviderSupport.throttle");
         Guard.notNull(runtimeSettings, "ProviderSupport.runtimeSettings");
-        Guard.notNull(secrets, "ProviderSupport.secrets");
         Guard.notNull(clock, "ProviderSupport.clock");
         Guard.notNull(clients, "ProviderSupport.clients");
     }

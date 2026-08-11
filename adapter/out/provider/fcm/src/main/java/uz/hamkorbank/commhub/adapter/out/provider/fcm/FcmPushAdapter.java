@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Blobs;
 import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
@@ -18,7 +19,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSetting
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.PushProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.PushSubmission;
@@ -68,7 +68,6 @@ public class FcmPushAdapter implements PushProviderPort {
     private final FcmJson json;
     private final ProviderCallExecutor executor;
     private final ProviderThrottle throttle;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
     private final RestClient client;
@@ -81,7 +80,6 @@ public class FcmPushAdapter implements PushProviderPort {
         Guard.notNull(support, "support");
         this.executor = support.executor();
         this.throttle = support.throttle();
-        this.secrets = support.secrets();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
         this.client = support.clients().create(properties.http());
@@ -233,9 +231,8 @@ public class FcmPushAdapter implements PushProviderPort {
     /**
      * The service account key, resolved per call so a rotation applies without a restart (SEC-04).
      *
-     * <p>Parsed every time rather than cached: the resolver caches the secret itself for its TTL, and
-     * parsing a few kilobytes of JSON is not what costs anything on this path — while a cached parse
-     * would keep a revoked key alive for as long as the process runs.
+     * <p>Parsed every time rather than cached: parsing a few kilobytes of JSON is not what costs anything
+     * on this path, while a cached parse would keep a revoked key alive for as long as the process runs.
      */
     private FcmServiceAccount serviceAccount() {
         if (!properties.hasCredentials()) {
@@ -244,7 +241,7 @@ public class FcmPushAdapter implements PushProviderPort {
         }
         return FcmServiceAccount.parse(
                 json,
-                secrets.require(properties.credentialsRef()),
+                Blobs.decodeIfBase64(properties.credentials().serviceAccount()),
                 properties.oauth().tokenUrl());
     }
 

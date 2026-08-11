@@ -25,7 +25,6 @@ public record UpdateProviderCommand(
         Tariff tariff,
         RateLimit rateLimit,
         QuotaConfig quota,
-        String credentialsRef,
         Map<String, String> endpointConfig) {
 
     public UpdateProviderCommand {

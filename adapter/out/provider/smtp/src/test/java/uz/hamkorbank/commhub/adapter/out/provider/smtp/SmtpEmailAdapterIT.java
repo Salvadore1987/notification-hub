@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
 import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
-import uz.hamkorbank.commhub.adapter.out.provider.ProviderStubs;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
@@ -118,7 +117,8 @@ class SmtpEmailAdapterIT {
     void signsWithDkim() throws Exception {
         // Arrange
         adapter = adapter(
-                RateLimit.unlimited(), new SmtpProperties.Dkim(true, "hamkorbank.uz", "hub", "dkim/private-key", null));
+                RateLimit.unlimited(),
+                new SmtpProperties.Dkim(true, "hamkorbank.uz", "hub", TestKeys.DKIM_PRIVATE_KEY_PEM, null));
 
         // Act
         ProviderAck ack = adapter.submit(EmailSubmissions.textOnly(MessageId.newId()));
@@ -178,7 +178,6 @@ class SmtpEmailAdapterIT {
                         CircuitBreakerRegistry.ofDefaults(), RetryRegistry.ofDefaults(), FixedClock.standard()),
                 throttle,
                 ProviderRuntimeSettings.configurationOnly(),
-                ProviderStubs.secrets("dkim/private-key", TestKeys.DKIM_PRIVATE_KEY_PEM, "unused", "unused"),
                 FixedClock.standard(),
                 new ProviderRestClients());
     }

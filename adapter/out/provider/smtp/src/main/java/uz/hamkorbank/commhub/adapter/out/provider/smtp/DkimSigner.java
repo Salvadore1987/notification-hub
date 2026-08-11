@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Blobs;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -49,13 +49,11 @@ public class DkimSigner {
     private static final String CRLF = "\r\n";
 
     private final SmtpProperties.Dkim settings;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final AtomicReference<CachedKey> key = new AtomicReference<>();
 
-    public DkimSigner(SmtpProperties.Dkim settings, SecretResolverPort secrets, ClockPort clock) {
+    public DkimSigner(SmtpProperties.Dkim settings, ClockPort clock) {
         this.settings = Guard.notNull(settings, "settings");
-        this.secrets = Guard.notNull(secrets, "secrets");
         this.clock = Guard.notNull(clock, "clock");
     }
 
@@ -170,7 +168,7 @@ public class DkimSigner {
     }
 
     private PrivateKey privateKey() throws GeneralSecurityException {
-        String pem = secrets.require(settings.privateKeyRef());
+        String pem = Blobs.decodeIfBase64(settings.privateKey());
         CachedKey cached = key.get();
         if (cached != null && cached.pem().equals(pem)) {
             return cached.key();

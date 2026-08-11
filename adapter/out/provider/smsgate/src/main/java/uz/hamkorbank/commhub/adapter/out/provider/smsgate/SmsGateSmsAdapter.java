@@ -22,7 +22,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSetting
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
@@ -70,7 +69,6 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
     private final SmsGateSendCodec codec;
     private final ProviderCallExecutor executor;
     private final ProviderThrottle throttle;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
     private final RestClient client;
@@ -81,7 +79,6 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
         Guard.notNull(support, "support");
         this.executor = support.executor();
         this.throttle = support.throttle();
-        this.secrets = support.secrets();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
         this.client = support.clients().create(properties.http());
@@ -243,14 +240,14 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
         return properties.sending().overlay(runtimeSettings.endpointConfigOf(properties.providerCode()));
     }
 
-    /** {@code login} and {@code key}, resolved per call so a rotation applies without a restart (SG-04). */
+    /** {@code login} and {@code key} of the deployment settings, read per call (SG-04, ADR-0044). */
     private SmsGateCredentials credentials() {
         SmsGateProperties.Credentials configured = properties.credentials();
         if (!configured.isConfigured()) {
             throw ProviderCallException.blocking(
-                    "NO_CREDENTIALS", "no credential references are configured for SMS Gate (SG-04)");
+                    "NO_CREDENTIALS", "no credentials are configured for SMS Gate (SG-04)");
         }
-        return new SmsGateCredentials(secrets.require(configured.loginRef()), secrets.require(configured.keyRef()));
+        return new SmsGateCredentials(configured.login(), configured.key());
     }
 
     /**

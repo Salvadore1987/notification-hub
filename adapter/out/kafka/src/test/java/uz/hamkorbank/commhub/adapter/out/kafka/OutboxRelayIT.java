@@ -37,7 +37,6 @@ import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.OutboxEvent;
 import uz.hamkorbank.commhub.application.port.out.OutboxPort;
 import uz.hamkorbank.commhub.application.port.out.PendingOutboxEvent;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.StatusPublisherPort;
 import uz.hamkorbank.commhub.application.service.PublishOutboxEventsService;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
@@ -285,17 +284,7 @@ class OutboxRelayIT {
          */
         @Bean
         KafkaSecurityConfigurer kafkaSecurityConfigurer() {
-            return new KafkaSecurityConfigurer(KafkaSecurityProperties.none(), new SecretResolverPort() {
-                @Override
-                public java.util.Optional<String> resolve(String secretRef) {
-                    return java.util.Optional.empty();
-                }
-
-                @Override
-                public String require(String secretRef) {
-                    throw new IllegalStateException("no secret store in the integration context");
-                }
-            });
+            return new KafkaSecurityConfigurer(KafkaSecurityProperties.none());
         }
 
         @Bean

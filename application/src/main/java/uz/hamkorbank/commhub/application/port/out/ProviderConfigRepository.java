@@ -58,7 +58,7 @@ public interface ProviderConfigRepository {
      *
      * <p>An opaque map: the Hub stores and returns it, only the adapter behind {@code adapterType}
      * knows what its keys mean, which is what keeps a new provider a new adapter (AR-04). Credentials
-     * never belong here — they stay references resolved through {@code SecretResolverPort} (SEC-04).
+     * never belong here — they are deployment settings read from the environment (SEC-04, ADR-0044).
      */
     Map<String, String> endpointConfig(ProviderId providerId);
 

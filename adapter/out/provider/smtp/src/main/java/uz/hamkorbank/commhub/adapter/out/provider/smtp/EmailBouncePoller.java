@@ -19,7 +19,6 @@ import uz.hamkorbank.commhub.application.dto.ProcessProviderStatusResult;
 import uz.hamkorbank.commhub.application.port.in.ProcessProviderStatus;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
@@ -55,7 +54,6 @@ public class EmailBouncePoller {
     private final SmtpProperties smtpProperties;
     private final BounceCodec codec;
     private final ProcessProviderStatus processStatus;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
 
     public EmailBouncePoller(
@@ -63,13 +61,11 @@ public class EmailBouncePoller {
             SmtpProperties smtpProperties,
             BounceCodec codec,
             ProcessProviderStatus processStatus,
-            SecretResolverPort secrets,
             ClockPort clock) {
         this.properties = Guard.notNull(properties, "properties");
         this.smtpProperties = Guard.notNull(smtpProperties, "smtpProperties");
         this.codec = Guard.notNull(codec, "codec");
         this.processStatus = Guard.notNull(processStatus, "processStatus");
-        this.secrets = Guard.notNull(secrets, "secrets");
         this.clock = Guard.notNull(clock, "clock");
     }
 
@@ -111,11 +107,7 @@ public class EmailBouncePoller {
     private void connect(Store store) throws MessagingException {
         SmtpBounceProperties.Credentials credentials = properties.credentials();
         if (credentials.isConfigured()) {
-            store.connect(
-                    properties.host(),
-                    properties.port(),
-                    secrets.require(credentials.usernameRef()),
-                    secrets.require(credentials.passwordRef()));
+            store.connect(properties.host(), properties.port(), credentials.username(), credentials.password());
         } else {
             store.connect(properties.host(), properties.port(), null, null);
         }
