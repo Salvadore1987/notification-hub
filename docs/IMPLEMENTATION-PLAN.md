@@ -872,7 +872,7 @@
 - ✅ Vite + React 18 + TypeScript, структура проекта, ESLint/Prettier (UI-01)
 - ✅ UI-kit (Ant Design или MUI — согласовать с Банком) (UI-01)
 - ✅ i18n RU/UZ/EN (минимум RU), формат дат Asia/Tashkent, хранение UTC (UI-01, UI-04)
-- ✅ OIDC-аутентификация (Authorization Code + PKCE), хранение токена, refresh (UI-02, SEC-02)
+- ✅ OIDC-аутентификация (~~Authorization Code + PKCE~~ → форма входа в панели, Phase 21), хранение токена, refresh (UI-02, SEC-02)
 - ✅ Гейтинг по ролям RBAC на клиенте (дублирует backend) (FR-7.2)
 - ✅ API-клиент к Admin BFF (типы из OpenAPI), обработка ошибок/`Retry-After`
 - ✅ Общие компоненты: серверные таблицы (пагинация/сортировка/фильтр), виртуализация, маскирование PII (UI-03, DB-04)
@@ -883,8 +883,9 @@
 > `commhub.security.roles-claim`, по умолчанию `groups`) и маппинг SSO-группа → роль §10.1. Пустой
 > issuer — не режим работы, а ошибка настройки контура: панель показывает «не настроена» и внутрь не
 > пускает (ADR-0037, 10.08.2026; локально issuer указывает на Keycloak из `docker compose`, вход
-> `demo/demo`). Аутентификация — `oidc-client-ts`/`react-oidc-context`
-> (Code + PKCE, токены в `sessionStorage`, silent renew); роли считаются из claim'а профиля или
+> `demo/demo`). Аутентификация — ~~`oidc-client-ts`/`react-oidc-context` (Code + PKCE)~~ форма входа
+> в самой панели, direct access grant (Phase 21, ADR-0043); токены в `sessionStorage`, тихое
+> продление; роли считаются из
 > payload access-токена и гейтят меню и маршруты (`src/auth/roles.ts` — клиентское зеркало
 > `AdminAuthority`, разделы §11.2 объявлены один раз в `src/layout/navigation.tsx`). Типы API
 > генерируются `openapi-typescript` из `comm-hub-admin-v1.yaml` (`npm run generate:api`,
@@ -998,9 +999,10 @@
 - ✅ Панель без открытого режима: `OpenSession` и `Session.open` удалены, пустой `authority` —
   экран «не настроена»; попутно починен возврат на запрошенный маршрут после входа
   (`src/auth/returnTo.ts`) — раньше вход по ссылке на `/dlq` заканчивался дашбордом
+  (в Phase 21 механизм стал не нужен вместе с редиректом)
 - ✅ Тесты: Keycloak третьим синглтоном в `HubTestContainers` (тот же файл realm'а), `KeycloakTokens`
   через direct access grant, `AdminSecurityIT` (401/403/200 и логин в журнале SEC-08 вместо UUID);
-  E2E логинятся настоящим `demo/demo` (проект `setup` Playwright)
+  E2E логинятся настоящим `demo/demo` (проектом `setup` Playwright; с Phase 21 — формой панели)
 
 > **Что нашли по дороге.** Пока `@PreAuthorize` никогда не отказывал, два дефекта нечем было
 > заметить. Отказ метода — `AccessDeniedException` — выбрасывается внутри диспетчера, а не в
@@ -1013,6 +1015,27 @@
 
 ---
 
+## Phase 21. Форма входа в панели (11.08.2026)
+
+- ✅ Вход — экран самой панели: `LoginPage`, токен через direct access grant к издателю
+  (`src/auth/tokenClient.ts`, `src/auth/tokenStore.ts`)
+  ([ADR-0043](architecture/adr/ADR-0043-panel-login-form.md), UI-02, SEC-02)
+- ✅ Редирект-поток удалён: `/auth/callback`, `src/auth/returnTo.ts`, `oidc-client-ts` и
+  `react-oidc-context`; глубокая ссылка переживает вход сама — адрес никуда не уходит
+- ✅ Продление за 30 с до истечения, восстановление сессии после F5, выход гасит сессию
+  и у издателя (`end_session_endpoint`)
+- ✅ Тесты: `src/auth/session.test.tsx`, `src/auth/tokenClient.test.ts`, `e2e/sign-in.spec.ts`;
+  проект `setup` Playwright и `storageState` удалены — входит каждый тест (`e2e/fixtures/signIn.ts`),
+  форма входа добавлена в axe-проверку
+
+> **Чего это стоило.** Пароль теперь проходит через код панели, `grant_type=password` удалён из
+> OAuth 2.1, а контур обязан разрешать direct grant клиенту панели — MFA и федерация в AD этим
+> путём не работают. Требование заказчика, цена записана в ADR-0043 вместе с альтернативой,
+> к которой следует вернуться, если появится контур с MFA: своя тема оформления Keycloak.
+> Backend не менялся ничем — он остаётся resource server'ом с тем же издателем.
+
+---
+
 ## Порядок и вехи
 
 1. **Phase 1–3** — каркас + домен + use cases (ядро).
@@ -1022,5 +1045,6 @@
 5. **Phase 13–15** — наблюдаемость/безопасность/тесты (сквозные, ведутся параллельно, финализируются здесь).
 6. **Phase 16–18** — frontend после стабилизации Admin BFF.
 7. **Phase 19** — Keycloak и снятие открытого режима (после того, как панель стала пригодной к работе).
+8. **Phase 21** — форма входа перенесена в панель (требование заказчика, ADR-0043).
 
 > После завершения каждого пункта — отмечать ✅ (не `[x]`).

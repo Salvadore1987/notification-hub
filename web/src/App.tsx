@@ -5,7 +5,6 @@ import type { ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
-import { CallbackPage } from './auth/CallbackPage';
 import { RequireSection } from './auth/RequireSection';
 import { AppLayout } from './layout/AppLayout';
 import { NAV_ITEMS } from './layout/navigation';
@@ -53,7 +52,6 @@ export function App() {
       <AntApp>
         <BrowserRouter>
           <Routes>
-            <Route path="/auth/callback" element={<CallbackPage />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               {NAV_ITEMS.map((item) => {

@@ -1,7 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
 
-import { STORAGE_STATE } from './e2e/authState';
-
 /**
  * E2E критических сценариев QA-07: пауза батча, повтор из DLQ, публикация шаблона, тестовая
  * отправка — плюс проверка доступности (axe) на тех же экранах.
@@ -10,10 +8,11 @@ import { STORAGE_STATE } from './e2e/authState';
  * (`e2e/fixtures/adminApi.ts`), так сценарий проверяет саму панель, а не контур. Контракт BFF при
  * этом не выдуман: ответы заглушки — тела схем comm-hub-admin-v1.yaml.
  *
- * А вот **Keycloak настоящий** (ADR-0037: открытого режима нет). Проект `setup` один раз проходит
- * форму логина демо-пользователем и сохраняет SSO-cookie; остальные тесты стартуют с ней и проходят
- * редирект молча. Один хост на всё — `localhost`: для Keycloak `localhost` и `127.0.0.1` разные
- * origin'ы, и redirect_uri, выданный с одного, не подойдёт другому.
+ * А вот **Keycloak настоящий** (ADR-0037: открытого режима нет). Форма входа теперь своя
+ * (ADR-0043), поэтому переиспользовать между тестами нечего — токен живёт в `sessionStorage`,
+ * который `storageState` не возит, — и каждый тест входит сам через фикстуру `page`. Один хост на
+ * всё — `localhost`: у Keycloak `localhost` и `127.0.0.1` разные origin'ы, и CORS, разрешённый
+ * одному, другому не подойдёт.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -28,14 +27,7 @@ export default defineConfig({
     locale: 'ru-RU',
     timezoneId: 'Asia/Tashkent',
   },
-  projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE },
-      dependencies: ['setup'],
-    },
-  ],
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'npm run dev -- --host localhost --port 5173',
     url: 'http://localhost:5173',

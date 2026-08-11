@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import { test as anonymous } from '@playwright/test';
 
 import { expect, test } from './fixtures/adminApi';
 
@@ -56,6 +57,22 @@ for (const screen of SCREENS) {
     expect(describe(results.violations)).toEqual([]);
   });
 }
+
+/**
+ * Форма входа — первый экран, который вообще видит оператор, и единственный, до которого нельзя
+ * дойти залогиненным: поэтому она проверяется базовым тестом, без фикстуры со входом.
+ */
+anonymous('форма входа не нарушает правила доступности', async ({ page }) => {
+  await page.goto('http://localhost:5173/dashboard');
+  await page.getByLabel('Пользователь').waitFor();
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .disableRules(['color-contrast'])
+    .analyze();
+
+  expect(describe(results.violations)).toEqual([]);
+});
 
 test('форма тестовой отправки размечена подписями, а не только placeholder', async ({ page }) => {
   await page.goto('/providers');

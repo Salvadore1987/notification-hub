@@ -20,14 +20,21 @@
     "administration": "Administratsiya"
   },
   "auth": {
+    "title": "Panelga kirish",
+    "username": "Foydalanuvchi",
+    "password": "Parol",
+    "usernameRequired": "Foydalanuvchi nomini kiriting",
+    "passwordRequired": "Parolni kiriting",
     "signIn": "Kirish",
     "signOut": "Chiqish",
     "signingIn": "Kirilmoqda…",
-    "redirecting": "SSO sahifasiga yoʻnaltirilmoqda…",
     "forbidden": "Bu boʻlim uchun rolingiz yoʻq",
     "error": "Kirish amalga oshmadi",
     "notConfigured": "Panel sozlanmagan",
-    "notConfiguredHint": "OIDC-issuer koʻrsatilmagan: public/config.json faylida oidc.authority boʻsh. Panel har qanday konturda SSO ortida — uni oʻrnatgan mutaxassislarga murojaat qiling."
+    "notConfiguredHint": "OIDC-issuer koʻrsatilmagan: public/config.json faylida oidc.authority boʻsh. Panel har qanday konturda SSO ortida — uni oʻrnatgan mutaxassislarga murojaat qiling.",
+    "invalidCredentials": "Foydalanuvchi nomi yoki parol notoʻgʻri",
+    "sessionExpired": "Sessiya tugadi — qaytadan kiring",
+    "issuerUnavailable": "SSO-issuer mavjud emas. Konturni oʻrnatgan mutaxassislarga murojaat qiling."
   },
   "errors": {
     "request": "Soʻrov bajarilmadi",

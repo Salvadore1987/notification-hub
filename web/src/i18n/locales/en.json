@@ -20,14 +20,21 @@
     "administration": "Administration"
   },
   "auth": {
+    "title": "Sign in to the panel",
+    "username": "Username",
+    "password": "Password",
+    "usernameRequired": "Enter the username",
+    "passwordRequired": "Enter the password",
     "signIn": "Sign in",
     "signOut": "Sign out",
     "signingIn": "Signing in…",
-    "redirecting": "Redirecting to SSO…",
     "forbidden": "You have no role for this section",
     "error": "Sign-in failed",
     "notConfigured": "The panel is not configured",
-    "notConfiguredHint": "No OIDC issuer: oidc.authority in public/config.json is empty. The panel is behind SSO on every contour — ask whoever deployed it."
+    "notConfiguredHint": "No OIDC issuer: oidc.authority in public/config.json is empty. The panel is behind SSO on every contour — ask whoever deployed it.",
+    "invalidCredentials": "Wrong username or password",
+    "sessionExpired": "The session has expired — sign in again",
+    "issuerUnavailable": "The SSO issuer is unavailable. Ask whoever deployed the contour."
   },
   "errors": {
     "request": "Request failed",

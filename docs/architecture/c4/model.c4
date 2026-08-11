@@ -128,7 +128,7 @@ model {
     // ── Уровень 2: контейнеры ────────────────────────────────────────────────
 
     adminSpa = spa 'Админ-панель (SPA)' {
-      technology 'React 18, TypeScript, Vite, Ant Design 5, oidc-client-ts'
+      technology 'React 18, TypeScript, Vite, Ant Design 5'
       description '''
         Двенадцать разделов §11.2. Конфигурация развёртывания читается до первого рендера
         (public/config.json), типы API генерируются из OpenAPI админ-контракта.
@@ -398,7 +398,7 @@ model {
   analyst -[sync]-> hub.adminSpa 'Дашборд, статистика, отчёты'
   securityAuditor -[sync]-> hub.adminSpa 'Журнал аудита'
 
-  hub.adminSpa -[sync]-> sso 'Вход Code + PKCE, тихое продление' {
+  hub.adminSpa -[sync]-> sso 'Вход формой панели (direct grant), тихое продление' {
     technology 'OIDC'
   }
   hub.adminSpa -[sync]-> hub.app.adminApi 'Запросы панели' {

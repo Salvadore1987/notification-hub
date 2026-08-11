@@ -20,14 +20,21 @@
     "administration": "Администрирование"
   },
   "auth": {
+    "title": "Вход в панель",
+    "username": "Пользователь",
+    "password": "Пароль",
+    "usernameRequired": "Укажите имя пользователя",
+    "passwordRequired": "Укажите пароль",
     "signIn": "Войти",
     "signOut": "Выйти",
     "signingIn": "Вход…",
-    "redirecting": "Перенаправление на SSO…",
     "forbidden": "У вас нет роли для этого раздела",
     "error": "Не удалось выполнить вход",
     "notConfigured": "Панель не настроена",
-    "notConfiguredHint": "Не задан OIDC-издатель: в public/config.json пустой oidc.authority. Панель за SSO на любом контуре — обратитесь к тем, кто разворачивал."
+    "notConfiguredHint": "Не задан OIDC-издатель: в public/config.json пустой oidc.authority. Панель за SSO на любом контуре — обратитесь к тем, кто разворачивал.",
+    "invalidCredentials": "Неверное имя пользователя или пароль",
+    "sessionExpired": "Сессия истекла — войдите заново",
+    "issuerUnavailable": "SSO-издатель недоступен. Обратитесь к тем, кто разворачивал контур."
   },
   "errors": {
     "request": "Запрос не выполнен",

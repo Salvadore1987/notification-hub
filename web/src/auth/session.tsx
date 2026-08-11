@@ -1,20 +1,25 @@
-import { Button, Result, Spin } from 'antd';
-import { WebStorageStateStore } from 'oidc-client-ts';
-import { useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
-import { AuthProvider, hasAuthParams, useAuth } from 'react-oidc-context';
+import { Result, Spin } from 'antd';
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { setAccessTokenProvider } from '../api/client';
 import { useAppConfig, type AppConfig } from '../config/appConfig';
-import { restoreReturnTo, signinState } from './returnTo';
+import { tokenClaims } from './jwt';
+import { LoginPage } from './LoginPage';
 import { rolesFromClaim } from './roles';
 import { makeSession, SessionContext } from './sessionContext';
+import { endSession, passwordGrant, refreshGrant, type TokenSet } from './tokenClient';
+import { clearSession, readSession, writeSession } from './tokenStore';
 
 /**
  * Панель за SSO на любом контуре (ADR-0037): открытого режима нет ни здесь, ни на backend'е, где
  * админ-цепочка безусловно требует токен, а инстанс без issuer'а не стартует. Пустой authority —
  * это не «SSO не настроено, работаем так», а ошибка конфигурации развёртывания, и панель говорит
  * об этом вместо того, чтобы пустить внутрь.
+ *
+ * <p>Что изменилось (ADR-0043): токен добывается формой входа самой панели, а не редиректом на
+ * издателя. Требование «без токена внутрь не пускают» осталось прежним — другим стал способ
+ * этот токен получить.
  */
 export function SessionProvider({ children }: PropsWithChildren) {
   const config = useAppConfig();
@@ -28,118 +33,131 @@ export function SessionProvider({ children }: PropsWithChildren) {
       />
     );
   }
-  return <OidcSession config={config}>{children}</OidcSession>;
+  return <PasswordSession config={config}>{children}</PasswordSession>;
 }
 
-function OidcSession({ config, children }: PropsWithChildren<{ config: AppConfig }>) {
-  const oidcConfig = useMemo(
-    () => ({
-      authority: config.oidc.authority,
-      client_id: config.oidc.clientId,
-      redirect_uri: `${window.location.origin}/auth/callback`,
-      post_logout_redirect_uri: window.location.origin,
-      scope: config.oidc.scope,
-      // sessionStorage, не localStorage: токен живёт со вкладкой, а не переживает её (SEC-02).
-      userStore: new WebStorageStateStore({ store: window.sessionStorage }),
-      automaticSilentRenew: true,
-      onSigninCallback: restoreReturnTo,
-    }),
-    [config],
-  );
-  return (
-    <AuthProvider {...oidcConfig}>
-      <OidcSessionInner config={config}>{children}</OidcSessionInner>
-    </AuthProvider>
-  );
-}
+/** За сколько до истечения продлевать: запас на дорогу до издателя и на расхождение часов. */
+const RENEW_SKEW_MS = 30_000;
 
-function OidcSessionInner({ config, children }: PropsWithChildren<{ config: AppConfig }>) {
-  const auth = useAuth();
+function PasswordSession({ config, children }: PropsWithChildren<{ config: AppConfig }>) {
   const { t } = useTranslation();
-  const signinAttempted = useRef(false);
+  const [tokens, setTokens] = useState<TokenSet | null>(null);
+  const [restoring, setRestoring] = useState(true);
+  const [expired, setExpired] = useState(false);
+  // Провайдер токена для API-клиента читает ref, а не состояние: он живёт дольше рендера.
+  const current = useRef<TokenSet | null>(null);
+  current.current = tokens;
 
   useEffect(() => {
-    setAccessTokenProvider(() => auth.user?.access_token ?? null);
+    setAccessTokenProvider(() => current.current?.accessToken ?? null);
     return () => setAccessTokenProvider(() => null);
-  }, [auth.user]);
+  }, []);
 
-  // Панель целиком за SSO: неаутентифицированная загрузка сразу уходит на issuer. Один раз —
-  // чтобы отказ issuer стал экраном с кнопкой, а не циклом редиректов.
+  // Перезагрузка страницы — обычное действие во время инцидента, и она не должна быть повторным
+  // вводом пароля: сессия восстанавливается из хранилища, просроченный access-токен молча
+  // обменивается на новый, пока жив refresh.
   useEffect(() => {
-    if (
-      !auth.isAuthenticated &&
-      !auth.isLoading &&
-      !auth.activeNavigator &&
-      !hasAuthParams() &&
-      !signinAttempted.current
-    ) {
-      signinAttempted.current = true;
-      void auth.signinRedirect({ state: signinState() });
+    let cancelled = false;
+    const stored = readSession();
+    if (!stored) {
+      setRestoring(false);
+      return;
     }
-  }, [auth]);
+    if (stored.expiresAt - RENEW_SKEW_MS > Date.now()) {
+      setTokens(stored);
+      setRestoring(false);
+      return;
+    }
+    if (!stored.refreshToken) {
+      clearSession();
+      setRestoring(false);
+      return;
+    }
+    refreshGrant(config.oidc, stored.refreshToken)
+      .then((next) => {
+        if (!cancelled) {
+          writeSession(next);
+          setTokens(next);
+        }
+      })
+      .catch(() => clearSession())
+      .finally(() => {
+        if (!cancelled) {
+          setRestoring(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config.oidc]);
 
-  const roles = useMemo(() => {
-    if (!auth.user) {
-      return [];
+  // Продление до истечения, а не после: иначе первый же запрос оператора отвечает 401, и он видит
+  // отказ там, где не делал ничего запрещённого. Не удалось продлить — честная форма входа
+  // с объяснением, а не тихо мёртвая сессия.
+  useEffect(() => {
+    const refreshToken = tokens?.refreshToken;
+    if (!refreshToken) {
+      return;
     }
-    const fromProfile = auth.user.profile[config.rolesClaim];
-    const claim = fromProfile ?? accessTokenClaim(auth.user.access_token, config.rolesClaim);
-    return rolesFromClaim(claim, config.groupRoles);
-  }, [auth.user, config]);
+    const timer = window.setTimeout(
+      () => {
+        refreshGrant(config.oidc, refreshToken)
+          .then((next) => {
+            writeSession(next);
+            setTokens(next);
+          })
+          .catch(() => {
+            clearSession();
+            setTokens(null);
+            setExpired(true);
+          });
+      },
+      Math.max(tokens.expiresAt - Date.now() - RENEW_SKEW_MS, 1_000),
+    );
+    return () => window.clearTimeout(timer);
+  }, [tokens, config.oidc]);
+
+  const signIn = useCallback(
+    async (username: string, password: string) => {
+      const next = await passwordGrant(config.oidc, username, password);
+      writeSession(next);
+      setExpired(false);
+      setTokens(next);
+    },
+    [config.oidc],
+  );
+
+  const signOut = useCallback(() => {
+    const refreshToken = current.current?.refreshToken;
+    clearSession();
+    setExpired(false);
+    setTokens(null);
+    if (refreshToken) {
+      void endSession(config.oidc, refreshToken);
+    }
+  }, [config.oidc]);
+
+  const claims = useMemo(() => (tokens ? tokenClaims(tokens.accessToken) : {}), [tokens]);
 
   const session = useMemo(
     () =>
       makeSession(
-        roles,
-        auth.user?.profile.preferred_username ?? auth.user?.profile.sub,
-        () => void auth.signoutRedirect(),
+        rolesFromClaim(claims[config.rolesClaim], config.groupRoles),
+        typeof claims.preferred_username === 'string'
+          ? claims.preferred_username
+          : typeof claims.sub === 'string'
+            ? claims.sub
+            : undefined,
+        signOut,
       ),
-    [roles, auth],
+    [claims, config.rolesClaim, config.groupRoles, signOut],
   );
 
-  if (auth.error) {
-    return (
-      <Result
-        status="warning"
-        title={t('auth.error')}
-        subTitle={auth.error.message}
-        extra={
-          <Button type="primary" onClick={() => void auth.signinRedirect({ state: signinState() })}>
-            {t('auth.signIn')}
-          </Button>
-        }
-      />
-    );
+  if (restoring) {
+    return <Spin fullscreen size="large" tip={t('auth.signingIn')} />;
   }
-  if (!auth.isAuthenticated) {
-    return (
-      <Spin
-        size="large"
-        style={{ display: 'block', marginTop: '20vh' }}
-        tip={t('auth.redirecting')}
-      />
-    );
+  if (!tokens) {
+    return <LoginPage onSignIn={signIn} expired={expired} />;
   }
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
-}
-
-/**
- * Профиль — это claims id-токена; Keycloak кладёт группы туда только при соответствующем mapper'е,
- * поэтому вторым источником читается payload access-токена — тот же документ, по которому роли
- * решает backend.
- */
-function accessTokenClaim(accessToken: string, claim: string): unknown {
-  try {
-    const payload = accessToken.split('.')[1];
-    const decoded = JSON.parse(
-      new TextDecoder().decode(
-        Uint8Array.from(atob(payload.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
-          c.charCodeAt(0),
-        ),
-      ),
-    ) as Record<string, unknown>;
-    return decoded[claim];
-  } catch {
-    return undefined;
-  }
 }

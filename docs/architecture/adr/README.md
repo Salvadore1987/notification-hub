@@ -73,6 +73,7 @@
 | [0030](ADR-0030-metrics-port-no-logger.md) | В прикладном слое нет логгера: всё через `MetricsPort` | OBS-01, OBS-03 |
 | [0031](ADR-0031-security-off-by-default.md) | ~~Защита выключена по умолчанию и предупреждает при старте~~ · частично заменено [0037](ADR-0037-admin-panel-always-behind-oidc.md) | SEC-01, SEC-02 |
 | [0037](ADR-0037-admin-panel-always-behind-oidc.md) | Админ-панель за OIDC на любом контуре; Keycloak в локальной поставке, mTLS удалён | SEC-02, SEC-03, §10.1 |
+| [0043](ADR-0043-panel-login-form.md) | Форма входа в самой панели: direct access grant вместо редиректа на издателя | SEC-02, UI-02, §11.2 |
 | [0032](ADR-0032-health-groups.md) | Health-группы неравны: liveness не знает ничего внешнего | NF-05 |
 | [0034](ADR-0034-testing-strategy.md) | Тесты разделены по вопросу, на который отвечают | QA-01…QA-08 |
 | [0035](ADR-0035-campaigns-out-of-scope.md) | Кампании без списка получателей вне объёма; в ядре остаётся порт | FR-8.11 |
