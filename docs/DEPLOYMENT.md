@@ -41,7 +41,7 @@ SQL-пакета в поставке нет.
 ### 3.1. Инфраструктура
 
 ```bash
-docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak, WireMock, GreenMail
+docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Kafka UI, Keycloak, WireMock, GreenMail
 ```
 
 | Сервис | Адрес | Учётные данные |
@@ -49,6 +49,7 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak
 | PostgreSQL | `localhost:5432/commhub` | `commhub` / `commhub` |
 | Kafka | `localhost:9092` | без auth |
 | Schema Registry | `http://localhost:8081` | — |
+| Kafka UI (топики, сообщения, лаг групп) | `http://localhost:8090` | без auth |
 | Keycloak (realm `commhub`) | `http://localhost:8180` | консоль `admin` / `admin`; панель `demo` / `demo` |
 | WireMock (стабы Playmobile/SMS Gate/FCM/APNs) | `http://localhost:8089` | — |
 | GreenMail SMTP / IMAP / UI | `3025` / `3143` / `http://localhost:8085` | без auth |
@@ -56,6 +57,12 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak
 Топики Kafka создаются автоматически (`KAFKA_AUTO_CREATE_TOPICS_ENABLE=true` в compose) — до
 первой публикации в логе приложения будут одиночные предупреждения `UNKNOWN_TOPIC_OR_PARTITION`,
 это штатно.
+
+Kafka UI (`http://localhost:8090`) — то место, где локально видно топики §8.1: содержимое
+`comm.outbound.status.v1` и `comm.outbound.dlq.v1`, ошибки разбора в `comm.inbound.parse-error.v1`,
+лаг консьюмер-групп по классам трафика (TC-01) и зарегистрированные в Schema Registry субъекты.
+Оттуда же можно опубликовать сообщение в `comm.inbound.*` руками — вместо REST. Инструмент только
+для локального стенда; в контуре Банка доступ к брокеру даёт эксплуатация.
 
 Keycloak поднимается в режиме `start-dev` и импортирует `docker/keycloak/commhub-realm.json` при каждом
 запуске — тома у него нет намеренно: realm демонстрационный, и правка файла применяется рестартом

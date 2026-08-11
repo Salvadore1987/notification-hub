@@ -27,7 +27,7 @@
 ## Локальное окружение
 
 ```bash
-docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak, WireMock, GreenMail
+docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Kafka UI, Keycloak, WireMock, GreenMail
 docker compose down -v    # останов с удалением данных
 ```
 
@@ -36,6 +36,7 @@ docker compose down -v    # останов с удалением данных
 | PostgreSQL | `localhost:5432/commhub` | `commhub` / `commhub` |
 | Kafka | `localhost:9092` | без auth (локально) |
 | Schema Registry | `http://localhost:8081` | — |
+| Kafka UI (топики, сообщения, лаг групп) | `http://localhost:8090` | без auth |
 | Keycloak (realm `commhub`) | `http://localhost:8180` | консоль `admin` / `admin`; панель `demo` / `demo` |
 | WireMock (стабы провайдеров) | `http://localhost:8089` | — |
 | GreenMail SMTP / IMAP / UI | `3025` / `3143` / `http://localhost:8085` | без auth |

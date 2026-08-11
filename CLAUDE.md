@@ -45,7 +45,7 @@ Gradle wrapper 9.7.0; Java 25 toolchain (Gradle downloads JDK 25 via foojay if i
 ./gradlew :bootstrap:bootJar        # -> bootstrap/build/libs/notification-hub.jar
 ./gradlew :domain:test              # single module
 
-docker compose up -d                # PostgreSQL 5432, Kafka 9092, Schema Registry 8081,
+docker compose up -d                # PostgreSQL 5432, Kafka 9092, Schema Registry 8081, Kafka UI 8090,
                                     # Keycloak 8180 (realm commhub, demo/demo),
                                     # WireMock 8089, GreenMail 3025/3143/8085
                                     # (the email ITs start their own GreenMail on a dynamic port —

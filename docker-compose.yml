@@ -105,6 +105,25 @@ services:
     ports:
       - "8081:8081"
 
+  # Просмотр и администрирование Kafka: топики §8.1, содержимое сообщений, консьюмер-группы и их лаг,
+  # схемы из Schema Registry. Смотрит внутрь сети (kafka:9092), а не на проброшенный порт.
+  # DYNAMIC_CONFIG_ENABLED разрешает править подключение прямо в UI — это локальный стенд.
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.5.0
+    container_name: commhub-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: commhub-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      DYNAMIC_CONFIG_ENABLED: "true"
+      # Без аутентификации: стенд поднимается на ноутбуке и наружу не смотрит.
+      AUTH_TYPE: DISABLED
+    ports:
+      - "8090:8080"
+
   # Стабы провайдеров: Playmobile, SMS Gate, FCM, APNs (QA-04, PR-04)
   wiremock:
     image: wiremock/wiremock:3.13.2
