@@ -34,6 +34,35 @@ class BatchTest {
     }
 
     @Test
+    @DisplayName("FR-1.6: announcing a total and then uploading it is not two batches' worth of items")
+    void theAnnouncedTotalAndTheUploadedOneAreNotAdded() {
+        // Arrange — заголовок объявил ровно то, что за ним и приедет: так делает панель, и так
+        // вправе делать система-источник, заполнившая expectedTotal (§8.2)
+        Batch batch = newBatch(50L);
+
+        // Act
+        batch.addItems(30L);
+        batch.addItems(20L);
+
+        // Assert — иначе total = 100, processed никогда его не догонит и рассылка не закроется
+        assertThat(batch.total()).isEqualTo(50L);
+        assertThat(batch.uploaded()).isEqualTo(50L);
+    }
+
+    @Test
+    @DisplayName("FR-1.6: chunks correct a header that announced too little")
+    void uploadedItemsOutgrowAnUnderstatedAnnouncement() {
+        // Arrange
+        Batch batch = newBatch(10L);
+
+        // Act
+        batch.addItems(25L);
+
+        // Assert — объявление было оценкой, приехавшее количество её побеждает
+        assertThat(batch.total()).isEqualTo(25L);
+    }
+
+    @Test
     @DisplayName("FR-3.2: pause, resume and stop follow the batch state machine")
     void operatorControlFollowsTheStateMachine() {
         // Arrange

@@ -27,7 +27,7 @@ import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
 public class BatchPersistenceAdapter implements BatchRepository {
 
     private static final String SELECT = """
-            SELECT id, stream_id, channel, status, total, processed, sent, delivered, failed,
+            SELECT id, stream_id, channel, status, total, uploaded, processed, sent, delivered, failed,
                    cost_estimate, cost_currency, timing, traffic_class, test,
                    template_code, template_locale, template_variables, created_at
             FROM batch
@@ -71,15 +71,16 @@ public class BatchPersistenceAdapter implements BatchRepository {
             """;
 
     private static final String UPSERT = """
-            INSERT INTO batch (id, stream_id, channel, status, total, processed, sent, delivered, failed,
+            INSERT INTO batch (id, stream_id, channel, status, total, uploaded, processed, sent, delivered, failed,
                                cost_estimate, cost_currency, timing, traffic_class, test,
                                template_code, template_locale, template_variables, created_at)
-            VALUES (:id, :streamId, :channel, :status, :total, :processed, :sent, :delivered, :failed,
+            VALUES (:id, :streamId, :channel, :status, :total, :uploaded, :processed, :sent, :delivered, :failed,
                     :costEstimate, :costCurrency, CAST(:timing AS jsonb), :trafficClass, :test,
                     :templateCode, :templateLocale, CAST(:templateVariables AS jsonb), :createdAt)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 total = EXCLUDED.total,
+                uploaded = EXCLUDED.uploaded,
                 processed = EXCLUDED.processed,
                 sent = EXCLUDED.sent,
                 delivered = EXCLUDED.delivered,
@@ -115,6 +116,7 @@ public class BatchPersistenceAdapter implements BatchRepository {
                 .param("channel", batch.channel().name())
                 .param("status", batch.status().name())
                 .param("total", batch.progress().total())
+                .param("uploaded", batch.uploaded())
                 .param("processed", batch.progress().processed())
                 .param("sent", batch.progress().sent())
                 .param("delivered", batch.progress().delivered())
@@ -239,6 +241,7 @@ public class BatchPersistenceAdapter implements BatchRepository {
                         SqlValues.instant(rs, "created_at"))
                 .status(SqlValues.enumValue(rs, "status", BatchStatus.class))
                 .progress(rs.getLong("total"), rs.getLong("processed"), rs.getLong("sent"), rs.getLong("delivered"))
+                .uploaded(rs.getLong("uploaded"))
                 .failed(rs.getLong("failed"))
                 .costEstimate(SqlValues.money(rs, "cost_estimate", "cost_currency"))
                 .itemDefaults(itemDefaults(rs))

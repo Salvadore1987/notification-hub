@@ -222,7 +222,10 @@ class AcceptanceScenariosIT {
         //
         // processed остаётся нулём намеренно: SMS на SENT_TO_PROVIDER ещё в полёте — провайдер о
         // доставке не отчитался, и терминальной она не является (в отличие от push, PU-12).
+        // total равен пяти, а не десяти: заголовок объявил пять и чанк привёз те же пять —
+        // складывать их значило бы, что processed никогда не догонит total и рассылка не закроется
         await().atMost(TIMEOUT).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> assertThat(progressOf(batchId))
+                .containsEntry("total", 5)
                 .containsEntry("sent", 5)
                 .containsEntry("processed", 0)
                 .containsEntry("failed", 0));

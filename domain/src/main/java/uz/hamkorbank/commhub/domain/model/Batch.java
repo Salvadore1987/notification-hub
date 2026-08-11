@@ -16,6 +16,13 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  *
  * <p>Visible from the moment its header is accepted; items may still arrive in chunks, which is why
  * {@link #addItems(long)} can grow the total after acceptance (FR-1.6).
+ *
+ * <p><b>The announced total and the uploaded one are alternatives, not addends.</b> A header may
+ * announce how many items are coming — that is what draws the progress bar while the chunks are still
+ * arriving — and the chunks then say how many actually arrived; the total is the larger of the two.
+ * Adding them was a defect: a caller that both announced and uploaded (the panel does exactly that,
+ * and so does any source system that fills {@code expectedTotal}) doubled its own total, and a batch
+ * whose {@code processed} can never reach that total never closes.
  */
 public final class Batch extends AggregateRoot<BatchId> {
 
@@ -27,6 +34,7 @@ public final class Batch extends AggregateRoot<BatchId> {
     private BatchStatus status;
     private ItemDefaults itemDefaults = ItemDefaults.none();
     private long total;
+    private long uploaded;
     private long processed;
     private long sent;
     private long delivered;
@@ -52,6 +60,7 @@ public final class Batch extends AggregateRoot<BatchId> {
                 source.timing,
                 source.createdAt);
         this.status = Guard.notNull(source.status, "Batch.status");
+        this.uploaded = Guard.notNegative(source.uploaded, "Batch.uploaded");
         this.processed = Guard.notNegative(source.processed, "Batch.processed");
         this.sent = Guard.notNegative(source.sent, "Batch.sent");
         this.delivered = Guard.notNegative(source.delivered, "Batch.delivered");
@@ -123,11 +132,18 @@ public final class Batch extends AggregateRoot<BatchId> {
         }
     }
 
-    /** Registers another chunk of uploaded items (FR-1.6). */
+    /**
+     * Registers another chunk of uploaded items (FR-1.6).
+     *
+     * <p>The total is the larger of what the header announced and what has actually been uploaded, so
+     * a header that announced the right number stays right, one that announced nothing catches up with
+     * the chunks, and one that announced too little is corrected by them.
+     */
     public void addItems(long itemCount) {
         Guard.notNegative(itemCount, "itemCount");
         Guard.isTrue(!status.isTerminal(), "cannot add items to a batch in status " + status);
-        this.total += itemCount;
+        this.uploaded += itemCount;
+        this.total = Math.max(this.total, this.uploaded);
     }
 
     public void startProcessing() {
@@ -247,6 +263,11 @@ public final class Batch extends AggregateRoot<BatchId> {
         return total;
     }
 
+    /** Items uploaded in chunks; persisted so the next chunk can be measured against the announcement. */
+    public long uploaded() {
+        return uploaded;
+    }
+
     public Optional<Money> costEstimate() {
         return Optional.ofNullable(costEstimate);
     }
@@ -274,6 +295,7 @@ public final class Batch extends AggregateRoot<BatchId> {
 
         private BatchStatus status = BatchStatus.ACCEPTED;
         private long total;
+        private long uploaded;
         private long processed;
         private long sent;
         private long delivered;
@@ -305,6 +327,18 @@ public final class Batch extends AggregateRoot<BatchId> {
 
         public Rehydration failed(long failedItems) {
             this.failed = failedItems;
+            return this;
+        }
+
+        /**
+         * Items uploaded in chunks so far, which the announced total is measured against.
+         *
+         * <p>Its own method rather than a sixth parameter of {@link #progress}: that one is already at
+         * the limit, and this is not a progress counter — nothing shows it, it only decides whether the
+         * next chunk grows the total.
+         */
+        public Rehydration uploaded(long uploadedItems) {
+            this.uploaded = uploadedItems;
             return this;
         }
 

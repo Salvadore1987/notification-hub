@@ -100,7 +100,9 @@ class BatchLifecycleTest {
         // Assert
         assertThat(result.accepted()).isEqualTo(2L);
         assertThat(result.rejected()).isZero();
-        assertThat(batch.total()).isEqualTo(12L);
+        // Заголовок объявил 10, приехало 2 — рассылка остаётся десятью, а не становится двенадцатью:
+        // объявленное и загруженное — не слагаемые (FR-1.6)
+        assertThat(batch.total()).isEqualTo(10L);
         assertThat(batch.status()).isEqualTo(BatchStatus.PROCESSING);
         verify(submitMessage, org.mockito.Mockito.times(2)).submit(any());
     }
