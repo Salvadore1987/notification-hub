@@ -102,7 +102,7 @@ public class TemplateAdminController {
 
     /** {@code GET /api/admin/v1/templates} — the catalogue page, without bodies (FR-4.1, UI-03). */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize(AdminAuthority.TEMPLATE_MANAGER)
+    @PreAuthorize(AdminAuthority.TEMPLATE_CATALOGUE_READER)
     public PageResponse<TemplateSummaryResponse> list(
             @RequestParam(required = false) String channel,
             @RequestParam(required = false) String direction,

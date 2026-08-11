@@ -90,6 +90,29 @@ class AdminSecurityIT {
     }
 
     @Test
+    @DisplayName("ADR-0038: an operator reads the reference lists the send form needs, and nothing more")
+    void letsTheOperatorReadTheReferenceLists() {
+        // Arrange — форма отправки принадлежит оператору, а поток и шаблон в ней выбираются из списка
+
+        // Act + Assert — списки открыты
+        status(AdminApi.STREAMS, KeycloakTokens.of("operator")).isEqualTo(HttpStatus.OK);
+        status(AdminApi.TEMPLATES, KeycloakTokens.of("operator")).isEqualTo(HttpStatus.OK);
+
+        // Act + Assert — а конфигурация и тексты версий по-прежнему закрыты
+        status(AdminApi.PROVIDERS, KeycloakTokens.of("operator")).isEqualTo(HttpStatus.FORBIDDEN);
+        status(AdminApi.ROUTING + "/policies", KeycloakTokens.of("operator")).isEqualTo(HttpStatus.FORBIDDEN);
+        status(AdminApi.TEMPLATES + "/OTP_LOGIN", KeycloakTokens.of("operator")).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("FR-4.5: the template manager reads the provider list, and still cannot edit a profile")
+    void letsTheTemplateManagerReadProviders() {
+        // Act + Assert — список нужен, чтобы регистрацию шаблона у провайдера выбирали из него
+        status(AdminApi.PROVIDERS, KeycloakTokens.of("template-manager")).isEqualTo(HttpStatus.OK);
+        status(AdminApi.STREAMS, KeycloakTokens.of("template-manager")).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
     @DisplayName("SEC-08: the journal is the auditor's and the administrator's, and nobody else's")
     void keepsTheAuditJournalToItsRoles() {
         // Act + Assert

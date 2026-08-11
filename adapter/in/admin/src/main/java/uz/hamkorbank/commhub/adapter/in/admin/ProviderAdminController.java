@@ -74,7 +74,7 @@ public class ProviderAdminController {
 
     /** {@code GET /api/admin/v1/providers} — every provider with its live state (§11.2, FR-6.3). */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize(AdminAuthority.ADMIN)
+    @PreAuthorize(AdminAuthority.PROVIDER_READER)
     public List<ProviderResponse> list() {
         return configuration.providers().stream().map(viewMapper::toProvider).toList();
     }
