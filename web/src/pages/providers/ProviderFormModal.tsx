@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { components } from '../../api/generated/admin-schema';
+import { identifierRule } from '../../shared/identifiers';
 import { CHANNELS, enumOptions } from '../../shared/labels';
 import { AdapterTypeSelect } from './AdapterTypeSelect';
 
@@ -90,11 +91,14 @@ export function ProviderFormModal({
         <Form.Item
           name="code"
           label={t('providers.code')}
-          rules={initial ? [] : [{ required: true }]}
-
+          rules={
+            initial
+              ? []
+              : [{ required: true }, identifierRule('providerCode', t('providers.codeFormat'))]
+          }
           tooltip={t('providers.codeHint')}
         >
-          <Input disabled={initial !== null} />
+          <Input disabled={initial !== null} placeholder="PLAYMOBILE" />
         </Form.Item>
         <Form.Item
           name="channel"

@@ -510,10 +510,7 @@ paths:
       summary: Зарегистрировать профиль провайдера
       description: ADMIN (FR-2.1). `credentialsRef` — ссылка в секрет-хранилище, не сам секрет (SEC-04).
       parameters:
-        - name: code
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/ProviderProfileCodePath'
       requestBody:
         required: true
         content:
@@ -879,6 +876,9 @@ paths:
         TEMPLATE_MANAGER (FR-4.1, FR-4.2). Публикация требует второго человека, и это проверяет
         use case, а не экран. Публикация v2 архивирует v1: у локали ровно одна отправляемая
         версия.
+        Порядок статусов — `DRAFT → ON_REVIEW → PUBLISHED → ARCHIVED`; отдельного «отклонена» нет,
+        отказ ревьюера — это возврат версии в `DRAFT`. Переход, которого нет в
+        `TemplateStatus.allowedTransitions()`, отклоняется как 409.
       parameters:
         - $ref: '#/components/parameters/TemplateCodePath'
         - name: locale
@@ -892,7 +892,7 @@ paths:
         - name: status
           in: path
           required: true
-          schema: { type: string, enum: [DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED, REJECTED] }
+          schema: { $ref: '#/components/schemas/TemplateVersionStatus' }
       responses:
         '200':
           description: Версия в новом состоянии
@@ -1400,7 +1400,10 @@ components:
       name: streamId
       in: path
       required: true
-      schema: { type: string }
+      description: |
+        Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+        (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+      schema: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{1,63}$' }
     ChannelPath:
       name: channel
       in: path
@@ -1415,17 +1418,31 @@ components:
       name: providerCode
       in: path
       required: true
-      schema: { type: string }
+      description: Код профиля провайдера; формат — как у `ProviderProfileCodePath`
+      schema: { type: string, pattern: '^[A-Z0-9][A-Z0-9_]{1,31}$' }
     PolicyIdPath:
       name: policyId
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ProviderProfileCodePath:
+      name: code
+      in: path
+      required: true
+      description: |
+        Код профиля провайдера: **заглавные** латинские буквы, цифры и `_`, 2–32 символа
+        (`PLAYMOBILE`, `SMS_GATE`). Не путать с типом адаптера (`playmobile-http`), который
+        выбирается из списка и пишется строчными.
+      schema: { type: string, pattern: '^[A-Z0-9][A-Z0-9_]{1,31}$' }
+
     TemplateCodePath:
       name: code
       in: path
       required: true
-      schema: { type: string }
+      description: |
+        Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+        (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+      schema: { type: string, pattern: '^[A-Z0-9][A-Z0-9._-]{1,63}$' }
     ParameterKeyPath:
       name: key
       in: path
@@ -1504,7 +1521,8 @@ components:
 
     SuppressionReason:
       type: string
-      enum: [OPT_OUT, COMPLAINT, HARD_BOUNCE, INVALID_ADDRESS, BLACKLISTED, MANUAL]
+      enum: [OPT_OUT, COMPLAINT, HARD_BOUNCE, DELIVERY_FAILURES, PROVIDER_BLACKLIST,
+             PUSH_TOKEN_INVALID, MANUAL]
 
     Money:
       type: string
@@ -1976,6 +1994,15 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ContentLocale' }
 
+    TemplateVersionStatus:
+      type: string
+      description: |
+        Жизненный цикл версии (FR-4.1). Отправляема только `PUBLISHED`. Отдельного «отклонена» нет:
+        отказ ревьюера возвращает версию в `DRAFT`. Не путать со статусом карточки
+        (`Template.catalogStatus` — `ACTIVE`/`ARCHIVED`), который говорит лишь о том, остаётся ли
+        шаблон в каталоге.
+      enum: [DRAFT, ON_REVIEW, PUBLISHED, ARCHIVED]
+
     TemplateVersion:
       type: object
       properties:
@@ -1983,7 +2010,7 @@ components:
         version: { type: integer }
         locale: { $ref: '#/components/schemas/ContentLocale' }
         body: { $ref: '#/components/schemas/TemplateBody' }
-        status: { type: string, enum: [DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED, REJECTED] }
+        status: { $ref: '#/components/schemas/TemplateVersionStatus' }
         variables:
           type: array
           items: { type: string }

@@ -19,6 +19,7 @@ import type { components } from '../../api/generated/admin-schema';
 import { ServerTable, type PageQuery } from '../../shared/components/ServerTable';
 import { readFileText } from '../../shared/download';
 import { describeError } from '../../shared/errors';
+import { identifierRule } from '../../shared/identifiers';
 import { CHANNELS, enumOptions, type Channel } from '../../shared/labels';
 
 type TemplateSummary = components['schemas']['TemplateSummary'];
@@ -174,7 +175,10 @@ export function TemplatesPage() {
           <Form.Item
             name="code"
             label={t('templates.code')}
-            rules={[{ required: true }]}
+            rules={[
+              { required: true },
+              identifierRule('templateCode', t('templates.codeFormat')),
+            ]}
             tooltip={t('templates.newCodeHint')}
           >
             <Input placeholder="OTP_LOGIN" />

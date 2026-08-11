@@ -552,6 +552,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -583,6 +587,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -633,6 +641,10 @@ export interface paths {
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -678,6 +690,10 @@ export interface paths {
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -942,7 +958,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    code: string;
+                    /**
+                     * @description Код профиля провайдера: **заглавные** латинские буквы, цифры и `_`, 2–32 символа
+                     *     (`PLAYMOBILE`, `SMS_GATE`). Не путать с типом адаптера (`playmobile-http`), который
+                     *     выбирается из списка и пишется строчными.
+                     */
+                    code: components["parameters"]["ProviderProfileCodePath"];
                 };
                 cookie?: never;
             };
@@ -1483,6 +1504,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1510,6 +1535,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1541,6 +1570,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1576,6 +1609,10 @@ export interface paths {
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1620,6 +1657,10 @@ export interface paths {
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1663,6 +1704,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1706,16 +1751,23 @@ export interface paths {
          * @description TEMPLATE_MANAGER (FR-4.1, FR-4.2). Публикация требует второго человека, и это проверяет
          *     use case, а не экран. Публикация v2 архивирует v1: у локали ровно одна отправляемая
          *     версия.
+         *     Порядок статусов — `DRAFT → ON_REVIEW → PUBLISHED → ARCHIVED`; отдельного «отклонена» нет,
+         *     отказ ревьюера — это возврат версии в `DRAFT`. Переход, которого нет в
+         *     `TemplateStatus.allowedTransitions()`, отклоняется как 409.
          */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                     locale: components["schemas"]["ContentLocale"];
                     version: number;
-                    status: "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
+                    status: components["schemas"]["TemplateVersionStatus"];
                 };
                 cookie?: never;
             };
@@ -1760,6 +1812,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1805,7 +1861,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
+                    /** @description Код профиля провайдера; формат — как у `ProviderProfileCodePath` */
                     providerCode: components["parameters"]["ProviderCodePath"];
                 };
                 cookie?: never;
@@ -1838,7 +1899,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
+                    /** @description Код профиля провайдера; формат — как у `ProviderProfileCodePath` */
                     providerCode: components["parameters"]["ProviderCodePath"];
                 };
                 cookie?: never;
@@ -2671,7 +2737,7 @@ export interface components {
         /** @enum {string} */
         RejectionReason: "VALIDATION_FAILED" | "DUPLICATE_SUBMISSION" | "SUPPRESSED" | "OPT_OUT" | "QUIET_HOURS" | "FREQUENCY_CAPPED" | "QUOTA_EXCEEDED" | "STREAM_SUSPENDED" | "TEMPLATE_NOT_PUBLISHED" | "TEMPLATE_VARIABLE_MISSING" | "NO_ROUTE_AVAILABLE" | "PAN_DETECTED" | "TTL_EXPIRED" | "SEND_STOPPED" | "KILL_SWITCH" | "PROVIDER_REJECTED" | "ATTEMPTS_EXHAUSTED";
         /** @enum {string} */
-        SuppressionReason: "OPT_OUT" | "COMPLAINT" | "HARD_BOUNCE" | "INVALID_ADDRESS" | "BLACKLISTED" | "MANUAL";
+        SuppressionReason: "OPT_OUT" | "COMPLAINT" | "HARD_BOUNCE" | "DELIVERY_FAILURES" | "PROVIDER_BLACKLIST" | "PUSH_TOKEN_INVALID" | "MANUAL";
         /** @description Сумма с кодом валюты, например `12.5000 UZS` */
         Money: string;
         Quota: {
@@ -3112,14 +3178,21 @@ export interface components {
             catalogStatus?: "ACTIVE" | "ARCHIVED";
             publishedLocales?: components["schemas"]["ContentLocale"][];
         };
+        /**
+         * @description Жизненный цикл версии (FR-4.1). Отправляема только `PUBLISHED`. Отдельного «отклонена» нет:
+         *     отказ ревьюера возвращает версию в `DRAFT`. Не путать со статусом карточки
+         *     (`Template.catalogStatus` — `ACTIVE`/`ARCHIVED`), который говорит лишь о том, остаётся ли
+         *     шаблон в каталоге.
+         * @enum {string}
+         */
+        TemplateVersionStatus: "DRAFT" | "ON_REVIEW" | "PUBLISHED" | "ARCHIVED";
         TemplateVersion: {
             /** Format: uuid */
             versionId?: string;
             version?: number;
             locale?: components["schemas"]["ContentLocale"];
             body?: components["schemas"]["TemplateBody"];
-            /** @enum {string} */
-            status?: "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
+            status?: components["schemas"]["TemplateVersionStatus"];
             variables?: string[];
             review?: {
                 createdBy?: string;
@@ -3371,11 +3444,26 @@ export interface components {
         /** @description Разрез отчёта */
         Dimension: "CHANNEL" | "PROVIDER" | "STREAM" | "BATCH" | "DAY" | "HOUR";
         BatchId: string;
+        /**
+         * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+         *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+         */
         StreamIdPath: string;
         ChannelPath: components["schemas"]["Channel"];
         ProviderIdPath: string;
+        /** @description Код профиля провайдера; формат — как у `ProviderProfileCodePath` */
         ProviderCodePath: string;
         PolicyIdPath: string;
+        /**
+         * @description Код профиля провайдера: **заглавные** латинские буквы, цифры и `_`, 2–32 символа
+         *     (`PLAYMOBILE`, `SMS_GATE`). Не путать с типом адаптера (`playmobile-http`), который
+         *     выбирается из списка и пишется строчными.
+         */
+        ProviderProfileCodePath: string;
+        /**
+         * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+         *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+         */
         TemplateCodePath: string;
         ParameterKeyPath: string;
         /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */

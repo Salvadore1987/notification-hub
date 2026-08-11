@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { components } from '../../api/generated/admin-schema';
+import { identifierRule } from '../../shared/identifiers';
 import { ProviderSelect } from '../providers/ProviderSelect';
 import {
   BALANCING_STRATEGIES,
@@ -77,12 +78,15 @@ export function StreamFormModal({
       <Form form={form} layout="vertical">
         <Form.Item
           name="streamId"
-          label={t('batches.streamId')}
-          rules={initial ? [] : [{ required: true }]}
-
+          label={t('streams.streamId')}
+          rules={
+            initial
+              ? []
+              : [{ required: true }, identifierRule('streamId', t('streams.streamIdFormat'))]
+          }
           tooltip={t('streams.streamIdHint')}
         >
-          <Input disabled={initial !== null} />
+          <Input disabled={initial !== null} placeholder="mobile-app" />
         </Form.Item>
         <Form.Item
           name="name"

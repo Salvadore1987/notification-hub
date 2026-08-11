@@ -64,7 +64,7 @@ describe('tag colors', () => {
     expect(healthColor('DOWN')).toBe('red');
     expect(healthColor('DEGRADED')).toBe('orange');
     expect(versionStatusColor('PUBLISHED')).toBe('green');
-    expect(versionStatusColor('IN_REVIEW')).toBe('orange');
+    expect(versionStatusColor('ON_REVIEW')).toBe('orange');
   });
 });
 

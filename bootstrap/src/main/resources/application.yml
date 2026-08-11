@@ -304,7 +304,7 @@ commhub:
 
     # Playmobile SMS-Broker — основной провайдер SMS (§9.1, §18.1).
     playmobile:
-      enabled: ${PLAYMOBILE_ENABLED:false}
+      enabled: ${PLAYMOBILE_ENABLED:true}
       provider-code: ${PLAYMOBILE_PROVIDER_CODE:PLAYMOBILE}
       credentials:
         username-ref: ${PLAYMOBILE_USERNAME_REF:env:PLAYMOBILE_USERNAME}
@@ -330,7 +330,7 @@ commhub:
 
     # SMS Gate v4.3 — резервный провайдер SMS (§9.2, §18.2).
     smsgate:
-      enabled: ${SMSGATE_ENABLED:false}
+      enabled: ${SMSGATE_ENABLED:true}
       provider-code: ${SMSGATE_PROVIDER_CODE:SMSGATE}
       credentials:
         login-ref: ${SMSGATE_LOGIN_REF:env:SMSGATE_LOGIN}

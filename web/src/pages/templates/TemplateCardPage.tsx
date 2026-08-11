@@ -13,6 +13,7 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +21,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { api } from '../../api/client';
 import type { components } from '../../api/generated/admin-schema';
+import { useSession } from '../../auth/sessionContext';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
 import { reasonHeader } from '../../shared/reason';
@@ -52,18 +54,25 @@ interface MappingForm {
   approved?: boolean;
 }
 
-/** Переходы workflow FR-4.2, какие осмысленны из какого статуса; право решает use case. */
+/**
+ * Переходы workflow FR-4.2, какие осмысленны из какого статуса; право решает use case.
+ *
+ * Словарь — доменный (`TemplateStatus`): отдельного «отклонена» нет, отказ ревьюера возвращает
+ * версию в `DRAFT` — эта кнопка и подписана «Отклонить». Домен разрешает ещё `DRAFT → ARCHIVED`,
+ * но кнопки здесь нет: `ARCHIVED` терминален, и необратимый клик рядом с «На ревью» дороже,
+ * чем невозможность выбросить черновик одним нажатием.
+ */
 const NEXT_STATES: Record<VersionStatus, VersionStatus[]> = {
-  DRAFT: ['IN_REVIEW'],
-  IN_REVIEW: ['PUBLISHED', 'REJECTED', 'DRAFT'],
+  DRAFT: ['ON_REVIEW'],
+  ON_REVIEW: ['PUBLISHED', 'DRAFT', 'ARCHIVED'],
   PUBLISHED: ['ARCHIVED'],
   ARCHIVED: [],
-  REJECTED: ['DRAFT'],
 };
 
 export function TemplateCardPage() {
   const { t } = useTranslation();
   const { message } = AntdApp.useApp();
+  const { userName } = useSession();
   const { code = '' } = useParams();
   const navigate = useNavigate();
   const { reasonModal, askReason } = useReasonPrompt();
@@ -171,6 +180,17 @@ export function TemplateCardPage() {
       failing(e);
     }
   };
+
+  /**
+   * Автор версии — это текущий пользователь, и публиковать её ему нельзя (FR-4.2).
+   *
+   * Проверка до запроса, а не по ответу: домен всё равно откажет, но кнопка, которую нельзя нажать,
+   * объясняет правило, а тост с английским текстом домена — нет. Настоящее решение остаётся за
+   * backend'ом — здесь только видно, почему оно будет таким. Имена сравниваются без учёта регистра,
+   * как в `TemplateVersion.publish`; оба берутся из `preferred_username`.
+   */
+  const isOwnVersion = (version: TemplateVersion) =>
+    !!userName && version.review?.createdBy?.toLowerCase() === userName.toLowerCase();
 
   const transition = async (version: TemplateVersion, status: VersionStatus) => {
     try {
@@ -299,7 +319,9 @@ export function TemplateCardPage() {
                 { title: t('templates.locale'), dataIndex: 'locale', width: 80 },
                 { title: t('templates.version'), dataIndex: 'version', width: 80 },
                 {
-                  title: t('batches.status'),
+                  // Не batches.status: рядом на этом же экране есть «Статус карточки», и два
+                  // «Статуса» с разными словарями — источник вопроса «как перевести DRAFT в ACTIVE».
+                  title: t('templates.versionStatus'),
                   width: 130,
                   render: (_, row) => (
                     <Tag color={versionStatusColor(row.status)}>{row.status}</Tag>
@@ -338,16 +360,27 @@ export function TemplateCardPage() {
                           {t('common.edit')}
                         </Button>
                       )}
-                      {(row.status ? NEXT_STATES[row.status] : []).map((next) => (
-                        <Button
+                      {(row.status ? (NEXT_STATES[row.status] ?? []) : []).map((next) => (
+                        <Tooltip
                           key={next}
-                          size="small"
-                          type={next === 'PUBLISHED' ? 'primary' : 'default'}
-                          danger={next === 'REJECTED'}
-                          onClick={() => void transition(row, next)}
+                          title={
+                            next === 'PUBLISHED' && isOwnVersion(row)
+                              ? t('templates.ownVersionHint')
+                              : undefined
+                          }
                         >
-                          {t(`templates.transition.${next}`)}
-                        </Button>
+                          <Button
+                            size="small"
+                            type={next === 'PUBLISHED' ? 'primary' : 'default'}
+                            // Отказ ревьюера в домене — это возврат в DRAFT; кнопка красная потому,
+                            // что для автора она означает «переделывать».
+                            danger={next === 'DRAFT'}
+                            disabled={next === 'PUBLISHED' && isOwnVersion(row)}
+                            onClick={() => void transition(row, next)}
+                          >
+                            {t(`templates.transition.${next}`)}
+                          </Button>
+                        </Tooltip>
                       ))}
                     </Space>
                   ),

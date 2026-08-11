@@ -41,8 +41,9 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
  * fail this test until it has an adapter.
  *
  * <p>The channel ports of {@code port.out.provider} are deliberately outside that count: they exist once
- * per enabled provider, and this context enables none. {@link ProviderAdaptersContextIT} is where they
- * are checked, with every adapter of §9 switched on.
+ * per enabled provider, and what this context enables is whatever the deployment defaults do — the two
+ * SMS adapters, since {@code PLAYMOBILE_ENABLED} and {@code SMSGATE_ENABLED} default to true, and
+ * nothing else. {@link ProviderAdaptersContextIT} is where all five are checked, switched on explicitly.
  */
 @Tag("integration")
 @SpringBootTest(classes = NotificationHubApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -112,17 +113,22 @@ class ApplicationContextIT {
     }
 
     @Test
-    @DisplayName("AR-04, §11.2: with no provider enabled the panel is offered no adapter type")
+    @DisplayName("AR-04, §11.2: the panel is offered the adapter types the deployment defaults switch on")
     void deployedAdaptersFollowTheContour() {
-        // Arrange — this context enables none of the adapters of §9, mock included
+        // Arrange — the defaults of §9: both SMS providers on, email and push off until configured,
+        // and the fake provider of the local stand disabled by the property block above (ADR-0041)
         GetDeployedAdapters adapters = context.getBean(GetDeployedAdapters.class);
 
         // Act
         List<DeployedAdapterView> offered = adapters.adapters();
 
-        // Assert — the list is a statement about the deployment, not a catalogue that always answers
-        // the same; ProviderAdaptersContextIT is the same call with every adapter switched on
-        assertThat(offered).isEmpty();
+        // Assert — the answer is a statement about this deployment rather than a catalogue that always
+        // reads the same; ProviderAdaptersContextIT is the identical call with all five switched on,
+        // and the two together are what makes "depends on the contour" a checked claim
+        assertThat(offered)
+                .extracting(view ->
+                        view.adapterType().value() + "/" + view.channel().name())
+                .containsExactly("playmobile-http/SMS", "smsgate-http/SMS");
     }
 
     @Test

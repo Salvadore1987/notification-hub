@@ -195,7 +195,7 @@
     "resume": "Qabulni davom ettirish",
     "connection": "Ulanish",
     "lastActivity": "Oxirgi faollik",
-    "streamIdHint": "Manba tizimlar har bir xabarda ko‘rsatadigan identifikator. Doimiy: ro‘yxatdan o‘tgandan keyin o‘zgartirib bo‘lmaydi",
+    "streamIdHint": "Manba tizimlar har bir xabarda ko‘rsatadigan identifikator. Doimiy: ro‘yxatdan o‘tgandan keyin o‘zgartirib bo‘lmaydi. Faqat kichik lotin harflari: PlayMobile rad etiladi, playmobile — yoʻq.",
     "integrationTypeHint": "Oqim xabarlarni qaysi transport orqali yuboradi: REST, Kafka yoki ikkalasi",
     "credentialsRefHint": "Sirning o‘zi emas, unga havola: env:NOM yoki prop:kalit. Qiymatni Modul murojaat vaqtida o‘qiydi va o‘zida saqlamaydi (SEC-04)",
     "defaultChannelHint": "Manba o‘zinikini ko‘rsatmasa, shu oqim xabarlari uchun standart kanal",
@@ -215,7 +215,9 @@
     "quietZoneHint": "Oyna vaqt mintaqasi. Odatda Asia/Tashkent — oyna mijoz vaqti bo‘yicha hisoblanadi, server emas",
     "quietBehaviorHint": "DEFER — oyna tugaguncha ushlab turish, REJECT — darhol rad etish. OTP sukunat oynasiga bo‘ysunmaydi",
     "clearQuietHoursHint": "Sukunat oynasini butunlay olib tashlash. Yuqoridagi bo‘sh maydonlar oynani olib tashlamaydi — ular «o‘zgartirmaslik» degani",
-    "nameHint": "Ro‘yxatlar va hisobotlar uchun oqimning odamga tushunarli nomi. Identifikator yuqoridagi maydonda beriladi va nomdan farqli o‘laroq o‘zgarmaydi"
+    "nameHint": "Ro‘yxatlar va hisobotlar uchun oqimning odamga tushunarli nomi. Identifikator yuqoridagi maydonda beriladi va nomdan farqli o‘laroq o‘zgarmaydi",
+    "streamId": "Oqim identifikatori",
+    "streamIdFormat": "Faqat kichik lotin harflari, raqamlar, nuqta, defis va pastki chiziq, 2-64 belgi. Masalan: mobile-app"
   },
   "providers": {
     "tabProviders": "Provayderlar",
@@ -252,7 +254,7 @@
     "send": "Yuborish",
     "testSendResult": "Qabul natijasi",
     "sentTo": "Qabul qiluvchi",
-    "codeHint": "Profilning doimiy kodi: undan marshrutlash, statistika va provayder hisobotlari foydalanadi. O‘zgartirib bo‘lmaydi",
+    "codeHint": "Profilning doimiy kodi: undan marshrutlash, statistika va provayder hisobotlari foydalanadi. O‘zgartirib bo‘lmaydi. Faqat KATTA lotin harflari — oqim identifikatoridan farqli.",
     "channelHint": "Ushbu profil xizmat ko‘rsatadigan kanal. SMS provayderi pochta provayderiga aylana olmaydi",
     "weightHint": "Vaznli balanslashda trafik ulushi. Boshqa strategiyalarda ishlatilmaydi",
     "perMessageHint": "Butun xabar uchun narx. SMS uchun odatda segment narxi beriladi — u aniqroq",
@@ -264,7 +266,8 @@
     "testTextHint": "Sinov xabari matni. Bu yerda u ataylab ixtiyoriy: ifoda emas, transport tekshiriladi",
     "testStreamIdHint": "Tekshiruv qaysi oqim nomidan ketadi: uning kvotalari va filtrlari qo‘llanadi (FR-7.4)",
     "testChannelHint": "Tekshiruv qaysi kanal orqali ketadi. Xabar ko‘rsatilgan manzilga haqiqatan yetib boradi",
-    "selectPlaceholder": "Provayderni tanlang"
+    "selectPlaceholder": "Provayderni tanlang",
+    "codeFormat": "Faqat KATTA lotin harflari, raqamlar va pastki chiziq, 2-32 belgi. Masalan: PLAYMOBILE"
   },
   "routing": {
     "policies": "Marshrutlash siyosatlari",
@@ -312,6 +315,8 @@
     "direction": "Yoʻnalish",
     "owner": "Egasi",
     "catalogStatus": "Karta holati",
+    "versionStatus": "Versiya holati",
+    "ownVersionHint": "Nashrni ikkinchi shaxs oʻtkazadi: bu versiyaning muallifi sizsiz (FR-4.2)",
     "publishedLocales": "Nashr etilgan tillar",
     "versions": "Versiyalar",
     "newDraft": "Yangi qoralama",
@@ -323,10 +328,9 @@
     "mergeFields": "Merge maydonlari",
     "review": "Koʻrib chiqish",
     "transition": {
-      "IN_REVIEW": "Koʻrib chiqishga",
+      "ON_REVIEW": "Koʻrib chiqishga",
       "PUBLISHED": "Nashr etish",
-      "REJECTED": "Rad etish",
-      "DRAFT": "Qoralamaga",
+      "DRAFT": "Rad etish",
       "ARCHIVED": "Arxivlash"
     },
     "archive": "Shablonni arxivlash",
@@ -349,7 +353,7 @@
     "approved": "Tasdiqlangan",
     "removeMappingConfirm": "Provayderdagi roʻyxatga olish olib tashlansinmi?",
     "codeHint": "«Shablonlar» bo‘limidagi shablon kodi, masalan OTP_LOGIN. Matn faqat undan olinadi — bu yerdan ixtiyoriy matn yuborib bo‘lmaydi (FR-4.2)",
-    "newCodeHint": "Shablonning doimiy nomi: manba tizimlar unga shu nom bilan murojaat qiladi va u yuborilgan xabarlar tarixida qoladi. Keyin o‘zgartirib bo‘lmaydi",
+    "newCodeHint": "Shablonning doimiy nomi: manba tizimlar unga shu nom bilan murojaat qiladi va u yuborilgan xabarlar tarixida qoladi. Keyin o‘zgartirib bo‘lmaydi. Faqat KATTA lotin harflari.",
     "localeField": "Shablon tili",
     "localeFieldHint": "Shablonning til versiyasi. Aynan shu tilda chop etilgan versiya kerak, aks holda smeta rad etadi",
     "channelHint": "Shablon kanali: SMS-shablonni xat sifatida yuborib bo‘lmaydi. Keyin o‘zgartirib bo‘lmaydi",
@@ -362,7 +366,8 @@
     "providerTemplateIdHint": "Provayder tomonidagi shablon identifikatori. Provayder matnni oldindan ro‘yxatdan o‘tkazishni talab qilganda kerak (FR-4.5)",
     "approvedHint": "Provayder ro‘yxatdan o‘tishni tasdiqladi. Tasdiqlanmaguncha shu shablon bo‘yicha yuborish rad etilishi mumkin",
     "previewLocaleHint": "Qaysi til versiyasini render qilish kerak",
-    "previewVariablesHint": "Ko‘rib chiqish uchun o‘zgaruvchilar qiymatlari. To‘ldirilmaganlari {NAME} ko‘rinishida qoladi va sanab o‘tiladi — ko‘rib chiqish qat’iy emas"
+    "previewVariablesHint": "Ko‘rib chiqish uchun o‘zgaruvchilar qiymatlari. To‘ldirilmaganlari {NAME} ko‘rinishida qoladi va sanab o‘tiladi — ko‘rib chiqish qat’iy emas",
+    "codeFormat": "Faqat KATTA lotin harflari, raqamlar, nuqta, defis va pastki chiziq, 2-64 belgi. Masalan: OTP_LOGIN"
   },
   "suppressions": {
     "check": "Manzilni tekshirish (FR-5.1)",

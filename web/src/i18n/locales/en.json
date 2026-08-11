@@ -195,7 +195,7 @@
     "resume": "Resume intake",
     "connection": "Connection",
     "lastActivity": "Last activity",
-    "streamIdHint": "The identifier every submission of this source system will carry. Permanent: it cannot be changed after registration",
+    "streamIdHint": "The identifier every submission of this source system will carry. Permanent: it cannot be changed after registration. Lowercase Latin only: PlayMobile is refused, playmobile is not.",
     "integrationTypeHint": "Which transport this stream submits over: REST, Kafka or both",
     "credentialsRefHint": "A reference to the secret, never the secret: env:NAME or prop:key. The Hub resolves it on use and stores no value (SEC-04)",
     "defaultChannelHint": "Default channel for this stream's messages when the source system names none",
@@ -215,7 +215,9 @@
     "quietZoneHint": "Timezone of the window. Usually Asia/Tashkent — the window is the customer's local time, not the server's",
     "quietBehaviorHint": "DEFER holds the message until the window closes, REJECT refuses it at once. OTP does not observe quiet hours",
     "clearQuietHoursHint": "Removes the quiet-hours window altogether. Clearing the fields above does not — that means 'leave unchanged'",
-    "nameHint": "The human-readable name shown in lists and reports. The identifier is the field above and, unlike the name, never changes"
+    "nameHint": "The human-readable name shown in lists and reports. The identifier is the field above and, unlike the name, never changes",
+    "streamId": "Stream identifier",
+    "streamIdFormat": "Lowercase Latin letters, digits, dot, hyphen and underscore only, 2-64 characters. For example: mobile-app"
   },
   "providers": {
     "tabProviders": "Providers",
@@ -252,7 +254,7 @@
     "send": "Send",
     "testSendResult": "Acceptance result",
     "sentTo": "Recipient",
-    "codeHint": "The profile's permanent code: routing, statistics and the provider's own reports all use it. It cannot be changed",
+    "codeHint": "The profile's permanent code: routing, statistics and the provider's own reports all use it. It cannot be changed. UPPERCASE Latin only — unlike a stream identifier.",
     "channelHint": "The channel this profile serves. An SMS provider cannot become an email one",
     "weightHint": "Share of traffic under weighted balancing. Unused by the other strategies",
     "perMessageHint": "Price of a whole message. For SMS the per-segment price is the accurate one",
@@ -264,7 +266,8 @@
     "testTextHint": "The text of the test message. Free-form on purpose: what is being checked is the transport, not the wording",
     "testStreamIdHint": "The stream the check is made on behalf of: its quotas and filters apply (FR-7.4)",
     "testChannelHint": "Which channel the check goes out on. The message really does reach the address given",
-    "selectPlaceholder": "Pick a provider"
+    "selectPlaceholder": "Pick a provider",
+    "codeFormat": "UPPERCASE Latin letters, digits and underscore only, 2-32 characters. For example: PLAYMOBILE"
   },
   "routing": {
     "policies": "Routing policies",
@@ -312,6 +315,8 @@
     "direction": "Direction",
     "owner": "Owner",
     "catalogStatus": "Card status",
+    "versionStatus": "Version status",
+    "ownVersionHint": "Publication is done by a second person: you authored this version (FR-4.2)",
     "publishedLocales": "Published locales",
     "versions": "Versions",
     "newDraft": "New draft",
@@ -323,10 +328,9 @@
     "mergeFields": "Merge fields",
     "review": "Review",
     "transition": {
-      "IN_REVIEW": "To review",
+      "ON_REVIEW": "To review",
       "PUBLISHED": "Publish",
-      "REJECTED": "Reject",
-      "DRAFT": "Back to draft",
+      "DRAFT": "Reject",
       "ARCHIVED": "Archive"
     },
     "archive": "Archive template",
@@ -349,7 +353,7 @@
     "approved": "Approved",
     "removeMappingConfirm": "Remove the provider registration?",
     "codeHint": "The template code from «Шаблоны», e.g. OTP_LOGIN. The text comes only from it — free text cannot be sent from here (FR-4.2)",
-    "newCodeHint": "The template's permanent name: source systems refer to it by this, and it stays in the history of every message sent from it. It cannot be changed later",
+    "newCodeHint": "The template's permanent name: source systems refer to it by this, and it stays in the history of every message sent from it. It cannot be changed later. UPPERCASE Latin only.",
     "localeField": "Template language",
     "localeFieldHint": "The language variant of the template. A version published in that very language is required, or the estimate refuses",
     "channelHint": "The template's channel: an SMS template cannot go out as an email. It cannot be changed later",
@@ -362,7 +366,8 @@
     "providerTemplateIdHint": "The template's identifier on the provider's side. Needed where the provider requires the wording to be registered first (FR-4.5)",
     "approvedHint": "The provider has confirmed the registration. Until it has, a send on this template may be refused",
     "previewLocaleHint": "The language variant to render",
-    "previewVariablesHint": "Values for the preview. Unfilled ones stay visible as {NAME} and are listed — the preview is deliberately not strict"
+    "previewVariablesHint": "Values for the preview. Unfilled ones stay visible as {NAME} and are listed — the preview is deliberately not strict",
+    "codeFormat": "UPPERCASE Latin letters, digits, dot, hyphen and underscore only, 2-64 characters. For example: OTP_LOGIN"
   },
   "suppressions": {
     "check": "Address check (FR-5.1)",

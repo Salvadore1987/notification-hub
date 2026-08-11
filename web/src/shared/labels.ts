@@ -57,14 +57,18 @@ export function healthColor(health: ProviderHealth | undefined): string {
   return health ? HEALTH_COLORS[health] : 'default';
 }
 
-export type VersionStatus = 'DRAFT' | 'IN_REVIEW' | 'PUBLISHED' | 'ARCHIVED' | 'REJECTED';
+/**
+ * Статус версии шаблона — из контракта, а не своим списком: панель однажды уже разошлась с доменом
+ * («IN_REVIEW» и «REJECTED», которых нет ни в `TemplateStatus`, ни в CHECK-ограничении), и кнопка
+ * «На ревью» молча отвечала 400. Теперь расхождение — ошибка компиляции.
+ */
+export type VersionStatus = Schemas['TemplateVersionStatus'];
 
 const VERSION_STATUS_COLORS: Record<VersionStatus, string> = {
   DRAFT: 'default',
-  IN_REVIEW: 'orange',
+  ON_REVIEW: 'orange',
   PUBLISHED: 'green',
   ARCHIVED: 'default',
-  REJECTED: 'red',
 };
 
 export function versionStatusColor(status: VersionStatus | undefined): string {
@@ -101,8 +105,9 @@ export const SUPPRESSION_REASONS: readonly Schemas['SuppressionReason'][] = [
   'OPT_OUT',
   'COMPLAINT',
   'HARD_BOUNCE',
-  'INVALID_ADDRESS',
-  'BLACKLISTED',
+  'DELIVERY_FAILURES',
+  'PROVIDER_BLACKLIST',
+  'PUSH_TOKEN_INVALID',
   'MANUAL',
 ];
 
