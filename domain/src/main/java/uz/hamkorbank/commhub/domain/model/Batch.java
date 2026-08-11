@@ -5,6 +5,7 @@ import java.util.Optional;
 import uz.hamkorbank.commhub.domain.exception.InvalidStatusTransitionException;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
+import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.BatchId;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
@@ -15,6 +16,13 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  *
  * <p>Visible from the moment its header is accepted; items may still arrive in chunks, which is why
  * {@link #addItems(long)} can grow the total after acceptance (FR-1.6).
+ *
+ * <p><b>The announced total and the uploaded one are alternatives, not addends.</b> A header may
+ * announce how many items are coming — that is what draws the progress bar while the chunks are still
+ * arriving — and the chunks then say how many actually arrived; the total is the larger of the two.
+ * Adding them was a defect: a caller that both announced and uploaded (the panel does exactly that,
+ * and so does any source system that fills {@code expectedTotal}) doubled its own total, and a batch
+ * whose {@code processed} can never reach that total never closes.
  */
 public final class Batch extends AggregateRoot<BatchId> {
 
@@ -24,7 +32,9 @@ public final class Batch extends AggregateRoot<BatchId> {
     private final Instant createdAt;
 
     private BatchStatus status;
+    private ItemDefaults itemDefaults = ItemDefaults.none();
     private long total;
+    private long uploaded;
     private long processed;
     private long sent;
     private long delivered;
@@ -50,11 +60,13 @@ public final class Batch extends AggregateRoot<BatchId> {
                 source.timing,
                 source.createdAt);
         this.status = Guard.notNull(source.status, "Batch.status");
+        this.uploaded = Guard.notNegative(source.uploaded, "Batch.uploaded");
         this.processed = Guard.notNegative(source.processed, "Batch.processed");
         this.sent = Guard.notNegative(source.sent, "Batch.sent");
         this.delivered = Guard.notNegative(source.delivered, "Batch.delivered");
         this.failed = Guard.notNegative(source.failed, "Batch.failed");
         this.costEstimate = source.costEstimate;
+        this.itemDefaults = source.itemDefaults == null ? ItemDefaults.none() : source.itemDefaults;
     }
 
     /** Accepts a batch header; {@code total} may be 0 when items are uploaded afterwards (FR-1.6). */
@@ -74,11 +86,64 @@ public final class Batch extends AggregateRoot<BatchId> {
         return new Rehydration(id, streamId, channel, timing, createdAt);
     }
 
-    /** Registers another chunk of uploaded items (FR-1.6). */
+    /**
+     * Sets what the items of this batch inherit from its header (FR-1.6, FR-4.1, FR-7.4).
+     *
+     * <p>Applied once, at acceptance: the traffic class, the TEST flag and the template of a batch are
+     * part of what was accepted, and changing them afterwards would mean two halves of one batch sent
+     * under different rules.
+     */
+    public void applyItemDefaults(ItemDefaults defaults) {
+        Guard.notNull(defaults, "defaults");
+        Guard.isTrue(status == BatchStatus.ACCEPTED, "item defaults are part of the accepted header");
+        this.itemDefaults = defaults;
+    }
+
+    /** What an item takes from the batch unless it says otherwise. */
+    public ItemDefaults itemDefaults() {
+        return itemDefaults;
+    }
+
+    /**
+     * The part of a batch header its items inherit (FR-1.6).
+     *
+     * <p>Grouped rather than spread over the aggregate's fields because that is exactly how it is used:
+     * every item asks the same three questions, and the answer is either the item's own or this.
+     *
+     * @param trafficClass class of the items; {@code null} leaves the decision to the stream
+     * @param template template every item is rendered from unless it names its own (FR-4.1)
+     * @param test whether the batch is a test send, kept out of business statistics (FR-7.4)
+     */
+    public record ItemDefaults(TrafficClass trafficClass, TemplateRef template, boolean test) {
+
+        private static final ItemDefaults NONE = new ItemDefaults(null, null, false);
+
+        /** Nothing inherited: the stream decides the class and every item carries its own content. */
+        public static ItemDefaults none() {
+            return NONE;
+        }
+
+        public Optional<TrafficClass> trafficClassOptional() {
+            return Optional.ofNullable(trafficClass);
+        }
+
+        public Optional<TemplateRef> templateOptional() {
+            return Optional.ofNullable(template);
+        }
+    }
+
+    /**
+     * Registers another chunk of uploaded items (FR-1.6).
+     *
+     * <p>The total is the larger of what the header announced and what has actually been uploaded, so
+     * a header that announced the right number stays right, one that announced nothing catches up with
+     * the chunks, and one that announced too little is corrected by them.
+     */
     public void addItems(long itemCount) {
         Guard.notNegative(itemCount, "itemCount");
         Guard.isTrue(!status.isTerminal(), "cannot add items to a batch in status " + status);
-        this.total += itemCount;
+        this.uploaded += itemCount;
+        this.total = Math.max(this.total, this.uploaded);
     }
 
     public void startProcessing() {
@@ -120,6 +185,46 @@ public final class Batch extends AggregateRoot<BatchId> {
         this.failed = increase(failed, count, "failed");
     }
 
+    /**
+     * Applies a counter change computed from one message's transition (FR-3.1, FR-3.3, ADR-0040).
+     *
+     * <p>Components may be negative: a DLQ retry takes an item back out of {@code failed} and out of
+     * {@code processed}, because the message is in flight again. Counters are floored at zero here and
+     * in the SQL that persists them — the {@code CHECK} constraint would otherwise refuse the write, and
+     * a counter that went negative would be a worse lie than one that stopped at zero.
+     */
+    public void apply(Delta delta) {
+        Guard.notNull(delta, "delta");
+        this.processed = floorAtZero(processed + delta.processed());
+        this.sent = floorAtZero(sent + delta.sent());
+        this.delivered = floorAtZero(delivered + delta.delivered());
+        this.failed = floorAtZero(failed + delta.failed());
+    }
+
+    private static long floorAtZero(long value) {
+        return Math.max(0L, value);
+    }
+
+    /**
+     * How much one message's transition changes the counters of its batch (ADR-0040).
+     *
+     * <p>Computed as the difference between what the message contributed before the change and what it
+     * contributes after it, which is what makes a repeated provider report cost nothing and a DLQ retry
+     * subtract by itself, without anybody having to remember either case.
+     */
+    public record Delta(long processed, long sent, long delivered, long failed) {
+
+        private static final Delta NONE = new Delta(0, 0, 0, 0);
+
+        public static Delta none() {
+            return NONE;
+        }
+
+        public boolean isEmpty() {
+            return processed == 0 && sent == 0 && delivered == 0 && failed == 0;
+        }
+    }
+
     /** Expected cost of the batch by provider tariffs and computed segments (FR-6.2). */
     public void applyCostEstimate(Money estimate) {
         this.costEstimate = Guard.notNull(estimate, "estimate");
@@ -158,6 +263,11 @@ public final class Batch extends AggregateRoot<BatchId> {
         return total;
     }
 
+    /** Items uploaded in chunks; persisted so the next chunk can be measured against the announcement. */
+    public long uploaded() {
+        return uploaded;
+    }
+
     public Optional<Money> costEstimate() {
         return Optional.ofNullable(costEstimate);
     }
@@ -185,11 +295,13 @@ public final class Batch extends AggregateRoot<BatchId> {
 
         private BatchStatus status = BatchStatus.ACCEPTED;
         private long total;
+        private long uploaded;
         private long processed;
         private long sent;
         private long delivered;
         private long failed;
         private Money costEstimate;
+        private ItemDefaults itemDefaults = ItemDefaults.none();
 
         private Rehydration(BatchId id, StreamId streamId, Channel channel, Timing timing, Instant createdAt) {
             this.id = id;
@@ -218,8 +330,26 @@ public final class Batch extends AggregateRoot<BatchId> {
             return this;
         }
 
+        /**
+         * Items uploaded in chunks so far, which the announced total is measured against.
+         *
+         * <p>Its own method rather than a sixth parameter of {@link #progress}: that one is already at
+         * the limit, and this is not a progress counter — nothing shows it, it only decides whether the
+         * next chunk grows the total.
+         */
+        public Rehydration uploaded(long uploadedItems) {
+            this.uploaded = uploadedItems;
+            return this;
+        }
+
         public Rehydration costEstimate(Money estimate) {
             this.costEstimate = estimate;
+            return this;
+        }
+
+        /** What the items of this batch inherit from its header (FR-1.6). */
+        public Rehydration itemDefaults(ItemDefaults defaults) {
+            this.itemDefaults = defaults;
             return this;
         }
 
@@ -254,6 +384,11 @@ public final class Batch extends AggregateRoot<BatchId> {
 
         public long remaining() {
             return Math.max(0L, total - processed);
+        }
+
+        /** Whether every accepted item has been processed and the batch may be closed (FR-3.1). */
+        public boolean isComplete() {
+            return total > 0 && processed >= total;
         }
 
         /** Completion in percent, 0 for an empty batch. */

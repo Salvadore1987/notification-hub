@@ -12,6 +12,7 @@ import {
   Select,
   Space,
   Tag,
+  Tooltip,
   Upload,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
@@ -165,15 +166,27 @@ export function SuppressionsPage() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Card size="small" title={t('suppressions.check')}>
+        {/* Подписей у полей нет (inline-форма), поэтому иконка у метки не рисуется —
+            подсказка висит на самом контроле и всплывает по наведению на него. */}
         <Form form={checkForm} layout="inline" initialValues={{ channel: 'SMS' }}>
           <Form.Item name="channel" rules={[{ required: true }]}>
-            <Select options={enumOptions(CHANNELS)} style={{ width: 110 }} />
+            <Tooltip title={t('suppressions.checkChannelHint')}>
+              <Select
+                options={enumOptions(CHANNELS)}
+                aria-label={t('dashboard.channel')}
+                style={{ width: 110 }}
+              />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="address">
-            <Input placeholder={t('suppressions.address')} style={{ width: 220 }} />
+            <Tooltip title={t('suppressions.checkAddressHint')}>
+              <Input placeholder={t('suppressions.address')} style={{ width: 220 }} />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="clientId">
-            <Input placeholder={t('suppressions.clientId')} style={{ width: 160 }} />
+            <Tooltip title={t('suppressions.checkClientIdHint')}>
+              <Input placeholder={t('suppressions.clientId')} style={{ width: 160 }} />
+            </Tooltip>
           </Form.Item>
           <Button type="primary" onClick={() => void runCheck()}>
             {t('suppressions.runCheck')}
@@ -290,19 +303,40 @@ export function SuppressionsPage() {
           style={{ marginBottom: 16 }}
         />
         <Form form={addForm} layout="vertical">
-          <Form.Item name="channel" label={t('dashboard.channel')}>
+          <Form.Item
+            name="channel"
+            label={t('dashboard.channel')}
+            tooltip={t('suppressions.channelHint')}
+          >
             <Select allowClear options={enumOptions(CHANNELS)} />
           </Form.Item>
-          <Form.Item name="address" label={t('suppressions.address')}>
+          <Form.Item
+            name="address"
+            label={t('suppressions.address')}
+            tooltip={t('suppressions.addressHint')}
+          >
             <Input placeholder="998901234567 / user@example.com" />
           </Form.Item>
-          <Form.Item name="clientId" label={t('suppressions.clientId')}>
+          <Form.Item
+            name="clientId"
+            label={t('suppressions.clientId')}
+            tooltip={t('suppressions.clientIdHint')}
+          >
             <Input />
           </Form.Item>
-          <Form.Item name="reason" label={t('dlq.reason')} rules={[{ required: true }]}>
+          <Form.Item
+            name="reason"
+            label={t('dlq.reason')}
+            rules={[{ required: true }]}
+            tooltip={t('suppressions.reasonHint')}
+          >
             <Select options={enumOptions(SUPPRESSION_REASONS)} />
           </Form.Item>
-          <Form.Item name="validUntil" label={t('suppressions.validUntil')}>
+          <Form.Item
+            name="validUntil"
+            label={t('suppressions.validUntil')}
+            tooltip={t('suppressions.validUntilHint')}
+          >
             <DatePicker showTime style={{ width: '100%' }} />
           </Form.Item>
         </Form>

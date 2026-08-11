@@ -99,6 +99,27 @@ public final class CsvRecords {
         return columns;
     }
 
+    /**
+     * Column name → position with the case of the file preserved (ADR-0038).
+     *
+     * <p>{@link #header(List, List)} lower-cases, which is right when the names are a fixed vocabulary.
+     * A recipient list is the other case: every column that is not reserved is a merge variable, and
+     * {@code {NAME}} stops resolving the moment its header becomes {@code name}.
+     */
+    public static Map<String, Integer> headerAsGiven(List<String> record) {
+        Map<String, Integer> columns = new LinkedHashMap<>();
+        for (int index = 0; index < record.size(); index++) {
+            String name = record.get(index).trim();
+            if (!name.isEmpty() && name.charAt(0) == BOM) {
+                name = name.substring(1);
+            }
+            if (!name.isEmpty()) {
+                columns.putIfAbsent(name, index);
+            }
+        }
+        return columns;
+    }
+
     /** One cell, trimmed; {@code null} when the column is absent or the cell is empty. */
     public static String value(List<String> record, Map<String, Integer> columns, String column) {
         Integer index = columns.get(column);

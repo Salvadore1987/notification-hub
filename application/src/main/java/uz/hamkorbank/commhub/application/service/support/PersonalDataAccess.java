@@ -77,14 +77,12 @@ public class PersonalDataAccess {
         if (actor == null || actor.type() != ActorType.OPERATOR) {
             return;
         }
-        audit.write(new AuditEntry(
+        audit.write(AuditEntry.changed(
                 actor,
                 ACTION_SEARCH,
                 MESSAGE,
                 addressHash == null ? null : addressHash.value(),
-                null,
-                filter,
-                null,
+                AuditEntry.Change.of(null, filter),
                 clock.now()));
     }
 }

@@ -20,6 +20,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestPropertySource;
+import uz.hamkorbank.commhub.application.dto.DeployedAdapterView;
+import uz.hamkorbank.commhub.application.port.in.GetDeployedAdapters;
 import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.bootstrap.NotificationHubApplication;
 import uz.hamkorbank.commhub.support.HubTestContainers;
@@ -39,8 +41,9 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
  * fail this test until it has an adapter.
  *
  * <p>The channel ports of {@code port.out.provider} are deliberately outside that count: they exist once
- * per enabled provider, and this context enables none. {@link ProviderAdaptersContextIT} is where they
- * are checked, with every adapter of §9 switched on.
+ * per enabled provider, and what this context enables is whatever the deployment defaults do — the two
+ * SMS adapters, since {@code PLAYMOBILE_ENABLED} and {@code SMSGATE_ENABLED} default to true, and
+ * nothing else. {@link ProviderAdaptersContextIT} is where all five are checked, switched on explicitly.
  */
 @Tag("integration")
 @SpringBootTest(classes = NotificationHubApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -51,7 +54,10 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
             "commhub.outbox.relay.poll-interval-ms=3600000",
             "commhub.config.cache.refresh-interval=30s",
             "commhub.provider.health.initial-delay=1h",
-            "commhub.metrics.backlog-refresh-interval=1h"
+            "commhub.metrics.backlog-refresh-interval=1h",
+            // Фиктивный провайдер выключен явно: локальный config/application.yml включает его для
+            // стенда и читается в том числе отсюда, а проверяется здесь именно выключатель (ADR-0041).
+            "commhub.provider.mock.enabled=false"
         })
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class ApplicationContextIT {
@@ -107,6 +113,25 @@ class ApplicationContextIT {
     }
 
     @Test
+    @DisplayName("AR-04, §11.2: the panel is offered the adapter types the deployment defaults switch on")
+    void deployedAdaptersFollowTheContour() {
+        // Arrange — the defaults of §9: both SMS providers on, email and push off until configured,
+        // and the fake provider of the local stand disabled by the property block above (ADR-0041)
+        GetDeployedAdapters adapters = context.getBean(GetDeployedAdapters.class);
+
+        // Act
+        List<DeployedAdapterView> offered = adapters.adapters();
+
+        // Assert — the answer is a statement about this deployment rather than a catalogue that always
+        // reads the same; ProviderAdaptersContextIT is the identical call with all five switched on,
+        // and the two together are what makes "depends on the contour" a checked claim
+        assertThat(offered)
+                .extracting(view ->
+                        view.adapterType().value() + "/" + view.channel().name())
+                .containsExactly("playmobile-http/SMS", "smsgate-http/SMS");
+    }
+
+    @Test
     @DisplayName("AR-06: every use case of port/in is wired")
     void everyUseCaseHasAnImplementation() {
         // Arrange
@@ -135,6 +160,21 @@ class ApplicationContextIT {
         assertThat(unimplemented)
                 .as("a port without an adapter is a use case that cannot run in production")
                 .containsExactlyInAnyOrderElementsOf(UNIMPLEMENTED_BY_DESIGN);
+    }
+
+    @Test
+    @DisplayName("ADR-0041: the fake provider creates no beans where it is not switched on")
+    void mockProviderIsNotWiredWhenDisabled() {
+        // Arrange + Act — контекст поднят с commhub.provider.mock.enabled=false, как в образе,
+        // где ни этого свойства, ни файла config/application.yml вообще нет
+
+        // Assert — код мока лежит в jar, но без включения бинов не существует
+        assertThat(context.getBeanNamesForType(uz.hamkorbank.commhub.adapter.out.provider.mock.MockSmsProvider.class))
+                .as("a stand provider reachable in production would be a way to send nothing and report success")
+                .isEmpty();
+        assertThat(context.getBeanNamesForType(
+                        uz.hamkorbank.commhub.adapter.out.provider.mock.MockDeliveryReports.class))
+                .isEmpty();
     }
 
     @Test

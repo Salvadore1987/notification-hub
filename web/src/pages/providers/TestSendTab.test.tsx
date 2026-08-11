@@ -4,20 +4,34 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { initTestApi, mockApi } from '../../test/api';
 import { renderWithProviders } from '../../test/render';
+import { clearReferenceCache } from '../../shared/useReference';
 import { TestSendTab } from './TestSendTab';
 
 const ACCEPTED = { messageId: '018f-ccc', status: 'ACCEPTED' };
 
+/** Поток и провайдер теперь выбираются из справочника — его заглушки нужны каждому тесту. */
+const REFERENCE = {
+  'GET /streams': { body: [{ streamId: 'core-banking', name: 'Ядро', status: 'ACTIVE' }] },
+  'GET /providers': { body: [{ providerId: '018f-p', code: 'PLAYMOBILE', channel: 'SMS' }] },
+};
+
+/** Выбор потока из списка вместо ввода строки. */
+async function chooseStream() {
+  await userEvent.click(screen.getByLabelText('Поток'));
+  await userEvent.click(await screen.findByTitle('core-banking — Ядро'));
+}
+
 describe('TestSendTab', () => {
   beforeEach(() => {
+    clearReferenceCache();
     initTestApi();
   });
 
   it('sends the form through the ordinary pipeline endpoint (FR-7.4)', async () => {
-    const calls = mockApi({ 'POST /providers/test-send': { body: ACCEPTED } });
+    const calls = mockApi({ ...REFERENCE, 'POST /providers/test-send': { body: ACCEPTED } });
     renderWithProviders(<TestSendTab />, { roles: ['ADMIN'] });
 
-    await userEvent.type(screen.getByLabelText('Поток'), 'core-banking');
+    await chooseStream();
     await userEvent.type(screen.getByLabelText('MSISDN'), '998901234567');
     await userEvent.type(screen.getByLabelText('Текст'), 'проверка канала');
     await userEvent.click(screen.getByRole('button', { name: 'Отправить' }));
@@ -32,10 +46,10 @@ describe('TestSendTab', () => {
   });
 
   it('masks the address the operator typed in the confirmation (DB-04)', async () => {
-    mockApi({ 'POST /providers/test-send': { body: ACCEPTED } });
+    mockApi({ ...REFERENCE, 'POST /providers/test-send': { body: ACCEPTED } });
     renderWithProviders(<TestSendTab />, { roles: ['ADMIN'] });
 
-    await userEvent.type(screen.getByLabelText('Поток'), 'core-banking');
+    await chooseStream();
     await userEvent.type(screen.getByLabelText('MSISDN'), '998901234567');
     await userEvent.click(screen.getByRole('button', { name: 'Отправить' }));
 
@@ -46,7 +60,7 @@ describe('TestSendTab', () => {
   });
 
   it('asks for the address the chosen channel needs, and only that one', async () => {
-    mockApi({ 'POST /providers/test-send': { body: ACCEPTED } });
+    mockApi({ ...REFERENCE, 'POST /providers/test-send': { body: ACCEPTED } });
     renderWithProviders(<TestSendTab />, { roles: ['ADMIN'] });
 
     expect(screen.getByLabelText('MSISDN')).toBeInTheDocument();
@@ -60,7 +74,7 @@ describe('TestSendTab', () => {
   });
 
   it('does not send an incomplete form — the required fields are marked instead', async () => {
-    const calls = mockApi({ 'POST /providers/test-send': { body: ACCEPTED } });
+    const calls = mockApi({ ...REFERENCE, 'POST /providers/test-send': { body: ACCEPTED } });
     renderWithProviders(<TestSendTab />, { roles: ['ADMIN'] });
 
     await userEvent.click(screen.getByRole('button', { name: 'Отправить' }));
@@ -71,6 +85,7 @@ describe('TestSendTab', () => {
 
   it('shows the rejection of the pipeline as it came, and no result card', async () => {
     mockApi({
+      ...REFERENCE,
       'POST /providers/test-send': {
         status: 422,
         body: { detail: 'PAN_DETECTED', code: 'PAN_DETECTED' },
@@ -78,7 +93,7 @@ describe('TestSendTab', () => {
     });
     renderWithProviders(<TestSendTab />, { roles: ['ADMIN'] });
 
-    await userEvent.type(screen.getByLabelText('Поток'), 'core-banking');
+    await chooseStream();
     await userEvent.type(screen.getByLabelText('MSISDN'), '998901234567');
     await userEvent.click(screen.getByRole('button', { name: 'Отправить' }));
 

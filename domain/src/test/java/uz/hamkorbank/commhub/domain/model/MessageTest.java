@@ -154,6 +154,50 @@ class MessageTest {
     }
 
     @Test
+    @DisplayName("PU-12: a push that reached the platform is finished, and the TTL never touches it again")
+    void pushIsTerminalAtSentToProvider() {
+        // Arrange — push с TTL: платформы о доставке не сообщают, ждать нечего
+        ProviderRef fcm = new ProviderRef(
+                ProviderId.newId(), ProviderCode.of("FCM"), Channel.PUSH, AdapterType.of("fcm-http-v1"));
+        Message message = Message.accept(
+                envelope("push-1", TrafficClass.NOTIFICATION),
+                Recipient.ofPushTokens(List.of(PushToken.of("device-token-1", PushPlatform.ANDROID))),
+                ChannelPlan.explicitChannel(Channel.PUSH),
+                MessageContents.of(PushContent.of("Заголовок", "Текст")),
+                null,
+                Timing.withTtl(Duration.ofMinutes(2)),
+                NOW);
+        message.markValidated(Actor.system(), NOW);
+        message.markRouted(Channel.PUSH, fcm, Actor.system(), NOW);
+        message.markQueued(Actor.system(), NOW);
+        message.markSending(Actor.system(), NOW);
+
+        // Act
+        message.markSentToProvider("SENT", Actor.provider("FCM"), NOW.plusSeconds(1));
+
+        // Assert — иначе свип TTL пометил бы каждый доставленный push как EXPIRED и сообщил бы
+        // об этом системе-источнику (PU-12, FR-3.4)
+        assertThat(message.isTerminalForChannel()).isTrue();
+        assertThat(message.isExpiredAt(NOW.plusSeconds(600))).isFalse();
+        assertThat(message.terminalAt()).contains(NOW.plusSeconds(1));
+    }
+
+    @Test
+    @DisplayName("ST-03: an SMS at SENT_TO_PROVIDER is still in flight — the provider has yet to report")
+    void smsIsNotTerminalAtSentToProvider() {
+        // Arrange
+        Message message = routedMessage();
+        message.markSending(Actor.system(), NOW);
+
+        // Act
+        message.markSentToProvider("ACCEPTD", Actor.provider("PLAYMOBILE"), NOW.plusSeconds(1));
+
+        // Assert
+        assertThat(message.isTerminalForChannel()).isFalse();
+        assertThat(message.terminalAt()).isEmpty();
+    }
+
+    @Test
     @DisplayName("FR-3.3, ST-02: a DLQ retry reopens a FAILED message")
     void dlqRetryReopensAFailedMessage() {
         // Arrange

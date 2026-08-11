@@ -22,4 +22,21 @@ public interface BatchRepository {
 
     /** Total number of matching batches, so the screen can page. */
     long count(BatchListQuery query);
+
+    /**
+     * Applies a counter change atomically and returns the progress that resulted (FR-3.1, ADR-0040).
+     *
+     * <p>Not through {@link #save(Batch)}: that writes the counters as absolute values read a moment
+     * earlier, so two dispatch threads working on the same batch lose one of their increments. On a
+     * batch of a million items "lose one" is not one — it is percentages.
+     */
+    Batch.Progress applyProgress(BatchId batchId, Batch.Delta delta);
+
+    /**
+     * Closes a fully processed batch; a no-op unless it is still {@code PROCESSING} (FR-3.1).
+     *
+     * <p>Idempotent by the status predicate, so the message that happens to be last may try more than
+     * once without turning a stopped batch into a completed one.
+     */
+    void markCompleted(BatchId batchId);
 }

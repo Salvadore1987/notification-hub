@@ -46,6 +46,7 @@ function labelOf(key: string): string {
   const labels: Record<string, string> = {
     dashboard: 'Дашборд',
     batches: 'Рассылки',
+    send: 'Отправка',
     messages: 'Сообщения',
     dlq: 'DLQ',
     streams: 'Входящие потоки',

@@ -10,7 +10,7 @@ test.describe('Шаблоны', () => {
     await page.getByRole('cell', { name: 'OTP_LOGIN' }).click();
 
     await expect(page).toHaveURL(/\/templates\/OTP_LOGIN$/);
-    const version = page.getByRole('row', { name: /IN_REVIEW/ });
+    const version = page.getByRole('row', { name: /ON_REVIEW/ });
     await expect(version).toBeVisible();
 
     await version.getByRole('button', { name: 'Опубликовать' }).click();
@@ -24,25 +24,31 @@ test.describe('Шаблоны', () => {
   test('версии на ревью предлагается и отклонение, но не редактирование', async ({ page }) => {
     await page.goto('/templates/OTP_LOGIN');
 
-    const version = page.getByRole('row', { name: /IN_REVIEW/ });
+    const version = page.getByRole('row', { name: /ON_REVIEW/ });
     await expect(version.getByRole('button', { name: 'Отклонить' })).toBeVisible();
     await expect(version.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
   });
 
   test('отказ публикации показывается и статус не меняется', async ({ page, admin }) => {
+    // Ровно то, чем отвечает настоящий backend: Guard домена — это DomainValidationException,
+    // то есть 400 VALIDATION_FAILED с английским detail, а не 409 с русским текстом.
     admin.stub(
       'POST /templates/OTP_LOGIN/versions/RU/2/state/PUBLISHED',
-      { title: 'Conflict', detail: 'публикацию проводит второй человек', status: 409 },
-      409,
+      {
+        title: 'Validation failed',
+        detail: 'maker/checker: the author of a template version may not publish it (FR-4.2)',
+        status: 400,
+      },
+      400,
     );
     await page.goto('/templates/OTP_LOGIN');
 
     await page
-      .getByRole('row', { name: /IN_REVIEW/ })
+      .getByRole('row', { name: /ON_REVIEW/ })
       .getByRole('button', { name: 'Опубликовать' })
       .click();
 
-    await expect(page.getByText(/второй человек/)).toBeVisible();
-    await expect(page.getByRole('row', { name: /IN_REVIEW/ })).toBeVisible();
+    await expect(page.getByText(/maker\/checker/)).toBeVisible();
+    await expect(page.getByRole('row', { name: /ON_REVIEW/ })).toBeVisible();
   });
 });

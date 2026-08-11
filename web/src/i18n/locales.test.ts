@@ -43,7 +43,7 @@ function sourceFiles(dir: string): string[] {
 /** Ключи, которые собираются из шаблонной строки — их считать регуляркой нельзя, они выписаны. */
 const DYNAMIC_KEYS = [
   ...['start', 'pause', 'resume', 'stop'].map((action) => `batches.action.${action}`),
-  ...['DRAFT', 'IN_REVIEW', 'PUBLISHED', 'ARCHIVED', 'REJECTED'].map(
+  ...['DRAFT', 'ON_REVIEW', 'PUBLISHED', 'ARCHIVED'].map(
     (status) => `templates.transition.${status}`,
   ),
 ];

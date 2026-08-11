@@ -36,6 +36,12 @@ spring:
   # публикацию, а прерванная запись курсора выгрузки — повторную страницу в витрине (AD-03, FR-6.4).
   task:
     scheduling:
+      # Предел задан явно, а не унаследован: с виртуальными потоками Boot берёт
+      # SimpleAsyncTaskScheduler, без них пул по умолчанию равен одному — и девять @Scheduled
+      # выстраиваются за самым медленным. Выглядит это как «Модуль перестал отправлять»
+      # и к отправке отношения не имеет (ADR-0039).
+      simple:
+        concurrency-limit: ${SCHEDULER_CONCURRENCY:16}
       shutdown:
         await-termination: true
         await-termination-period: 20s
@@ -111,6 +117,40 @@ commhub:
       poll-interval-ms: ${OUTBOX_RELAY_POLL_INTERVAL_MS:500}
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
       max-passes-per-tick: ${OUTBOX_RELAY_MAX_PASSES:10}
+
+  # AD-04/TC-01: диспетчер отправки (ADR-0039). Свой планировщик на класс трафика — массовая
+  # рассылка не имеет права занять обороты, отведённые OTP. Строки берутся FOR UPDATE SKIP LOCKED
+  # и помечаются арендой, поэтому инстансы делят очередь, а не дублируют её.
+  #
+  # concurrency выше размера пула соединений намеренно: вызов провайдера идёт вне транзакции
+  # (сага разрезана надвое), соединение занято только на подготовке и расчёте оборота.
+  dispatch:
+    enabled: ${COMMHUB_DISPATCH_ENABLED:true}
+    # Аренда переживает оборот: покрывает самый медленный вызов провайдера и обе транзакции.
+    lease: ${COMMHUB_DISPATCH_LEASE:2m}
+    owner: ${HOSTNAME:}
+    critical-otp:
+      poll-interval: ${COMMHUB_DISPATCH_OTP_INTERVAL:200ms}
+      batch-size: ${COMMHUB_DISPATCH_OTP_BATCH:100}
+      max-passes-per-tick: 5
+      concurrency: ${COMMHUB_DISPATCH_OTP_CONCURRENCY:32}
+    transactional:
+      poll-interval: ${COMMHUB_DISPATCH_TX_INTERVAL:500ms}
+      batch-size: ${COMMHUB_DISPATCH_TX_BATCH:200}
+      max-passes-per-tick: 10
+      concurrency: ${COMMHUB_DISPATCH_TX_CONCURRENCY:32}
+    notification:
+      poll-interval: ${COMMHUB_DISPATCH_BULK_INTERVAL:1s}
+      batch-size: ${COMMHUB_DISPATCH_BULK_BATCH:500}
+      max-passes-per-tick: 20
+      concurrency: ${COMMHUB_DISPATCH_BULK_CONCURRENCY:64}
+    # FR-3.4: сообщения, чей TTL истёк, пока они ждали. Сага проверяет TTL на каждом обороте,
+    # свип ловит лишь то, до чего оборот не дошёл, — поэтому редко.
+    expiry:
+      enabled: ${COMMHUB_EXPIRY_ENABLED:true}
+      interval: ${COMMHUB_EXPIRY_INTERVAL:30s}
+      limit: ${COMMHUB_EXPIRY_LIMIT:500}
+      max-passes-per-tick: 10
 
   # SEC-01/SEC-03. Здесь НЕТ переключателя аутентификации админ-панели: она за OIDC всегда
   # (ADR-0037), издатель обязателен, инстанс без него не стартует. Ниже — только то, что вправе
@@ -264,7 +304,7 @@ commhub:
 
     # Playmobile SMS-Broker — основной провайдер SMS (§9.1, §18.1).
     playmobile:
-      enabled: ${PLAYMOBILE_ENABLED:false}
+      enabled: ${PLAYMOBILE_ENABLED:true}
       provider-code: ${PLAYMOBILE_PROVIDER_CODE:PLAYMOBILE}
       credentials:
         username-ref: ${PLAYMOBILE_USERNAME_REF:env:PLAYMOBILE_USERNAME}
@@ -290,7 +330,7 @@ commhub:
 
     # SMS Gate v4.3 — резервный провайдер SMS (§9.2, §18.2).
     smsgate:
-      enabled: ${SMSGATE_ENABLED:false}
+      enabled: ${SMSGATE_ENABLED:true}
       provider-code: ${SMSGATE_PROVIDER_CODE:SMSGATE}
       credentials:
         login-ref: ${SMSGATE_LOGIN_REF:env:SMSGATE_LOGIN}

@@ -85,10 +85,8 @@ public class ChannelConfigService implements ManageChannels {
                 ENTITY,
                 command.channel().name(),
                 before,
-                describe(config)
-                        + command.reasonOptional()
-                                .map(reason -> ", reason=" + reason)
-                                .orElse(""));
+                describe(config),
+                command.reasonOptional().orElse(null));
         return mapper.toView(config);
     }
 

@@ -35,11 +35,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestClient;
-import uz.hamkorbank.commhub.application.dto.DispatchResult;
 import uz.hamkorbank.commhub.application.dto.OutboxRelayResult;
-import uz.hamkorbank.commhub.application.port.in.DispatchMessage;
 import uz.hamkorbank.commhub.application.port.in.PublishOutboxEvents;
-import uz.hamkorbank.commhub.application.port.in.command.DispatchMessageCommand;
 import uz.hamkorbank.commhub.application.port.in.command.PublishOutboxEventsCommand;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
 import uz.hamkorbank.commhub.application.port.out.StreamRepository;
@@ -57,10 +54,10 @@ import uz.hamkorbank.commhub.support.ProviderStub;
  * Bank runs this against the provider's own test contour, and a test that dialled a real SMS gateway
  * would be a test that sends SMS.
  *
- * <p>One thing is driven by hand, and it is worth naming: the sending saga. {@code DispatchMessage} has
- * no scheduler behind it — nothing in the running application picks a {@code QUEUED} message up and
- * sends it, so the scenarios below call the use case the way a dispatcher would. That is a gap in the
- * product, not in the test, and it is recorded as one in the implementation plan.
+ * <p>Nothing here is driven by hand any more. Until the dispatcher existed, these scenarios called
+ * {@code DispatchMessage} themselves and this comment explained why — the running application picked up
+ * no {@code QUEUED} message and sent none. Now the schedulers of {@code adapter/in/scheduler} do it, and
+ * the tests wait for the outcome instead of producing it (ADR-0039).
  */
 @Tag("integration")
 @SpringBootTest(classes = NotificationHubApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -68,6 +65,11 @@ import uz.hamkorbank.commhub.support.ProviderStub;
         properties = {
             // Планировщики отодвинуты: сценарии дёргают use case'ы явно, чтобы шаг было видно в тесте.
             "commhub.outbox.relay.poll-interval-ms=3600000",
+            // Диспетчер включён намеренно: приёмка проверяет продукт, а не use case поодиночке.
+            "commhub.dispatch.critical-otp.poll-interval=200ms",
+            "commhub.dispatch.transactional.poll-interval=200ms",
+            "commhub.dispatch.notification.poll-interval=200ms",
+            "commhub.dispatch.expiry.enabled=false",
             "commhub.provider.health.initial-delay=1h",
             "commhub.metrics.backlog-refresh-interval=1h",
             "commhub.config.cache.refresh-interval=1s",
@@ -96,7 +98,6 @@ class AcceptanceScenariosIT {
     private final JdbcClient jdbc;
     private final ProviderConfigRepository providers;
     private final StreamRepository streams;
-    private final DispatchMessage dispatcher;
     private final PublishOutboxEvents relay;
     private final RestClient rest;
 
@@ -104,13 +105,11 @@ class AcceptanceScenariosIT {
             JdbcClient jdbc,
             ProviderConfigRepository providers,
             StreamRepository streams,
-            DispatchMessage dispatcher,
             PublishOutboxEvents relay,
             @Value("${local.server.port}") int port) {
         this.jdbc = jdbc;
         this.providers = providers;
         this.streams = streams;
-        this.dispatcher = dispatcher;
         this.relay = relay;
         this.rest = RestClient.create("http://localhost:" + port);
     }
@@ -144,15 +143,14 @@ class AcceptanceScenariosIT {
 
         // Assert — принято в конвейер и поставлено в очередь на отправку (§5.1)
         assertThat(accepted.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
-        assertThat(statusOf(messageId)).isEqualTo("QUEUED");
 
-        // Act — отправка (сага AD-04) и отчёт о доставке (PM-02)
-        DispatchResult dispatched = dispatcher.dispatch(DispatchMessageCommand.of(messageId));
+        // Act — отправку делает диспетчер сам (AD-04, ADR-0039), тест её только дожидается
+        await().atMost(TIMEOUT).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> assertThat(statusOf(messageId))
+                .isEqualTo("SENT_TO_PROVIDER"));
         String providerMessageId = providerMessageIdOf(messageId);
         ResponseEntity<String> callback = deliveryReport(providerMessageId, "delivered");
 
         // Assert — попытка записана на нужного провайдера, статус DELIVERED (ST-01)
-        assertThat(dispatched.outcome().name()).isEqualTo("SENT");
         ProviderStub.server()
                 .verify(postRequestedFor(urlEqualTo(SEND_URL))
                         .withRequestBody(matchingJsonPath("$.messages[0].recipient", WireMock.equalTo("998901234567")))
@@ -187,11 +185,9 @@ class AcceptanceScenariosIT {
         MessageId messageId = idOf(externalId);
         assertThat(trafficClassOf(messageId)).isEqualTo("TRANSACTIONAL");
 
-        // Act
-        dispatcher.dispatch(DispatchMessageCommand.of(messageId));
-
-        // Assert
-        assertThat(statusOf(messageId)).isEqualTo("SENT_TO_PROVIDER");
+        // Act + Assert — диспетчер класса TRANSACTIONAL забирает своё сам
+        await().atMost(TIMEOUT).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> assertThat(statusOf(messageId))
+                .isEqualTo("SENT_TO_PROVIDER"));
     }
 
     @Test
@@ -214,23 +210,25 @@ class AcceptanceScenariosIT {
         assertThat(act(batchId, "pause").getBody().get("status")).isEqualTo("PAUSED");
         assertThat(act(batchId, "resume").getBody().get("status")).isEqualTo("PROCESSING");
 
-        // Act — рассылка отправляется поштучно, как её отправлял бы диспетчер
-        List<UUID> queued = jdbc.sql("SELECT id FROM message WHERE batch_id = :batch")
-                .param("batch", UUID.fromString(batchId))
-                .query(UUID.class)
-                .list();
-        queued.forEach(id -> dispatcher.dispatch(DispatchMessageCommand.of(MessageId.of(id))));
-
-        // Assert — все пять ушли провайдеру, у каждого своя попытка на выбранном провайдере
-        assertThat(queued).hasSize(5);
+        // Act + Assert — рассылку вычёрпывает диспетчер класса NOTIFICATION
+        await().atMost(TIMEOUT).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
+            assertThat(statusesOfBatch(batchId)).containsOnly("SENT_TO_PROVIDER");
+            assertThat(attemptsOfBatch(batchId)).isEqualTo(5);
+        });
         ProviderStub.server().verify(5, postRequestedFor(urlEqualTo(SEND_URL)));
-        assertThat(statusesOfBatch(batchId)).containsOnly("SENT_TO_PROVIDER");
-        assertThat(attemptsOfBatch(batchId)).isEqualTo(5);
 
-        // Счётчики прогресса батча (`sent`/`delivered`/`failed`, FR-3.1) здесь намеренно не
-        // проверяются: их никто не увеличивает — ни сага отправки, ни обработка отчётов, — поэтому
-        // ассерт на них был бы ассертом на дефект. Он записан в план как находка Phase 15.
-        assertThat(batch(batchId).getBody().get("status")).isEqualTo("PROCESSING");
+        // Assert — счётчики прогресса рассылки (FR-3.1). Раньше здесь стоял комментарий о том,
+        // почему ассерта нет: их никто не увеличивал (долг Д-2). Теперь это ассерт (ADR-0040).
+        //
+        // processed остаётся нулём намеренно: SMS на SENT_TO_PROVIDER ещё в полёте — провайдер о
+        // доставке не отчитался, и терминальной она не является (в отличие от push, PU-12).
+        // total равен пяти, а не десяти: заголовок объявил пять и чанк привёз те же пять —
+        // складывать их значило бы, что processed никогда не догонит total и рассылка не закроется
+        await().atMost(TIMEOUT).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> assertThat(progressOf(batchId))
+                .containsEntry("total", 5)
+                .containsEntry("sent", 5)
+                .containsEntry("processed", 0)
+                .containsEntry("failed", 0));
     }
 
     // ------------------------------------------------------------------ HTTP
@@ -298,6 +296,12 @@ class AcceptanceScenariosIT {
 
     private ResponseEntity<Map> batch(String batchId) {
         return rest.get().uri("/api/v1/batches/{id}", batchId).retrieve().toEntity(Map.class);
+    }
+
+    /** Счётчики карточки рассылки, как их отдаёт §8.2 (FR-3.1). */
+    @SuppressWarnings("unchecked")
+    private Map<String, Integer> progressOf(String batchId) {
+        return (Map<String, Integer>) batch(batchId).getBody().get("progress");
     }
 
     // ----------------------------------------------------------------- Kafka

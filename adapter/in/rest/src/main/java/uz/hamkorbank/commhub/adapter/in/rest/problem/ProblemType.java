@@ -52,6 +52,12 @@ public enum ProblemType {
 
     /** Nothing matches the identifiers in the request. */
     NOT_FOUND(HttpStatus.NOT_FOUND, "Not found"),
+    /** The path exists but not for this HTTP method; the answer names the ones it has. */
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed"),
+    /** The endpoint does not read the media type the request was sent in. */
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type"),
+    /** The endpoint cannot answer in any media type the caller said it accepts. */
+    NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "Not acceptable"),
     /** Authenticated, but not entitled to the stream that was named (SEC-01). */
     FORBIDDEN(HttpStatus.FORBIDDEN, "Forbidden"),
     /** The aggregate is not in a state that allows the requested action (FR-3.2). */

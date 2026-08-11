@@ -33,7 +33,7 @@ listOf("admin", "callback", "contract", "importer", "kafka", "rest", "scheduler"
 listOf("compliance", "kafka", "metrics", "persistence", "policy", "secret", "time")
     .forEach { name -> include("adapter:out:$name") }
 
-listOf("apns", "fcm", "playmobile", "smsgate", "smtp", "support")
+listOf("apns", "fcm", "mock", "playmobile", "smsgate", "smtp", "support")
     .forEach { name -> include("adapter:out:provider:$name") }
 
 include("adapter:observability")

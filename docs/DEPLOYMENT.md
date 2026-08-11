@@ -41,7 +41,7 @@ SQL-пакета в поставке нет.
 ### 3.1. Инфраструктура
 
 ```bash
-docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak, WireMock, GreenMail
+docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Kafka UI, Keycloak, WireMock, GreenMail
 ```
 
 | Сервис | Адрес | Учётные данные |
@@ -49,6 +49,7 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak
 | PostgreSQL | `localhost:5432/commhub` | `commhub` / `commhub` |
 | Kafka | `localhost:9092` | без auth |
 | Schema Registry | `http://localhost:8081` | — |
+| Kafka UI (топики, сообщения, лаг групп) | `http://localhost:8090` | без auth |
 | Keycloak (realm `commhub`) | `http://localhost:8180` | консоль `admin` / `admin`; панель `demo` / `demo` |
 | WireMock (стабы Playmobile/SMS Gate/FCM/APNs) | `http://localhost:8089` | — |
 | GreenMail SMTP / IMAP / UI | `3025` / `3143` / `http://localhost:8085` | без auth |
@@ -56,6 +57,12 @@ docker compose up -d      # PostgreSQL, Kafka (KRaft), Schema Registry, Keycloak
 Топики Kafka создаются автоматически (`KAFKA_AUTO_CREATE_TOPICS_ENABLE=true` в compose) — до
 первой публикации в логе приложения будут одиночные предупреждения `UNKNOWN_TOPIC_OR_PARTITION`,
 это штатно.
+
+Kafka UI (`http://localhost:8090`) — то место, где локально видно топики §8.1: содержимое
+`comm.outbound.status.v1` и `comm.outbound.dlq.v1`, ошибки разбора в `comm.inbound.parse-error.v1`,
+лаг консьюмер-групп по классам трафика (TC-01) и зарегистрированные в Schema Registry субъекты.
+Оттуда же можно опубликовать сообщение в `comm.inbound.*` руками — вместо REST. Инструмент только
+для локального стенда; в контуре Банка доступ к брокеру даёт эксплуатация.
 
 Keycloak поднимается в режиме `start-dev` и импортирует `docker/keycloak/commhub-realm.json` при каждом
 запуске — тома у него нет намеренно: realm демонстрационный, и правка файла применяется рестартом
@@ -270,7 +277,9 @@ COMMHUB_REQUIRE_SOURCE_SYSTEM_TOKEN=true
 `provider.endpoint_config`) и правятся из админ-панели без рестарта (AD-07, NF-07).
 
 После первого старта конфигурация маршрутизации пуста — потоки, каналы, провайдеры и политики
-маршрутизации заводятся через админ-панель (§11.2) до подачи трафика.
+маршрутизации заводятся через админ-панель (§11.2) до подачи трафика. Порядок этой первичной настройки
+(провайдер → канал → поток → шаблон) и то, чем она отличается на стенде и в контуре, —
+[`QUICKSTART-SEND.md`](QUICKSTART-SEND.md).
 
 ### 5.5. Пробы и остановка (NF-05)
 
@@ -299,11 +308,13 @@ relay outbox'а и курсор выгрузки дорабатывают тек
 ## 6. Проверка после развёртывания
 
 1. Под прошёл `startup` и `readiness`; в логе нет предупреждений о выключенной security.
-2. Смок приёма: `POST /api/v1/messages` с тестовым сообщением (`test=true`, FR-7.4) от имени
+2. Конфигурация маршрутизации заведена — по [`QUICKSTART-SEND.md`](QUICKSTART-SEND.md) §2 и §5;
+   проверяется dry-run'ом (`POST /api/admin/v1/routing/evaluate`) до подачи трафика.
+3. Смок приёма: `POST /api/v1/messages` с тестовым сообщением (`test=true`, FR-7.4) от имени
    потока, заведённого в конфигурации, — ответ `202` с `messageId`.
-3. Тестовая отправка из админ-панели по каждому включённому каналу.
-4. Статус ушёл в `comm.outbound.status.v1` (следить за возрастом старейшей неопубликованной
+4. Тестовая отправка из админ-панели по каждому включённому каналу.
+5. Статус ушёл в `comm.outbound.status.v1` (следить за возрастом старейшей неопубликованной
    строки outbox — метрика backlog'а).
-5. Дашборды Grafana видят инстанс; алерты Prometheus загружены.
+6. Дашборды Grafana видят инстанс; алерты Prometheus загружены.
 
 Дальше — `docs/RUNBOOK.md` (по одному разделу на симптом, OBS-06).

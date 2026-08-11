@@ -11,6 +11,7 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
 } from 'antd';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -86,37 +87,51 @@ export function TemplatePreviewModal({
     >
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Form form={form} layout="inline" initialValues={{ locale: 'RU' }} style={{ rowGap: 12 }}>
+          {/* Форма inline, подписей нет: иконка у метки не рисуется — подсказка идёт на контроле. */}
           <Form.Item name="locale" rules={[{ required: true }]}>
-            <Select options={enumOptions(CONTENT_LOCALES)} style={{ width: 100 }} />
+            <Tooltip title={t('templates.previewLocaleHint')}>
+              <Select
+                options={enumOptions(CONTENT_LOCALES)}
+                aria-label={t('templates.localeField')}
+                style={{ width: 100 }}
+              />
+            </Tooltip>
           </Form.Item>
-          <Form.Item name="version" tooltip={t('templates.previewVersionHint')}>
-            <InputNumber min={1} placeholder={t('templates.version')} style={{ width: 130 }} />
+          <Form.Item name="version">
+            <Tooltip title={t('templates.previewVersionHint')}>
+              <InputNumber min={1} placeholder={t('templates.version')} style={{ width: 130 }} />
+            </Tooltip>
           </Form.Item>
           <Button type="primary" loading={loading} onClick={() => void render()}>
             {t('templates.render')}
           </Button>
         </Form>
         <Form form={form} layout="vertical">
-          <Form.List name="variables">
-            {(fields, { add, remove }) => (
-              <Space direction="vertical" style={{ width: '100%' }}>
-                {fields.map((field) => (
-                  <Space key={field.key} align="baseline">
-                    <Form.Item name={[field.name, 'name']} noStyle>
-                      <Input placeholder={t('templates.variable')} style={{ width: 200 }} />
-                    </Form.Item>
-                    <Form.Item name={[field.name, 'value']} noStyle>
-                      <Input placeholder={t('providers.configValue')} style={{ width: 280 }} />
-                    </Form.Item>
-                    <Button type="link" danger onClick={() => remove(field.name)}>
-                      {t('common.remove')}
-                    </Button>
-                  </Space>
-                ))}
-                <Button onClick={() => add({})}>{t('templates.addVariable')}</Button>
-              </Space>
-            )}
-          </Form.List>
+          <Form.Item
+            label={t('templates.mergeFields')}
+            tooltip={t('templates.previewVariablesHint')}
+          >
+            <Form.List name="variables">
+              {(fields, { add, remove }) => (
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {fields.map((field) => (
+                    <Space key={field.key} align="baseline">
+                      <Form.Item name={[field.name, 'name']} noStyle>
+                        <Input placeholder={t('templates.variable')} style={{ width: 200 }} />
+                      </Form.Item>
+                      <Form.Item name={[field.name, 'value']} noStyle>
+                        <Input placeholder={t('providers.configValue')} style={{ width: 280 }} />
+                      </Form.Item>
+                      <Button type="link" danger onClick={() => remove(field.name)}>
+                        {t('common.remove')}
+                      </Button>
+                    </Space>
+                  ))}
+                  <Button onClick={() => add({})}>{t('templates.addVariable')}</Button>
+                </Space>
+              )}
+            </Form.List>
+          </Form.Item>
         </Form>
         {preview && (
           <>

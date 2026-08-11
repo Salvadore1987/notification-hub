@@ -272,8 +272,12 @@ components:
             - PROVIDER_REJECTED
             - ATTEMPTS_EXHAUSTED
             - NOT_FOUND
+            - FORBIDDEN
             - CONFLICT
             - RATE_LIMITED
+            - METHOD_NOT_ALLOWED
+            - UNSUPPORTED_MEDIA_TYPE
+            - NOT_ACCEPTABLE
             - INTERNAL_ERROR
         field:
           type: string

@@ -22,8 +22,8 @@ public interface AuditMapper {
                 entry.action(),
                 entry.entityType(),
                 entry.entityId(),
-                entry.before(),
-                entry.after(),
+                new AuditEntryView.Change(entry.before(), entry.after()),
+                entry.reason(),
                 entry.sourceIp());
     }
 }

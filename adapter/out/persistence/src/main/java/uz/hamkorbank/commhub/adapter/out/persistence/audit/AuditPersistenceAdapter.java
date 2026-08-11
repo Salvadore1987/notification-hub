@@ -32,12 +32,12 @@ public class AuditPersistenceAdapter implements AuditPort, AuditQueryPort {
 
     private static final String INSERT = """
             INSERT INTO audit_log (id, user_id, username, action, entity_type, entity_id,
-                                   before_state, after_state, ip, occurred_at)
+                                   before_state, after_state, ip, reason, occurred_at)
             VALUES (:id,
                     (SELECT u.id FROM app_user u WHERE u.username = :username),
                     :username, :action, :entityType, :entityId,
                     to_jsonb(CAST(:before AS text)), to_jsonb(CAST(:after AS text)),
-                    CAST(:ip AS inet), :occurredAt)
+                    CAST(:ip AS inet), :reason, :occurredAt)
             """;
 
     /**
@@ -59,7 +59,7 @@ public class AuditPersistenceAdapter implements AuditPort, AuditQueryPort {
             SELECT a.username, a.action, a.entity_type, a.entity_id,
                    a.before_state #>> '{}' AS before_state,
                    a.after_state  #>> '{}' AS after_state,
-                   host(a.ip) AS ip, a.occurred_at
+                   host(a.ip) AS ip, a.reason, a.occurred_at
               FROM audit_log a
             """ + WHERE + """
              ORDER BY a.occurred_at DESC
@@ -87,6 +87,7 @@ public class AuditPersistenceAdapter implements AuditPort, AuditQueryPort {
                 .param("before", entry.before())
                 .param("after", entry.after())
                 .param("ip", entry.sourceIp())
+                .param("reason", entry.reason())
                 .param("occurredAt", SqlValues.timestamp(entry.occurredAt()))
                 .update();
     }

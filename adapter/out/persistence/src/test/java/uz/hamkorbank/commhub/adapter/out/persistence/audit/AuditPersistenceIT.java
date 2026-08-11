@@ -50,9 +50,11 @@ class AuditPersistenceIT extends AbstractPersistenceIT {
                 "channel.state",
                 "channel",
                 entityId,
-                "status=ACTIVE, strategy=WEIGHTED, order=[PLAYMOBILE, SMSGATE]",
-                "status=MAINTENANCE, strategy=WEIGHTED, order=[PLAYMOBILE, SMSGATE], reason=плановые работы",
+                AuditEntry.Change.of(
+                        "status=ACTIVE, strategy=WEIGHTED, order=[PLAYMOBILE, SMSGATE]",
+                        "status=MAINTENANCE, strategy=WEIGHTED, order=[PLAYMOBILE, SMSGATE]"),
                 "10.1.2.3",
+                "плановые работы",
                 OCCURRED_AT);
 
         // Act
@@ -68,7 +70,13 @@ class AuditPersistenceIT extends AbstractPersistenceIT {
                         .param("id", entityId)
                         .query(String.class)
                         .single())
-                .contains("плановые работы");
+                .isEqualTo("status=MAINTENANCE, strategy=WEIGHTED, order=[PLAYMOBILE, SMSGATE]");
+        // Обоснование — своя колонка, а не хвост в «стало»: по ней ищут и её выгружают (FR-7.3).
+        assertThat(jdbc().sql("SELECT reason FROM audit_log WHERE entity_id = :id")
+                        .param("id", entityId)
+                        .query(String.class)
+                        .single())
+                .isEqualTo("плановые работы");
         // host(ip), not ip::text: the column is inet and the driver renders it with its netmask
         // ("10.1.2.3/32"), while what the journal is read for is the address (FR-7.3).
         assertThat(jdbc().sql("SELECT username, entity_id, host(ip) FROM audit_log WHERE entity_id = :id")
@@ -82,14 +90,12 @@ class AuditPersistenceIT extends AbstractPersistenceIT {
     @DisplayName("a creation and a deletion leave the missing side null rather than the string \"null\"")
     void keepsMissingStatesNull() {
         // Arrange
-        audit.write(new AuditEntry(
+        audit.write(AuditEntry.changed(
                 Actor.operator("petrov"),
                 "template.create",
                 "template",
                 entityId,
-                null,
-                "status=ACTIVE",
-                null,
+                AuditEntry.Change.of(null, "status=ACTIVE"),
                 OCCURRED_AT));
 
         // Act + Assert
@@ -129,9 +135,9 @@ class AuditPersistenceIT extends AbstractPersistenceIT {
                 "provider.disabled",
                 "provider",
                 entityId,
-                "enabled=true",
-                "enabled=false",
+                AuditEntry.Change.of("enabled=true", "enabled=false"),
                 "10.1.2.3",
+                null,
                 OCCURRED_AT));
         audit.write(AuditEntry.of(Actor.operator("petrov"), "template.published", "template", entityId, OCCURRED_AT));
 

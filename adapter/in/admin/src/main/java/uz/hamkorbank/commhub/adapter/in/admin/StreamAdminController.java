@@ -73,7 +73,7 @@ public class StreamAdminController {
 
     /** {@code GET /api/admin/v1/streams} — every registered stream (§11.2). */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize(AdminAuthority.ADMIN)
+    @PreAuthorize(AdminAuthority.STREAM_READER)
     public List<StreamResponse> list() {
         return configuration.streams().stream().map(viewMapper::toStream).toList();
     }

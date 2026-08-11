@@ -29,12 +29,34 @@ public class ConfigAuditor {
     }
 
     /**
-     * Journals one change.
+     * Journals one change the operator was not asked to justify.
      *
      * @param before rendered state before the change; {@code null} for a creation
      * @param after rendered state after it; {@code null} for a deletion
      */
     public void record(Actor actor, String action, String entityType, String entityId, String before, String after) {
-        audit.write(new AuditEntry(actor, action, entityType, entityId, before, after, null, clock.now()));
+        record(actor, action, entityType, entityId, before, after, null);
+    }
+
+    /**
+     * Journals one change together with the justification the operator gave for it (FR-7.3).
+     *
+     * <p>Used by the edits the panel asks a reason for — disabling a provider, closing a channel,
+     * archiving a template, lifting a suppression. The reason is a field of the entry rather than a line
+     * appended to the new state: an auditor filters and exports by it.
+     *
+     * <p>The two overloads differ in arity rather than in type on purpose: a {@code Change} parameter next
+     * to a {@code String} one makes every {@code record(…, null, describe(x))} call ambiguous.
+     */
+    public void record(
+            Actor actor,
+            String action,
+            String entityType,
+            String entityId,
+            String before,
+            String after,
+            String reason) {
+        audit.write(new AuditEntry(
+                actor, action, entityType, entityId, AuditEntry.Change.of(before, after), null, reason, clock.now()));
     }
 }

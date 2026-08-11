@@ -1,7 +1,6 @@
 package uz.hamkorbank.commhub.application.service;
 
 import java.time.Instant;
-import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.application.dto.SuppressionView;
@@ -111,9 +110,8 @@ public class SuppressionService implements ManageSuppressions {
                 ENTITY,
                 entry.id().value().toString(),
                 describe(entry),
-                Optional.ofNullable(command.reason())
-                        .map(reason -> "released, reason=" + reason)
-                        .orElse(null));
+                null,
+                command.reason());
     }
 
     /**

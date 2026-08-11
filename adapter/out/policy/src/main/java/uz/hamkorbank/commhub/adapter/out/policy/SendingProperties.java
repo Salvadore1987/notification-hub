@@ -16,6 +16,8 @@ import uz.hamkorbank.commhub.application.policy.SendingPolicy;
  * @param initialBackoff delay before the first retry
  * @param backoffMultiplier growth factor of that delay
  * @param maxBackoff upper bound of the delay
+ * @param deferBackoff how long a message held by a guard waits before the dispatcher looks again, when
+ *     the guard cannot say when the hold ends — a paused batch, a raised kill switch (ADR-0039)
  */
 @ConfigurationProperties("commhub.sending")
 public record SendingProperties(
@@ -23,7 +25,8 @@ public record SendingProperties(
         Integer maxTotalAttempts,
         Duration initialBackoff,
         Double backoffMultiplier,
-        Duration maxBackoff) {
+        Duration maxBackoff,
+        Duration deferBackoff) {
 
     public SendingPolicy toPolicy() {
         SendingPolicy defaults = SendingPolicy.defaults();
@@ -32,6 +35,7 @@ public record SendingProperties(
                 maxTotalAttempts == null ? defaults.maxTotalAttempts() : maxTotalAttempts,
                 initialBackoff == null ? defaults.initialBackoff() : initialBackoff,
                 backoffMultiplier == null ? defaults.backoffMultiplier() : backoffMultiplier,
-                maxBackoff == null ? defaults.maxBackoff() : maxBackoff);
+                maxBackoff == null ? defaults.maxBackoff() : maxBackoff,
+                deferBackoff == null ? defaults.deferBackoff() : deferBackoff);
     }
 }

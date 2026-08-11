@@ -49,6 +49,9 @@ import uz.hamkorbank.commhub.support.KeycloakTokens;
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class AdminSecurityIT {
 
+    /** Types deployed on the contour: read by the registration form, so ADMIN and not the wider list. */
+    private static final String ADAPTERS = AdminApi.PROVIDERS + "/adapters";
+
     private final JdbcClient jdbc;
     private final RestClient rest;
 
@@ -78,6 +81,7 @@ class AdminSecurityIT {
     void admitsTheDemoAdministrator() {
         // Act + Assert
         status(AdminApi.PROVIDERS, KeycloakTokens.admin()).isEqualTo(HttpStatus.OK);
+        status(ADAPTERS, KeycloakTokens.admin()).isEqualTo(HttpStatus.OK);
         status(AdminApi.STREAMS, KeycloakTokens.admin()).isEqualTo(HttpStatus.OK);
     }
 
@@ -86,7 +90,35 @@ class AdminSecurityIT {
     void refusesAViewerTheConfiguration() {
         // Act + Assert
         status(AdminApi.PROVIDERS, KeycloakTokens.of("viewer")).isEqualTo(HttpStatus.FORBIDDEN);
+        status(ADAPTERS, KeycloakTokens.of("viewer")).isEqualTo(HttpStatus.FORBIDDEN);
         status(AdminApi.MESSAGES, KeycloakTokens.of("viewer")).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("ADR-0038: an operator reads the reference lists the send form needs, and nothing more")
+    void letsTheOperatorReadTheReferenceLists() {
+        // Arrange — форма отправки принадлежит оператору, а поток и шаблон в ней выбираются из списка
+
+        // Act + Assert — списки открыты
+        status(AdminApi.STREAMS, KeycloakTokens.of("operator")).isEqualTo(HttpStatus.OK);
+        status(AdminApi.TEMPLATES, KeycloakTokens.of("operator")).isEqualTo(HttpStatus.OK);
+
+        // Act + Assert — а конфигурация и тексты версий по-прежнему закрыты
+        status(AdminApi.PROVIDERS, KeycloakTokens.of("operator")).isEqualTo(HttpStatus.FORBIDDEN);
+        status(AdminApi.ROUTING + "/policies", KeycloakTokens.of("operator")).isEqualTo(HttpStatus.FORBIDDEN);
+        status(AdminApi.TEMPLATES + "/OTP_LOGIN", KeycloakTokens.of("operator")).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("FR-4.5: the template manager reads the provider list, and still cannot edit a profile")
+    void letsTheTemplateManagerReadProviders() {
+        // Act + Assert — список нужен, чтобы регистрацию шаблона у провайдера выбирали из него
+        status(AdminApi.PROVIDERS, KeycloakTokens.of("template-manager")).isEqualTo(HttpStatus.OK);
+        status(AdminApi.STREAMS, KeycloakTokens.of("template-manager")).isEqualTo(HttpStatus.FORBIDDEN);
+
+        // Act + Assert — а типы адаптеров нужны только форме регистрации, то есть ADMIN (AR-04):
+        // расширение PROVIDER_READER имеет одну записанную причину, и она про код провайдера
+        status(ADAPTERS, KeycloakTokens.of("template-manager")).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test

@@ -36,7 +36,8 @@ interface State {
     retryable: boolean;
     archived: boolean;
   }[];
-  versionStatus: 'DRAFT' | 'IN_REVIEW' | 'PUBLISHED' | 'ARCHIVED' | 'REJECTED';
+  /** Словарь доменный (`TemplateStatus`): «отклонена» — это возврат в DRAFT, отдельного статуса нет. */
+  versionStatus: 'DRAFT' | 'ON_REVIEW' | 'PUBLISHED' | 'ARCHIVED';
 }
 
 function initialState(): State {
@@ -60,7 +61,7 @@ function initialState(): State {
         archived: false,
       },
     ],
-    versionStatus: 'IN_REVIEW',
+    versionStatus: 'ON_REVIEW',
   };
 }
 
@@ -183,8 +184,8 @@ function handle(state: State, key: string, body: unknown): { status: number; bod
     case 'POST /templates/OTP_LOGIN/versions/RU/2/state/PUBLISHED':
       state.versionStatus = 'PUBLISHED';
       return { status: 200, body: templateCard(state) };
-    case 'POST /templates/OTP_LOGIN/versions/RU/2/state/REJECTED':
-      state.versionStatus = 'REJECTED';
+    case 'POST /templates/OTP_LOGIN/versions/RU/2/state/DRAFT':
+      state.versionStatus = 'DRAFT';
       return { status: 200, body: templateCard(state) };
     case 'GET /providers':
       return {
@@ -194,11 +195,23 @@ function handle(state: State, key: string, body: unknown): { status: number; bod
             providerId: '018f-provider-0001',
             code: 'playmobile',
             channel: 'SMS',
-            adapterType: 'PLAYMOBILE',
+            adapterType: 'playmobile-http',
             state: 'ACTIVE',
             priority: 10,
             weight: 1,
           },
+        ],
+      };
+    // Не справочник, а то, что развёрнуто на контуре: форма регистрации выбирает отсюда (AR-04).
+    case 'GET /providers/adapters':
+      return {
+        status: 200,
+        body: [
+          { adapterType: 'smtp', channel: 'EMAIL' },
+          { adapterType: 'apns-http2', channel: 'PUSH' },
+          { adapterType: 'fcm-http', channel: 'PUSH' },
+          { adapterType: 'playmobile-http', channel: 'SMS' },
+          { adapterType: 'smsgate-http', channel: 'SMS' },
         ],
       };
     case 'GET /channels':
@@ -207,9 +220,10 @@ function handle(state: State, key: string, body: unknown): { status: number; bod
         body: [
           {
             channel: 'SMS',
-            state: 'ACTIVE',
-            balancingStrategy: 'PRIORITY',
+            status: 'ACTIVE',
+            balancingStrategy: 'PRIMARY_ONLY',
             fallbackOrder: ['playmobile'],
+            available: true,
           },
         ],
       };

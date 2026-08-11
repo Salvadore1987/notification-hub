@@ -12,12 +12,14 @@ import uz.hamkorbank.commhub.adapter.in.admin.dto.RecipientDto;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.RouteEvaluationRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.RoutingPolicyRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.RoutingPolicyResponse;
+import uz.hamkorbank.commhub.adapter.in.admin.dto.SendRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.StreamRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.SuppressionRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.TestSendRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.support.AdminValues;
 import uz.hamkorbank.commhub.adapter.in.contract.InboundContractException;
 import uz.hamkorbank.commhub.application.port.in.command.ConfigureChannelCommand;
+import uz.hamkorbank.commhub.application.port.in.command.OperatorSendCommand;
 import uz.hamkorbank.commhub.application.port.in.command.RegisterProviderCommand;
 import uz.hamkorbank.commhub.application.port.in.command.RegisterStreamCommand;
 import uz.hamkorbank.commhub.application.port.in.command.SaveRoutingPolicyCommand;
@@ -27,6 +29,7 @@ import uz.hamkorbank.commhub.application.port.in.command.SuppressClientCommand;
 import uz.hamkorbank.commhub.application.port.in.command.UpdateProviderCommand;
 import uz.hamkorbank.commhub.application.port.in.command.UpdateStreamCommand;
 import uz.hamkorbank.commhub.application.port.in.query.RouteEvaluationQuery;
+import uz.hamkorbank.commhub.application.port.in.query.SendEstimateQuery;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Provider;
 import uz.hamkorbank.commhub.domain.model.QuietHours;
@@ -35,8 +38,10 @@ import uz.hamkorbank.commhub.domain.model.RateLimit;
 import uz.hamkorbank.commhub.domain.model.RoutingPolicy;
 import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.Tariff;
+import uz.hamkorbank.commhub.domain.model.TemplateRef;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
+import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
 import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
@@ -47,6 +52,7 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
 import uz.hamkorbank.commhub.domain.model.vo.ClientId;
 import uz.hamkorbank.commhub.domain.model.vo.EmailAddress;
+import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderId;
@@ -55,6 +61,8 @@ import uz.hamkorbank.commhub.domain.model.vo.PushToken;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 import uz.hamkorbank.commhub.domain.model.vo.RoutingPolicyId;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
+import uz.hamkorbank.commhub.domain.support.UuidV7;
 
 /**
  * Request bodies of the admin BFF → the commands of the use cases (AR-06).
@@ -204,6 +212,54 @@ public interface AdminCommandMapper {
                 AdminValues.parse(request.provider(), "provider", ProviderCode::of),
                 request.text(),
                 request.subject());
+    }
+
+    /**
+     * A panel send (ADR-0038): the template is required, the text does not exist as a concept here.
+     *
+     * <p>{@code externalId} is generated when the operator did not give one, prefixed so that a message
+     * sent from the panel is recognisable in the message list without a join.
+     */
+    default OperatorSendCommand toOperatorSend(SendRequest request, Actor actor, String reason) {
+        return new OperatorSendCommand(
+                actor,
+                reason,
+                toRecipient(request.recipient()),
+                ExternalMessageId.of(
+                        request.externalId() == null || request.externalId().isBlank()
+                                ? "panel-" + UuidV7.generate()
+                                : request.externalId()),
+                toTemplateRef(request),
+                toTarget(request));
+    }
+
+    /** The same target a batch header carries: where it goes and under what rules. */
+    default OperatorSendCommand.Target toTarget(SendRequest request) {
+        return new OperatorSendCommand.Target(
+                AdminValues.parseRequired(request.streamId(), "streamId", StreamId::of),
+                AdminValues.requiredEnum(Channel.class, request.channel(), "channel"),
+                AdminValues.optionalEnum(TrafficClass.class, request.trafficClass(), "trafficClass"),
+                null);
+    }
+
+    default TemplateRef toTemplateRef(SendRequest request) {
+        return new TemplateRef(
+                AdminValues.parseRequired(request.templateCode(), "templateCode", TemplateCode::of),
+                AdminValues.requiredEnum(ContentLocale.class, request.locale(), "locale"),
+                request.variables() == null ? java.util.Map.of() : request.variables());
+    }
+
+    /** The estimate of one message: the same query the list estimate uses, with a single row. */
+    default SendEstimateQuery toSendEstimate(SendRequest request) {
+        OperatorSendCommand.Target target = toTarget(request);
+        TemplateRef template = toTemplateRef(request);
+        return new SendEstimateQuery(
+                target.streamId(),
+                template.code(),
+                template.locale(),
+                target.channel(),
+                target.trafficClass(),
+                java.util.List.of(new SendEstimateQuery.Row(toRecipient(request.recipient()), template.variables())));
     }
 
     // ---------------------------------------------------------------- shared pieces

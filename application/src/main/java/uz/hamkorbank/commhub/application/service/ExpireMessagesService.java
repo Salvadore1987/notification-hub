@@ -9,6 +9,7 @@ import uz.hamkorbank.commhub.application.port.in.ExpireMessages;
 import uz.hamkorbank.commhub.application.port.in.command.ExpireMessagesCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
+import uz.hamkorbank.commhub.application.service.support.BatchProgressRecorder;
 import uz.hamkorbank.commhub.application.service.support.MessageStatusNotifier;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.Message;
@@ -31,11 +32,17 @@ public class ExpireMessagesService implements ExpireMessages {
     private final ClockPort clock;
     private final MessageRepository messages;
     private final MessageStatusNotifier notifier;
+    private final BatchProgressRecorder progress;
 
-    public ExpireMessagesService(ClockPort clock, MessageRepository messages, MessageStatusNotifier notifier) {
+    public ExpireMessagesService(
+            ClockPort clock,
+            MessageRepository messages,
+            MessageStatusNotifier notifier,
+            BatchProgressRecorder progress) {
         this.clock = Guard.notNull(clock, "clock");
         this.messages = Guard.notNull(messages, "messages");
         this.notifier = Guard.notNull(notifier, "notifier");
+        this.progress = Guard.notNull(progress, "progress");
     }
 
     @Override
@@ -49,9 +56,11 @@ public class ExpireMessagesService implements ExpireMessages {
             if (!message.isExpiredAt(now)) {
                 continue;
             }
+            BatchProgressRecorder.Contribution before = progress.contributionOf(message);
             StatusChange change = message.expire(Actor.system(), now);
             messages.save(message);
             notifier.publish(message, change);
+            progress.apply(message, before);
             applied++;
         }
         return new ExpireMessagesResult(applied, expired.size() >= command.limit());

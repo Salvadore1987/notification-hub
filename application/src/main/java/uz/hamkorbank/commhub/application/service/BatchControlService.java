@@ -78,15 +78,14 @@ public class BatchControlService implements StartBatch, PauseBatch, ResumeBatch,
         String before = batch.status().name();
         transition.accept(batch);
         batches.save(batch);
-        audit.write(new AuditEntry(
-                command.actor(),
-                action,
-                ENTITY_TYPE,
-                batch.id().toString(),
-                before,
-                batch.status().name(),
-                null,
-                now));
+        audit.write(AuditEntry.changed(
+                        command.actor(),
+                        action,
+                        ENTITY_TYPE,
+                        batch.id().toString(),
+                        AuditEntry.Change.of(before, batch.status().name()),
+                        now)
+                .withReason(command.reason()));
         return mapper.toControlResult(batch);
     }
 }

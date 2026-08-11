@@ -69,8 +69,8 @@ public class ArchiveDlqService implements ArchiveDlq {
         }
         entry.get().archive();
         dlqEntries.save(entry.get());
-        audit.write(new AuditEntry(
-                command.actor(), ACTION, ENTITY_TYPE, messageId.toString(), null, command.reason(), null, now));
+        audit.write(AuditEntry.of(command.actor(), ACTION, ENTITY_TYPE, messageId.toString(), now)
+                .withReason(command.reason()));
         return true;
     }
 }

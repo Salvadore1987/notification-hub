@@ -33,13 +33,25 @@ public interface MessageRepository {
     Optional<Message> findByProviderMessageId(ProviderCode providerCode, ProviderMessageId providerMessageId);
 
     /**
-     * Messages of a traffic class waiting to be handed to a provider, oldest first.
+     * Claims a page of messages of one traffic class for this instance, oldest first (AD-04, TC-01).
      *
-     * <p>Selects the non-terminal statuses {@code ROUTED}, {@code QUEUED} and {@code RETRYING} whose
-     * send window is open at {@code now}; separate calls per traffic class keep the OTP pool isolated
-     * from bulk load (TC-01, DB-05).
+     * <p>Selects the non-terminal statuses whose send window is open and whose backoff has elapsed, takes
+     * them with {@code FOR UPDATE SKIP LOCKED} and stamps the lease of {@code claim} on them. Two
+     * instances therefore share the queue instead of duplicating it, and a claim survives the transaction
+     * that took it — which it must, because the provider call happens outside that transaction (ADR-0039).
+     *
+     * <p>Only identifiers are returned: the aggregate is loaded by the turn that will act on it, in its
+     * own transaction, and a message claimed here may well be handled a moment later.
      */
-    List<Message> findDispatchable(TrafficClass trafficClass, Instant now, int limit);
+    List<MessageId> claimDispatchable(TrafficClass trafficClass, DispatchClaim claim);
+
+    /**
+     * Releases the claim and records when the message may be claimed again (PR-01).
+     *
+     * @param nextAttemptAt moment the next attempt becomes due; {@code null} means "at once", which is
+     *     what a terminal message gets — it will not match the claim query again anyway
+     */
+    void releaseClaim(Message message, Instant nextAttemptAt);
 
     /** In-flight messages whose TTL or send window has elapsed (FR-3.4). */
     List<Message> findExpired(Instant now, int limit);

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import uz.hamkorbank.commhub.adapter.in.admin.dto.DeployedAdapterResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.ProviderRequest;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.ProviderResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.TestSendRequest;
@@ -23,6 +24,7 @@ import uz.hamkorbank.commhub.adapter.in.admin.support.AdminValues;
 import uz.hamkorbank.commhub.adapter.in.rest.dto.MessageAcceptedResponse;
 import uz.hamkorbank.commhub.adapter.in.rest.mapper.RestResponseMapper;
 import uz.hamkorbank.commhub.adapter.in.rest.security.AuthenticatedCaller;
+import uz.hamkorbank.commhub.application.port.in.GetDeployedAdapters;
 import uz.hamkorbank.commhub.application.port.in.GetRoutingConfiguration;
 import uz.hamkorbank.commhub.application.port.in.ManageProviders;
 import uz.hamkorbank.commhub.application.port.in.SendTestMessage;
@@ -48,6 +50,7 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 public class ProviderAdminController {
 
     private final GetRoutingConfiguration configuration;
+    private final GetDeployedAdapters deployedAdapters;
     private final ManageProviders manageProviders;
     private final SendTestMessage sendTestMessage;
     private final AuthenticatedCaller caller;
@@ -57,6 +60,7 @@ public class ProviderAdminController {
 
     public ProviderAdminController(
             GetRoutingConfiguration configuration,
+            GetDeployedAdapters deployedAdapters,
             ManageProviders manageProviders,
             SendTestMessage sendTestMessage,
             AuthenticatedCaller caller,
@@ -64,6 +68,7 @@ public class ProviderAdminController {
             AdminCommandMapper commandMapper,
             RestResponseMapper acceptedMapper) {
         this.configuration = Guard.notNull(configuration, "configuration");
+        this.deployedAdapters = Guard.notNull(deployedAdapters, "deployedAdapters");
         this.manageProviders = Guard.notNull(manageProviders, "manageProviders");
         this.sendTestMessage = Guard.notNull(sendTestMessage, "sendTestMessage");
         this.caller = Guard.notNull(caller, "caller");
@@ -74,9 +79,29 @@ public class ProviderAdminController {
 
     /** {@code GET /api/admin/v1/providers} — every provider with its live state (§11.2, FR-6.3). */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize(AdminAuthority.ADMIN)
+    @PreAuthorize(AdminAuthority.PROVIDER_READER)
     public List<ProviderResponse> list() {
         return configuration.providers().stream().map(viewMapper::toProvider).toList();
+    }
+
+    /**
+     * {@code GET /api/admin/v1/providers/adapters} — adapter types deployed on this contour (AR-04).
+     *
+     * <p>What the registration form offers instead of asking an operator to type an opaque string.
+     * The answer is read off the channel-port beans, so a type the panel offers is a type a routed
+     * message will resolve; a profile naming anything else fails at the first send, not at the edit.
+     *
+     * <p>{@code ADMIN} rather than the wider audience of {@code GET /providers}: the only caller is the
+     * form behind {@code POST}/{@code PUT}, and a reader who cannot register a provider has no use for
+     * the list. Neither reason header nor audit entry — this is deployment metadata with no customer in
+     * it, and SEC-08 journals employees reading customer data.
+     */
+    @GetMapping(path = "/adapters", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize(AdminAuthority.ADMIN)
+    public List<DeployedAdapterResponse> adapters() {
+        return deployedAdapters.adapters().stream()
+                .map(viewMapper::toDeployedAdapter)
+                .toList();
     }
 
     /** {@code POST /api/admin/v1/providers/{code}} — registers a provider profile (FR-2.1). */

@@ -61,6 +61,10 @@ import uz.hamkorbank.commhub.support.ProviderStub;
 @TestPropertySource(
         properties = {
             "commhub.outbox.relay.poll-interval-ms=3600000",
+            // Диспетчер выключен: предмет этого теста — один оборот саги, и крутит его сам тест.
+            // Настоящий планировщик гонялся бы с ним за те же строки (ADR-0039).
+            "commhub.dispatch.enabled=false",
+            "commhub.dispatch.expiry.enabled=false",
             "commhub.provider.health.initial-delay=1h",
             "commhub.metrics.backlog-refresh-interval=1h",
             "commhub.config.cache.refresh-interval=1s",

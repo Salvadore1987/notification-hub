@@ -65,6 +65,8 @@ tags:
     description: Статистика и отчёты (§11.2, FR-6.2)
   - name: audit
     description: Журнал аудита (§11.2, FR-7.3, SEC-08)
+  - name: send
+    description: Отправка, инициированная оператором (ADR-0038)
   - name: administration
     description: Kill switch и системные параметры (§11.2, FR-3.2)
 
@@ -317,7 +319,9 @@ paths:
     get:
       tags: [streams]
       summary: Все зарегистрированные потоки
-      description: ADMIN. Без пагинации — потоков десятки, и пейджер здесь только прячет строки.
+      description: >-
+        ADMIN и OPERATOR: список нужен форме отправки, чтобы поток выбирали, а не набирали
+        (ADR-0038). Правка потоков осталась за ADMIN. Без пагинации — потоков десятки.
       responses:
         '200':
           description: Список потоков
@@ -446,7 +450,7 @@ paths:
         - name: status
           in: path
           required: true
-          schema: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
+          schema: { $ref: '#/components/schemas/ChannelStatus' }
         - $ref: '#/components/parameters/ReasonHeader'
       responses:
         '200':
@@ -463,7 +467,9 @@ paths:
       tags: [providers]
       summary: Все провайдеры с их живым состоянием
       description: |
-        ADMIN. `state.health` и `state.selectable` — только чтение: health выводится пассивно
+        ADMIN и TEMPLATE_MANAGER: последнему список нужен, чтобы регистрацию шаблона у провайдера
+        выбирали, а не набирали кодом (FR-4.5). Правка профилей осталась за ADMIN.
+        `state.health` и `state.selectable` — только чтение: health выводится пассивно
         из реальных попыток отправки (FR-6.3, PR-02), и кнопки «объявить провайдера живым» нет.
       responses:
         '200':
@@ -475,16 +481,36 @@ paths:
                 items: { $ref: '#/components/schemas/Provider' }
         '403': { $ref: '#/components/responses/Problem' }
 
+  /providers/adapters:
+    get:
+      tags: [providers]
+      summary: Типы адаптеров, развёрнутые на этом контуре
+      description: |
+        ADMIN — уже, чем список провайдеров: единственный потребитель — форма регистрации,
+        а она за ADMIN.
+        Не справочник и не конфигурация: это реализации канальных портов, поднятые в этом
+        контуре бинами, — то есть ровно те `adapterType`, для которых отправка найдёт адаптер
+        (AR-04). Набор задаётся деплоем, а не правкой в панели, и потому зависит от контура:
+        на локальном стенде в нём есть и mock-адаптеры (ADR-0041).
+        Поле `adapterType` в `Provider`/`ProviderRequest` намеренно остаётся строкой без `enum`:
+        перечисление в опубликованном контракте заморозило бы набор в релизе.
+      responses:
+        '200':
+          description: Развёрнутые адаптеры, по каналу и типу
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DeployedAdapter' }
+        '403': { $ref: '#/components/responses/Problem' }
+
   /providers/{code}:
     post:
       tags: [providers]
       summary: Зарегистрировать профиль провайдера
       description: ADMIN (FR-2.1). `credentialsRef` — ссылка в секрет-хранилище, не сам секрет (SEC-04).
       parameters:
-        - name: code
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/ProviderProfileCodePath'
       requestBody:
         required: true
         content:
@@ -541,7 +567,7 @@ paths:
         - name: state
           in: path
           required: true
-          schema: { type: string, enum: [ENABLED, DISABLED, MAINTENANCE] }
+          schema: { $ref: '#/components/schemas/ProviderState' }
         - $ref: '#/components/parameters/ReasonHeader'
       responses:
         '200':
@@ -685,11 +711,13 @@ paths:
     get:
       tags: [templates]
       summary: Каталог шаблонов без текстов
-      description: TEMPLATE_MANAGER (FR-4.1).
+      description: >-
+        TEMPLATE_MANAGER, ADMIN и OPERATOR (FR-4.1, ADR-0038): каталог не несёт текстов, и он нужен
+        форме отправки для выбора шаблона. Карточка с текстами версий остаётся у TEMPLATE_MANAGER.
       parameters:
         - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
         - { name: direction, in: query, schema: { type: string } }
-        - { name: catalogStatus, in: query, schema: { type: string, enum: [ACTIVE, ARCHIVED] } }
+        - { name: catalogStatus, in: query, schema: { $ref: '#/components/schemas/TemplateCatalogStatus' } }
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
@@ -848,6 +876,9 @@ paths:
         TEMPLATE_MANAGER (FR-4.1, FR-4.2). Публикация требует второго человека, и это проверяет
         use case, а не экран. Публикация v2 архивирует v1: у локали ровно одна отправляемая
         версия.
+        Порядок статусов — `DRAFT → ON_REVIEW → PUBLISHED → ARCHIVED`; отдельного «отклонена» нет,
+        отказ ревьюера — это возврат версии в `DRAFT`. Переход, которого нет в
+        `TemplateStatus.allowedTransitions()`, отклоняется как 409.
       parameters:
         - $ref: '#/components/parameters/TemplateCodePath'
         - name: locale
@@ -861,7 +892,7 @@ paths:
         - name: status
           in: path
           required: true
-          schema: { type: string, enum: [DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED, REJECTED] }
+          schema: { $ref: '#/components/schemas/TemplateVersionStatus' }
       responses:
         '200':
           description: Версия в новом состоянии
@@ -1151,6 +1182,82 @@ paths:
               schema: { type: string }
         '403': { $ref: '#/components/responses/Problem' }
 
+  # ------------------------------------------------------------------ отправка (ADR-0038)
+  /send/estimate:
+    post:
+      tags: [send]
+      summary: Смета отправки — получатели, сегменты, провайдер и стоимость (FR-4.4)
+      description: >-
+        JSON — одно сообщение, text/csv — загруженный список получателей. Ничего не отправляет,
+        поэтому обоснования не требует.
+      parameters:
+        - { name: streamId, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: templateCode, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: locale, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: channel, in: query, schema: { type: string }, description: Только для text/csv }
+        - { name: trafficClass, in: query, schema: { type: string }, description: Только для text/csv }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendRequest' }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Смета
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendEstimate' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /send/message:
+    post:
+      tags: [send]
+      summary: Отправить одно сообщение по опубликованному шаблону (ADR-0038)
+      parameters:
+        - $ref: '#/components/parameters/ReasonHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendRequest' }
+      responses:
+        '200':
+          description: Сообщение принято конвейером
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageAccepted' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /send/batch:
+    post:
+      tags: [send]
+      summary: Отправить рассылку по загруженному списку получателей (FR-1.6)
+      description: >-
+        Тело — CSV. Адресная колонка по каналу (msisdn / email / pushToken); зарезервированы также
+        clientId, externalId, pushPlatform. Все прочие колонки — merge-переменные строки, имя
+        колонки есть имя переменной, регистр сохраняется.
+      parameters:
+        - { name: streamId, in: query, required: true, schema: { type: string } }
+        - { name: templateCode, in: query, required: true, schema: { type: string } }
+        - { name: locale, in: query, required: true, schema: { type: string } }
+        - { name: channel, in: query, required: true, schema: { type: string } }
+        - { name: trafficClass, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/ReasonHeader'
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Рассылка создана; дальше она видна в разделе «Рассылки»
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendBatchResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
   # ------------------------------------------------------------------ администрирование
 
   /administration/kill-switch:
@@ -1293,7 +1400,10 @@ components:
       name: streamId
       in: path
       required: true
-      schema: { type: string }
+      description: |
+        Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+        (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+      schema: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{1,63}$' }
     ChannelPath:
       name: channel
       in: path
@@ -1308,17 +1418,31 @@ components:
       name: providerCode
       in: path
       required: true
-      schema: { type: string }
+      description: Код профиля провайдера; формат — как у `ProviderProfileCodePath`
+      schema: { type: string, pattern: '^[A-Z0-9][A-Z0-9_]{1,31}$' }
     PolicyIdPath:
       name: policyId
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ProviderProfileCodePath:
+      name: code
+      in: path
+      required: true
+      description: |
+        Код профиля провайдера: **заглавные** латинские буквы, цифры и `_`, 2–32 символа
+        (`PLAYMOBILE`, `SMS_GATE`). Не путать с типом адаптера (`playmobile-http`), который
+        выбирается из списка и пишется строчными.
+      schema: { type: string, pattern: '^[A-Z0-9][A-Z0-9_]{1,31}$' }
+
     TemplateCodePath:
       name: code
       in: path
       required: true
-      schema: { type: string }
+      description: |
+        Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+        (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+      schema: { type: string, pattern: '^[A-Z0-9][A-Z0-9._-]{1,63}$' }
     ParameterKeyPath:
       name: key
       in: path
@@ -1375,6 +1499,80 @@ components:
       type: string
       enum: [SMS, EMAIL, PUSH]
 
+    BalancingStrategy:
+      type: string
+      description: Стратегия балансировки между провайдерами канала (FR-2.3)
+      enum: [ROUND_ROBIN, WEIGHTED, LEAST_COST, PRIMARY_ONLY]
+
+    TrafficClass:
+      type: string
+      description: Класс трафика (TC-01). Из Kafka берётся из топика и перекрывает документ.
+      enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION]
+
+    Priority:
+      type: string
+      enum: [REALTIME, HIGH, NORMAL, LOW]
+
+    IntegrationType:
+      type: string
+      description: |
+        Как система-источник подаёт сообщения (FR-1.1, FR-1.3). Значение описательное: приём
+        по нему не ограничивается, поток, заведённый как `REST`, принимает и из Kafka.
+      enum: [KAFKA, REST]
+
+    StreamStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED, DISABLED]
+
+    ConnectionStatus:
+      type: string
+      description: Наблюдаемая активность источника, а не настройка.
+      enum: [CONNECTED, IDLE, DISCONNECTED, UNKNOWN]
+
+    ChannelStatus:
+      type: string
+      enum: [ACTIVE, MAINTENANCE, DISABLED]
+
+    ProviderHealthStatus:
+      type: string
+      description: Считается по фактическим попыткам доставки (PR-02); `DOWN` невыбираем.
+      enum: [UP, DEGRADED, DOWN, UNKNOWN]
+
+    QuotaExhaustionBehavior:
+      type: string
+      description: Поведение при исчерпании квоты — отклонять или только сигнализировать.
+      enum: [BLOCK_AND_ALERT, ALERT_ONLY]
+
+    QuietHoursBehavior:
+      type: string
+      enum: [DEFER, REJECT]
+
+    PushPlatform:
+      type: string
+      description: |
+        Платформа устройства, а не адаптер: APNs и FCM — это `adapterType` профиля провайдера,
+        и в адресе получателя им не место.
+      enum: [ANDROID, IOS, WEB]
+
+    SmsEncoding:
+      type: string
+      description: Кодировка, выбранная сегментацией (§18.3); один не-GSM символ переводит всё в UCS2.
+      enum: [GSM7, UCS2]
+
+    ProviderState:
+      type: string
+      description: |
+        Состояние, в которое переводят профиль. `MAINTENANCE` — не `DISABLED`: оба делают провайдера
+        невыбираемым, но в аудите это разные записи.
+      enum: [ENABLED, DISABLED, MAINTENANCE]
+
+    TemplateCatalogStatus:
+      type: string
+      description: |
+        Статус карточки шаблона: остаётся ли он в каталоге. Не путать со статусом версии
+        (`TemplateVersionStatus`) — отправляемым шаблон делает публикация версии, а не карточка.
+      enum: [ACTIVE, ARCHIVED]
+
     ContentLocale:
       type: string
       enum: [RU, UZ, EN]
@@ -1397,7 +1595,8 @@ components:
 
     SuppressionReason:
       type: string
-      enum: [OPT_OUT, COMPLAINT, HARD_BOUNCE, INVALID_ADDRESS, BLACKLISTED, MANUAL]
+      enum: [OPT_OUT, COMPLAINT, HARD_BOUNCE, DELIVERY_FAILURES, PROVIDER_BLACKLIST,
+             PUSH_TOKEN_INVALID, MANUAL]
 
     Money:
       type: string
@@ -1410,7 +1609,7 @@ components:
         monthlyCount: { type: integer, format: int64, nullable: true }
         dailyCost: { $ref: '#/components/schemas/Money' }
         monthlyCost: { $ref: '#/components/schemas/Money' }
-        behavior: { type: string, enum: [BLOCK, ALERT_ONLY] }
+        behavior: { $ref: '#/components/schemas/QuotaExhaustionBehavior' }
 
     QuietHours:
       type: object
@@ -1419,7 +1618,7 @@ components:
         start: { type: string, example: "21:00" }
         end: { type: string, example: "09:00" }
         zone: { type: string, default: Asia/Tashkent }
-        behavior: { type: string, enum: [DEFER, REJECT] }
+        behavior: { $ref: '#/components/schemas/QuietHoursBehavior' }
 
     RateLimit:
       type: object
@@ -1442,7 +1641,7 @@ components:
         msisdn: { type: string, example: "998901234567" }
         email: { type: string, format: email }
         pushToken: { type: string }
-        pushPlatform: { type: string, enum: [APNS, FCM] }
+        pushPlatform: { $ref: '#/components/schemas/PushPlatform' }
 
     Dashboard:
       type: object
@@ -1470,7 +1669,7 @@ components:
             properties:
               provider: { type: string }
               channel: { $ref: '#/components/schemas/Channel' }
-              health: { type: string, enum: [UP, DEGRADED, DOWN, UNKNOWN] }
+              health: { $ref: '#/components/schemas/ProviderHealthStatus' }
               selectable: { type: boolean }
         backlog:
           type: object
@@ -1644,9 +1843,9 @@ components:
       properties:
         streamId: { type: string }
         name: { type: string }
-        integrationType: { type: string, enum: [REST, KAFKA, BOTH] }
-        status: { type: string, enum: [ACTIVE, SUSPENDED] }
-        connectionStatus: { type: string, enum: [CONNECTED, IDLE, UNKNOWN] }
+        integrationType: { $ref: '#/components/schemas/IntegrationType' }
+        status: { $ref: '#/components/schemas/StreamStatus' }
+        connectionStatus: { $ref: '#/components/schemas/ConnectionStatus' }
         defaults: { $ref: '#/components/schemas/StreamDefaults' }
         limits:
           type: object
@@ -1662,15 +1861,15 @@ components:
       properties:
         channel: { $ref: '#/components/schemas/Channel' }
         provider: { type: string }
-        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
-        priority: { type: string, enum: [HIGH, NORMAL, LOW] }
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        trafficClass: { $ref: '#/components/schemas/TrafficClass' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
 
     StreamRequest:
       type: object
       properties:
         name: { type: string }
-        integrationType: { type: string, enum: [REST, KAFKA, BOTH] }
+        integrationType: { $ref: '#/components/schemas/IntegrationType' }
         defaults: { $ref: '#/components/schemas/StreamDefaults' }
         quota: { $ref: '#/components/schemas/Quota' }
         quietHours: { $ref: '#/components/schemas/QuietHours' }
@@ -1687,8 +1886,8 @@ components:
       type: object
       properties:
         channel: { $ref: '#/components/schemas/Channel' }
-        status: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        status: { $ref: '#/components/schemas/ChannelStatus' }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
         fallbackOrder:
           type: array
           items: { type: string }
@@ -1699,7 +1898,7 @@ components:
     ChannelRequest:
       type: object
       properties:
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
         fallbackOrder:
           type: array
           items: { type: string }
@@ -1707,13 +1906,30 @@ components:
         quietHours: { $ref: '#/components/schemas/QuietHours' }
         quota: { $ref: '#/components/schemas/Quota' }
 
+    DeployedAdapter:
+      type: object
+      description: Реализация канального порта, поднятая в этом контуре (AR-04)
+      properties:
+        adapterType:
+          type: string
+          description: |
+            Ключ адаптера, например `playmobile-http`. Непрозрачная строка: добавление провайдера —
+            это новый бин и ничего больше (AR-04).
+        channel:
+          allOf: [{ $ref: '#/components/schemas/Channel' }]
+          description: Канал, который обслуживает адаптер; профиль обязан назвать тот же
+
     Provider:
       type: object
       properties:
         providerId: { type: string, format: uuid }
         code: { type: string }
         channel: { $ref: '#/components/schemas/Channel' }
-        adapterType: { type: string }
+        adapterType:
+          type: string
+          description: |
+            Значение из `GET /providers/adapters` — набор зависит от контура, поэтому здесь
+            намеренно нет `enum` (AR-04).
         weight: { type: integer }
         tariff: { $ref: '#/components/schemas/Tariff' }
         rateLimit: { $ref: '#/components/schemas/RateLimit' }
@@ -1722,7 +1938,7 @@ components:
           properties:
             enabled: { type: boolean }
             maintenance: { type: boolean }
-            health: { type: string, enum: [UP, DEGRADED, DOWN, UNKNOWN] }
+            health: { $ref: '#/components/schemas/ProviderHealthStatus' }
             selectable: { type: boolean, readOnly: true }
             quota: { $ref: '#/components/schemas/Quota' }
             credentialsRef:
@@ -1735,8 +1951,14 @@ components:
     ProviderRequest:
       type: object
       properties:
-        channel: { $ref: '#/components/schemas/Channel' }
-        adapterType: { type: string }
+        channel:
+          allOf: [{ $ref: '#/components/schemas/Channel' }]
+          description: Читается только при регистрации; при обновлении профиля игнорируется
+        adapterType:
+          type: string
+          description: |
+            Значение из `GET /providers/adapters`, канал которого совпадает с `channel`.
+            Читается только при регистрации; при обновлении профиля игнорируется.
         weight: { type: integer }
         tariff: { $ref: '#/components/schemas/Tariff' }
         rateLimit: { $ref: '#/components/schemas/RateLimit' }
@@ -1760,8 +1982,8 @@ components:
       description: Каким должно быть сообщение, чтобы политика применилась; все поля опциональны
       properties:
         streamId: { type: string }
-        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
-        minPriority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        trafficClass: { $ref: '#/components/schemas/TrafficClass' }
+        minPriority: { $ref: '#/components/schemas/Priority' }
         channel: { $ref: '#/components/schemas/Channel' }
 
     RoutingAction:
@@ -1771,7 +1993,7 @@ components:
         providerOrder:
           type: array
           items: { type: string }
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
 
     RoutingPolicyRequest:
       type: object
@@ -1788,8 +2010,8 @@ components:
         streamId: { type: string }
         recipient: { $ref: '#/components/schemas/Recipient' }
         channel: { $ref: '#/components/schemas/Channel' }
-        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
-        priority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        trafficClass: { $ref: '#/components/schemas/TrafficClass' }
+        priority: { $ref: '#/components/schemas/Priority' }
         text: { type: string, description: Нужен для расчёта сегментов и стоимости (§18.3) }
 
     RouteEvaluation:
@@ -1801,7 +2023,7 @@ components:
         fallbackProviders:
           type: array
           items: { type: string }
-        strategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        strategy: { $ref: '#/components/schemas/BalancingStrategy' }
         segments: { type: integer }
         estimatedCost: { $ref: '#/components/schemas/Money' }
         rejection:
@@ -1819,7 +2041,7 @@ components:
         channel: { $ref: '#/components/schemas/Channel' }
         direction: { type: string }
         owner: { type: string }
-        catalogStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+        catalogStatus: { $ref: '#/components/schemas/TemplateCatalogStatus' }
         versions:
           type: array
           items: { $ref: '#/components/schemas/TemplateVersion' }
@@ -1841,10 +2063,19 @@ components:
         channel: { $ref: '#/components/schemas/Channel' }
         direction: { type: string }
         owner: { type: string }
-        catalogStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+        catalogStatus: { $ref: '#/components/schemas/TemplateCatalogStatus' }
         publishedLocales:
           type: array
           items: { $ref: '#/components/schemas/ContentLocale' }
+
+    TemplateVersionStatus:
+      type: string
+      description: |
+        Жизненный цикл версии (FR-4.1). Отправляема только `PUBLISHED`. Отдельного «отклонена» нет:
+        отказ ревьюера возвращает версию в `DRAFT`. Не путать со статусом карточки
+        (`Template.catalogStatus` — `ACTIVE`/`ARCHIVED`), который говорит лишь о том, остаётся ли
+        шаблон в каталоге.
+      enum: [DRAFT, ON_REVIEW, PUBLISHED, ARCHIVED]
 
     TemplateVersion:
       type: object
@@ -1853,7 +2084,7 @@ components:
         version: { type: integer }
         locale: { $ref: '#/components/schemas/ContentLocale' }
         body: { $ref: '#/components/schemas/TemplateBody' }
-        status: { type: string, enum: [DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED, REJECTED] }
+        status: { $ref: '#/components/schemas/TemplateVersionStatus' }
         variables:
           type: array
           items: { type: string }
@@ -1930,7 +2161,7 @@ components:
           type: object
           nullable: true
           properties:
-            encoding: { type: string, enum: [GSM7, UCS2] }
+            encoding: { $ref: '#/components/schemas/SmsEncoding' }
             characterCount: { type: integer }
             segments: { type: integer }
 
@@ -2028,9 +2259,82 @@ components:
         action: { type: string }
         entityType: { type: string }
         entityId: { type: string }
-        before: { type: string }
-        after: { type: string }
+        change:
+          type: object
+          description: Состояние до и после изменения; оба пусты у создания, удаления и чтения
+          properties:
+            before: { type: string, nullable: true }
+            after: { type: string, nullable: true }
+        reason:
+          type: string
+          nullable: true
+          description: Обоснование, введённое оператором (X-Commhub-Reason, FR-7.3)
         sourceIp: { type: string }
+
+    SendRequest:
+      type: object
+      required: [streamId, templateCode, locale, channel, recipient]
+      description: Поля текста здесь нет намеренно — контент берётся из опубликованного шаблона (ADR-0038)
+      properties:
+        streamId: { type: string }
+        templateCode: { type: string }
+        locale: { type: string, description: 'RU / UZ / EN' }
+        channel: { type: string }
+        trafficClass: { type: string, nullable: true }
+        recipient: { $ref: '#/components/schemas/Recipient' }
+        variables:
+          type: object
+          additionalProperties: { type: string }
+          description: Merge-поля шаблона
+        externalId: { type: string, nullable: true }
+
+    SendEstimate:
+      type: object
+      properties:
+        recipients: { type: integer, format: int64 }
+        segments: { type: integer, format: int64 }
+        estimatedCost: { type: string, nullable: true }
+        provider: { type: string, nullable: true }
+        template:
+          type: object
+          properties:
+            version: { type: integer }
+            status: { type: string }
+        missingVariables:
+          type: array
+          items: { type: string }
+          description: Незаполненные merge-поля; на реальной отправке эти строки были бы отклонены
+        rejection:
+          type: object
+          nullable: true
+          properties:
+            reason: { type: string }
+            detail: { type: string, nullable: true }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: integer, description: Строка файла, 1-based }
+              reason: { type: string }
+
+    SendBatchResult:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        accepted: { type: integer, format: int64 }
+        duplicates:
+          type: integer
+          format: int64
+          description: Повторная загрузка того же файла попадает целиком сюда (FR-1.5)
+        rejected: { type: integer, format: int64 }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: integer, description: Строка файла, 1-based }
+              reason: { type: string }
 
     KillSwitch:
       type: object

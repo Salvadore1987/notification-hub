@@ -52,5 +52,46 @@ public final class AdminAuthority {
     /** The suppression list, which §11.2 gives to both ADMIN and OPERATOR. */
     public static final String SUPPRESSION = OPERATOR;
 
+    /**
+     * Reading the list of streams, so that a send can be aimed at one (ADR-0038).
+     *
+     * <p>Wider than the {@code ADMIN} that owns stream <em>configuration</em>, because the send screen
+     * belongs to {@link #SENDER} and a form that asks an operator to type an identifier from a list they
+     * may not read is a form that gets it wrong. Only the list is widened: registering, editing and
+     * suspending a stream stay {@code ADMIN}.
+     *
+     * <p>The cost is stated rather than hidden: the list carries each stream's quotas, limits and quiet
+     * hours, so an operator can now read that configuration. It is a read, and §11.2 already trusts the
+     * same people with the traffic those settings govern.
+     */
+    public static final String STREAM_READER = OPERATOR;
+
+    /**
+     * Reading the template catalogue, so that a send can name a template (ADR-0038, FR-4.1).
+     *
+     * <p>The catalogue carries no bodies — code, channel, owner and which locales are published — which
+     * is exactly what a picker needs and nothing an author would call their text. The card
+     * ({@code GET /templates/&#123;code&#125;}) does carry bodies and stays with the template manager.
+     */
+    public static final String TEMPLATE_CATALOGUE_READER =
+            "hasAnyRole('" + Roles.ADMIN + "','" + Roles.TEMPLATE_MANAGER + "','" + Roles.OPERATOR + "')";
+
+    /**
+     * Reading the list of providers.
+     *
+     * <p>{@link Roles#TEMPLATE_MANAGER} is here because registering a template with a provider (FR-4.5)
+     * has to name one, and naming it by typing a code is how a mapping ends up pointing at nothing.
+     * Editing a provider profile remains {@code ADMIN}.
+     */
+    public static final String PROVIDER_READER = "hasAnyRole('" + Roles.ADMIN + "','" + Roles.TEMPLATE_MANAGER + "')";
+
+    /**
+     * Sending from the panel (ADR-0038).
+     *
+     * <p>The same pair that already controls running traffic: the right to send and the right to stop
+     * what is being sent belong together, and a separate role would only make one of them harder to get.
+     */
+    public static final String SENDER = OPERATOR;
+
     private AdminAuthority() {}
 }

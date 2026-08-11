@@ -219,7 +219,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -465,7 +465,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path?: never;
@@ -504,7 +504,7 @@ export interface paths {
         };
         /**
          * Все зарегистрированные потоки
-         * @description ADMIN. Без пагинации — потоков десятки, и пейджер здесь только прячет строки.
+         * @description ADMIN и OPERATOR: список нужен форме отправки, чтобы поток выбирали, а не набирали (ADR-0038). Правка потоков осталась за ADMIN. Без пагинации — потоков десятки.
          */
         get: {
             parameters: {
@@ -552,6 +552,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -583,6 +587,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -629,10 +637,14 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -674,10 +686,14 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+                     */
                     streamId: components["parameters"]["StreamIdPath"];
                 };
                 cookie?: never;
@@ -805,12 +821,12 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
                     channel: components["parameters"]["ChannelPath"];
-                    status: "ACTIVE" | "DISABLED" | "MAINTENANCE";
+                    status: components["schemas"]["ChannelStatus"];
                 };
                 cookie?: never;
             };
@@ -843,7 +859,9 @@ export interface paths {
         };
         /**
          * Все провайдеры с их живым состоянием
-         * @description ADMIN. `state.health` и `state.selectable` — только чтение: health выводится пассивно
+         * @description ADMIN и TEMPLATE_MANAGER: последнему список нужен, чтобы регистрацию шаблона у провайдера
+         *     выбирали, а не набирали кодом (FR-4.5). Правка профилей осталась за ADMIN.
+         *     `state.health` и `state.selectable` — только чтение: health выводится пассивно
          *     из реальных попыток отправки (FR-6.3, PR-02), и кнопки «объявить провайдера живым» нет.
          */
         get: {
@@ -875,6 +893,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/providers/adapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Типы адаптеров, развёрнутые на этом контуре
+         * @description ADMIN — уже, чем список провайдеров: единственный потребитель — форма регистрации,
+         *     а она за ADMIN.
+         *     Не справочник и не конфигурация: это реализации канальных портов, поднятые в этом
+         *     контуре бинами, — то есть ровно те `adapterType`, для которых отправка найдёт адаптер
+         *     (AR-04). Набор задаётся деплоем, а не правкой в панели, и потому зависит от контура:
+         *     на локальном стенде в нём есть и mock-адаптеры (ADR-0041).
+         *     Поле `adapterType` в `Provider`/`ProviderRequest` намеренно остаётся строкой без `enum`:
+         *     перечисление в опубликованном контракте заморозило бы набор в релизе.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Развёрнутые адаптеры, по каналу и типу */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeployedAdapter"][];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/providers/{code}": {
         parameters: {
             query?: never;
@@ -893,7 +958,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    code: string;
+                    /**
+                     * @description Код профиля провайдера: **заглавные** латинские буквы, цифры и `_`, 2–32 символа
+                     *     (`PLAYMOBILE`, `SMS_GATE`). Не путать с типом адаптера (`playmobile-http`), который
+                     *     выбирается из списка и пишется строчными.
+                     */
+                    code: components["parameters"]["ProviderProfileCodePath"];
                 };
                 cookie?: never;
             };
@@ -971,7 +1041,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -1013,12 +1083,12 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
                     providerId: components["parameters"]["ProviderIdPath"];
-                    state: "ENABLED" | "DISABLED" | "MAINTENANCE";
+                    state: components["schemas"]["ProviderState"];
                 };
                 cookie?: never;
             };
@@ -1328,14 +1398,14 @@ export interface paths {
         };
         /**
          * Каталог шаблонов без текстов
-         * @description TEMPLATE_MANAGER (FR-4.1).
+         * @description TEMPLATE_MANAGER, ADMIN и OPERATOR (FR-4.1, ADR-0038): каталог не несёт текстов, и он нужен форме отправки для выбора шаблона. Карточка с текстами версий остаётся у TEMPLATE_MANAGER.
          */
         get: {
             parameters: {
                 query?: {
                     channel?: components["schemas"]["Channel"];
                     direction?: string;
-                    catalogStatus?: "ACTIVE" | "ARCHIVED";
+                    catalogStatus?: components["schemas"]["TemplateCatalogStatus"];
                     /** @description Размер страницы; потолок зависит от списка */
                     limit?: components["parameters"]["Limit"];
                     offset?: components["parameters"]["Offset"];
@@ -1434,6 +1504,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1461,6 +1535,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1492,6 +1570,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1523,10 +1605,14 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1567,10 +1653,14 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1614,6 +1704,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1657,16 +1751,23 @@ export interface paths {
          * @description TEMPLATE_MANAGER (FR-4.1, FR-4.2). Публикация требует второго человека, и это проверяет
          *     use case, а не экран. Публикация v2 архивирует v1: у локали ровно одна отправляемая
          *     версия.
+         *     Порядок статусов — `DRAFT → ON_REVIEW → PUBLISHED → ARCHIVED`; отдельного «отклонена» нет,
+         *     отказ ревьюера — это возврат версии в `DRAFT`. Переход, которого нет в
+         *     `TemplateStatus.allowedTransitions()`, отклоняется как 409.
          */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                     locale: components["schemas"]["ContentLocale"];
                     version: number;
-                    status: "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
+                    status: components["schemas"]["TemplateVersionStatus"];
                 };
                 cookie?: never;
             };
@@ -1711,6 +1812,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
                 };
                 cookie?: never;
@@ -1756,7 +1861,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
+                    /** @description Код профиля провайдера; формат — как у `ProviderProfileCodePath` */
                     providerCode: components["parameters"]["ProviderCodePath"];
                 };
                 cookie?: never;
@@ -1789,7 +1899,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /**
+                     * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+                     *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+                     */
                     code: components["parameters"]["TemplateCodePath"];
+                    /** @description Код профиля провайдера; формат — как у `ProviderProfileCodePath` */
                     providerCode: components["parameters"]["ProviderCodePath"];
                 };
                 cookie?: never;
@@ -2005,7 +2120,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
                     "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
                 };
                 path: {
@@ -2246,6 +2361,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/send/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Смета отправки — получатели, сегменты, провайдер и стоимость (FR-4.4)
+         * @description JSON — одно сообщение, text/csv — загруженный список получателей. Ничего не отправляет, поэтому обоснования не требует.
+         */
+        post: {
+            parameters: {
+                query?: {
+                    /** @description Только для text/csv */
+                    streamId?: string;
+                    /** @description Только для text/csv */
+                    templateCode?: string;
+                    /** @description Только для text/csv */
+                    locale?: string;
+                    /** @description Только для text/csv */
+                    channel?: string;
+                    /** @description Только для text/csv */
+                    trafficClass?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SendRequest"];
+                    "text/csv": string;
+                };
+            };
+            responses: {
+                /** @description Смета */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SendEstimate"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/send/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправить одно сообщение по опубликованному шаблону (ADR-0038) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
+                    "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SendRequest"];
+                };
+            };
+            responses: {
+                /** @description Сообщение принято конвейером */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MessageAccepted"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/send/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить рассылку по загруженному списку получателей (FR-1.6)
+         * @description Тело — CSV. Адресная колонка по каналу (msisdn / email / pushToken); зарезервированы также clientId, externalId, pushPlatform. Все прочие колонки — merge-переменные строки, имя колонки есть имя переменной, регистр сохраняется.
+         */
+        post: {
+            parameters: {
+                query: {
+                    streamId: string;
+                    templateCode: string;
+                    locale: string;
+                    channel: string;
+                    trafficClass?: string;
+                };
+                header?: {
+                    /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
+                    "X-Commhub-Reason"?: components["parameters"]["ReasonHeader"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "text/csv": string;
+                };
+            };
+            responses: {
+                /** @description Рассылка создана; дальше она видна в разделе «Рассылки» */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SendBatchResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/administration/kill-switch": {
         parameters: {
             query?: never;
@@ -2460,6 +2728,68 @@ export interface components {
         };
         /** @enum {string} */
         Channel: "SMS" | "EMAIL" | "PUSH";
+        /**
+         * @description Стратегия балансировки между провайдерами канала (FR-2.3)
+         * @enum {string}
+         */
+        BalancingStrategy: "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST" | "PRIMARY_ONLY";
+        /**
+         * @description Класс трафика (TC-01). Из Kafka берётся из топика и перекрывает документ.
+         * @enum {string}
+         */
+        TrafficClass: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
+        /** @enum {string} */
+        Priority: "REALTIME" | "HIGH" | "NORMAL" | "LOW";
+        /**
+         * @description Как система-источник подаёт сообщения (FR-1.1, FR-1.3). Значение описательное: приём
+         *     по нему не ограничивается, поток, заведённый как `REST`, принимает и из Kafka.
+         * @enum {string}
+         */
+        IntegrationType: "KAFKA" | "REST";
+        /** @enum {string} */
+        StreamStatus: "ACTIVE" | "SUSPENDED" | "DISABLED";
+        /**
+         * @description Наблюдаемая активность источника, а не настройка.
+         * @enum {string}
+         */
+        ConnectionStatus: "CONNECTED" | "IDLE" | "DISCONNECTED" | "UNKNOWN";
+        /** @enum {string} */
+        ChannelStatus: "ACTIVE" | "MAINTENANCE" | "DISABLED";
+        /**
+         * @description Считается по фактическим попыткам доставки (PR-02); `DOWN` невыбираем.
+         * @enum {string}
+         */
+        ProviderHealthStatus: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN";
+        /**
+         * @description Поведение при исчерпании квоты — отклонять или только сигнализировать.
+         * @enum {string}
+         */
+        QuotaExhaustionBehavior: "BLOCK_AND_ALERT" | "ALERT_ONLY";
+        /** @enum {string} */
+        QuietHoursBehavior: "DEFER" | "REJECT";
+        /**
+         * @description Платформа устройства, а не адаптер: APNs и FCM — это `adapterType` профиля провайдера,
+         *     и в адресе получателя им не место.
+         * @enum {string}
+         */
+        PushPlatform: "ANDROID" | "IOS" | "WEB";
+        /**
+         * @description Кодировка, выбранная сегментацией (§18.3); один не-GSM символ переводит всё в UCS2.
+         * @enum {string}
+         */
+        SmsEncoding: "GSM7" | "UCS2";
+        /**
+         * @description Состояние, в которое переводят профиль. `MAINTENANCE` — не `DISABLED`: оба делают провайдера
+         *     невыбираемым, но в аудите это разные записи.
+         * @enum {string}
+         */
+        ProviderState: "ENABLED" | "DISABLED" | "MAINTENANCE";
+        /**
+         * @description Статус карточки шаблона: остаётся ли он в каталоге. Не путать со статусом версии
+         *     (`TemplateVersionStatus`) — отправляемым шаблон делает публикация версии, а не карточка.
+         * @enum {string}
+         */
+        TemplateCatalogStatus: "ACTIVE" | "ARCHIVED";
         /** @enum {string} */
         ContentLocale: "RU" | "UZ" | "EN";
         /** @enum {string} */
@@ -2469,7 +2799,7 @@ export interface components {
         /** @enum {string} */
         RejectionReason: "VALIDATION_FAILED" | "DUPLICATE_SUBMISSION" | "SUPPRESSED" | "OPT_OUT" | "QUIET_HOURS" | "FREQUENCY_CAPPED" | "QUOTA_EXCEEDED" | "STREAM_SUSPENDED" | "TEMPLATE_NOT_PUBLISHED" | "TEMPLATE_VARIABLE_MISSING" | "NO_ROUTE_AVAILABLE" | "PAN_DETECTED" | "TTL_EXPIRED" | "SEND_STOPPED" | "KILL_SWITCH" | "PROVIDER_REJECTED" | "ATTEMPTS_EXHAUSTED";
         /** @enum {string} */
-        SuppressionReason: "OPT_OUT" | "COMPLAINT" | "HARD_BOUNCE" | "INVALID_ADDRESS" | "BLACKLISTED" | "MANUAL";
+        SuppressionReason: "OPT_OUT" | "COMPLAINT" | "HARD_BOUNCE" | "DELIVERY_FAILURES" | "PROVIDER_BLACKLIST" | "PUSH_TOKEN_INVALID" | "MANUAL";
         /** @description Сумма с кодом валюты, например `12.5000 UZS` */
         Money: string;
         Quota: {
@@ -2479,8 +2809,7 @@ export interface components {
             monthlyCount?: number | null;
             dailyCost?: components["schemas"]["Money"];
             monthlyCost?: components["schemas"]["Money"];
-            /** @enum {string} */
-            behavior?: "BLOCK" | "ALERT_ONLY";
+            behavior?: components["schemas"]["QuotaExhaustionBehavior"];
         };
         /** @description Окно тишины; пересечение полуночи — норма (FR-5.3) */
         QuietHours: {
@@ -2490,8 +2819,7 @@ export interface components {
             end?: string;
             /** @default Asia/Tashkent */
             zone: string;
-            /** @enum {string} */
-            behavior?: "DEFER" | "REJECT";
+            behavior?: components["schemas"]["QuietHoursBehavior"];
         };
         RateLimit: {
             tps?: number;
@@ -2510,8 +2838,7 @@ export interface components {
             /** Format: email */
             email?: string;
             pushToken?: string;
-            /** @enum {string} */
-            pushPlatform?: "APNS" | "FCM";
+            pushPlatform?: components["schemas"]["PushPlatform"];
         };
         Dashboard: {
             /** Format: date-time */
@@ -2539,8 +2866,7 @@ export interface components {
             providers?: {
                 provider?: string;
                 channel?: components["schemas"]["Channel"];
-                /** @enum {string} */
-                health?: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN";
+                health?: components["schemas"]["ProviderHealthStatus"];
                 selectable?: boolean;
             }[];
             backlog?: {
@@ -2713,12 +3039,9 @@ export interface components {
         Stream: {
             streamId?: string;
             name?: string;
-            /** @enum {string} */
-            integrationType?: "REST" | "KAFKA" | "BOTH";
-            /** @enum {string} */
-            status?: "ACTIVE" | "SUSPENDED";
-            /** @enum {string} */
-            connectionStatus?: "CONNECTED" | "IDLE" | "UNKNOWN";
+            integrationType?: components["schemas"]["IntegrationType"];
+            status?: components["schemas"]["StreamStatus"];
+            connectionStatus?: components["schemas"]["ConnectionStatus"];
             defaults?: components["schemas"]["StreamDefaults"];
             limits?: {
                 quota?: components["schemas"]["Quota"];
@@ -2732,17 +3055,13 @@ export interface components {
         StreamDefaults: {
             channel?: components["schemas"]["Channel"];
             provider?: string;
-            /** @enum {string} */
-            trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
-            /** @enum {string} */
-            priority?: "HIGH" | "NORMAL" | "LOW";
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            trafficClass?: components["schemas"]["TrafficClass"];
+            priority?: components["schemas"]["Priority"];
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
         };
         StreamRequest: {
             name?: string;
-            /** @enum {string} */
-            integrationType?: "REST" | "KAFKA" | "BOTH";
+            integrationType?: components["schemas"]["IntegrationType"];
             defaults?: components["schemas"]["StreamDefaults"];
             quota?: components["schemas"]["Quota"];
             quietHours?: components["schemas"]["QuietHours"];
@@ -2757,28 +3076,39 @@ export interface components {
         };
         ChannelConfig: {
             channel?: components["schemas"]["Channel"];
-            /** @enum {string} */
-            status?: "ACTIVE" | "DISABLED" | "MAINTENANCE";
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            status?: components["schemas"]["ChannelStatus"];
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
             fallbackOrder?: string[];
             quietHours?: components["schemas"]["QuietHours"];
             quota?: components["schemas"]["Quota"];
             available?: boolean;
         };
         ChannelRequest: {
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
             /** @description Порядок и есть конфигурация, поэтому список присылается целиком */
             fallbackOrder?: string[];
             quietHours?: components["schemas"]["QuietHours"];
             quota?: components["schemas"]["Quota"];
+        };
+        /** @description Реализация канального порта, поднятая в этом контуре (AR-04) */
+        DeployedAdapter: {
+            /**
+             * @description Ключ адаптера, например `playmobile-http`. Непрозрачная строка: добавление провайдера —
+             *     это новый бин и ничего больше (AR-04).
+             */
+            adapterType?: string;
+            /** @description Канал, который обслуживает адаптер; профиль обязан назвать тот же */
+            channel?: components["schemas"]["Channel"];
         };
         Provider: {
             /** Format: uuid */
             providerId?: string;
             code?: string;
             channel?: components["schemas"]["Channel"];
+            /**
+             * @description Значение из `GET /providers/adapters` — набор зависит от контура, поэтому здесь
+             *     намеренно нет `enum` (AR-04).
+             */
             adapterType?: string;
             weight?: number;
             tariff?: components["schemas"]["Tariff"];
@@ -2786,8 +3116,7 @@ export interface components {
             state?: {
                 enabled?: boolean;
                 maintenance?: boolean;
-                /** @enum {string} */
-                health?: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN";
+                health?: components["schemas"]["ProviderHealthStatus"];
                 readonly selectable?: boolean;
                 quota?: components["schemas"]["Quota"];
                 /** @description Ссылка в секрет-хранилище; сам секрет наружу не выходит (SEC-04) */
@@ -2798,7 +3127,12 @@ export interface components {
             };
         };
         ProviderRequest: {
+            /** @description Читается только при регистрации; при обновлении профиля игнорируется */
             channel?: components["schemas"]["Channel"];
+            /**
+             * @description Значение из `GET /providers/adapters`, канал которого совпадает с `channel`.
+             *     Читается только при регистрации; при обновлении профиля игнорируется.
+             */
             adapterType?: string;
             weight?: number;
             tariff?: components["schemas"]["Tariff"];
@@ -2821,17 +3155,14 @@ export interface components {
         /** @description Каким должно быть сообщение, чтобы политика применилась; все поля опциональны */
         RoutingMatch: {
             streamId?: string;
-            /** @enum {string} */
-            trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
-            /** @enum {string} */
-            minPriority?: "HIGH" | "NORMAL" | "LOW";
+            trafficClass?: components["schemas"]["TrafficClass"];
+            minPriority?: components["schemas"]["Priority"];
             channel?: components["schemas"]["Channel"];
         };
         RoutingAction: {
             channel?: components["schemas"]["Channel"];
             providerOrder?: string[];
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
         };
         RoutingPolicyRequest: {
             match: components["schemas"]["RoutingMatch"];
@@ -2842,10 +3173,8 @@ export interface components {
             streamId: string;
             recipient: components["schemas"]["Recipient"];
             channel?: components["schemas"]["Channel"];
-            /** @enum {string} */
-            trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
-            /** @enum {string} */
-            priority?: "HIGH" | "NORMAL" | "LOW";
+            trafficClass?: components["schemas"]["TrafficClass"];
+            priority?: components["schemas"]["Priority"];
             /** @description Нужен для расчёта сегментов и стоимости (§18.3) */
             text?: string;
         };
@@ -2854,8 +3183,7 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             provider?: string;
             fallbackProviders?: string[];
-            /** @enum {string} */
-            strategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            strategy?: components["schemas"]["BalancingStrategy"];
             segments?: number;
             estimatedCost?: components["schemas"]["Money"];
             rejection?: {
@@ -2870,8 +3198,7 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             direction?: string;
             owner?: string;
-            /** @enum {string} */
-            catalogStatus?: "ACTIVE" | "ARCHIVED";
+            catalogStatus?: components["schemas"]["TemplateCatalogStatus"];
             versions?: components["schemas"]["TemplateVersion"][];
             providerMappings?: {
                 providerCode?: string;
@@ -2887,18 +3214,24 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             direction?: string;
             owner?: string;
-            /** @enum {string} */
-            catalogStatus?: "ACTIVE" | "ARCHIVED";
+            catalogStatus?: components["schemas"]["TemplateCatalogStatus"];
             publishedLocales?: components["schemas"]["ContentLocale"][];
         };
+        /**
+         * @description Жизненный цикл версии (FR-4.1). Отправляема только `PUBLISHED`. Отдельного «отклонена» нет:
+         *     отказ ревьюера возвращает версию в `DRAFT`. Не путать со статусом карточки
+         *     (`Template.catalogStatus` — `ACTIVE`/`ARCHIVED`), который говорит лишь о том, остаётся ли
+         *     шаблон в каталоге.
+         * @enum {string}
+         */
+        TemplateVersionStatus: "DRAFT" | "ON_REVIEW" | "PUBLISHED" | "ARCHIVED";
         TemplateVersion: {
             /** Format: uuid */
             versionId?: string;
             version?: number;
             locale?: components["schemas"]["ContentLocale"];
             body?: components["schemas"]["TemplateBody"];
-            /** @enum {string} */
-            status?: "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
+            status?: components["schemas"]["TemplateVersionStatus"];
             variables?: string[];
             review?: {
                 createdBy?: string;
@@ -2949,8 +3282,7 @@ export interface components {
                 selectable?: boolean;
             }[];
             segmentation?: {
-                /** @enum {string} */
-                encoding?: "GSM7" | "UCS2";
+                encoding?: components["schemas"]["SmsEncoding"];
                 characterCount?: number;
                 segments?: number;
             } | null;
@@ -3027,9 +3359,70 @@ export interface components {
             action?: string;
             entityType?: string;
             entityId?: string;
-            before?: string;
-            after?: string;
+            /** @description Состояние до и после изменения; оба пусты у создания, удаления и чтения */
+            change?: {
+                before?: string | null;
+                after?: string | null;
+            };
+            /** @description Обоснование, введённое оператором (X-Commhub-Reason, FR-7.3) */
+            reason?: string | null;
             sourceIp?: string;
+        };
+        /** @description Поля текста здесь нет намеренно — контент берётся из опубликованного шаблона (ADR-0038) */
+        SendRequest: {
+            streamId: string;
+            templateCode: string;
+            /** @description RU / UZ / EN */
+            locale: string;
+            channel: string;
+            trafficClass?: string | null;
+            recipient: components["schemas"]["Recipient"];
+            /** @description Merge-поля шаблона */
+            variables?: {
+                [key: string]: string;
+            };
+            externalId?: string | null;
+        };
+        SendEstimate: {
+            /** Format: int64 */
+            recipients?: number;
+            /** Format: int64 */
+            segments?: number;
+            estimatedCost?: string | null;
+            provider?: string | null;
+            template?: {
+                version?: number;
+                status?: string;
+            };
+            /** @description Незаполненные merge-поля; на реальной отправке эти строки были бы отклонены */
+            missingVariables?: string[];
+            rejection?: {
+                reason?: string;
+                detail?: string | null;
+            } | null;
+            failures?: {
+                /** @description Строка файла */
+                line?: number;
+                reason?: string;
+            }[];
+        };
+        SendBatchResult: {
+            /** Format: uuid */
+            batchId?: string;
+            /** Format: int64 */
+            accepted?: number;
+            /**
+             * Format: int64
+             * @description Повторная загрузка того же файла попадает целиком сюда (FR-1.5)
+             */
+            duplicates?: number;
+            /** Format: int64 */
+            rejected?: number;
+            failures?: {
+                /** @description Строка файла */
+                line?: number;
+                reason?: string;
+            }[];
         };
         KillSwitch: {
             active?: boolean;
@@ -3089,14 +3482,29 @@ export interface components {
         /** @description Разрез отчёта */
         Dimension: "CHANNEL" | "PROVIDER" | "STREAM" | "BATCH" | "DAY" | "HOUR";
         BatchId: string;
+        /**
+         * @description Идентификатор потока: **строчные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+         *     (`mobile-app`, `crm`). Регистр значим — `PlayMobile` будет отклонён, `playmobile` нет.
+         */
         StreamIdPath: string;
         ChannelPath: components["schemas"]["Channel"];
         ProviderIdPath: string;
+        /** @description Код профиля провайдера; формат — как у `ProviderProfileCodePath` */
         ProviderCodePath: string;
         PolicyIdPath: string;
+        /**
+         * @description Код профиля провайдера: **заглавные** латинские буквы, цифры и `_`, 2–32 символа
+         *     (`PLAYMOBILE`, `SMS_GATE`). Не путать с типом адаптера (`playmobile-http`), который
+         *     выбирается из списка и пишется строчными.
+         */
+        ProviderProfileCodePath: string;
+        /**
+         * @description Код шаблона: **заглавные** латинские буквы, цифры, `.`, `-`, `_`, 2–64 символа
+         *     (`OTP_LOGIN`). Регистр значим и противоположен регистру идентификатора потока.
+         */
         TemplateCodePath: string;
         ParameterKeyPath: string;
-        /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03) */
+        /** @description Обоснование действия; попадает в журнал аудита (FR-7.3, SEC-03). Значение — percent-encoded UTF-8 (RFC 3986): значение HTTP-заголовка байтовое, а обоснование набирают по-русски. */
         ReasonHeader: string;
     };
     requestBodies: never;

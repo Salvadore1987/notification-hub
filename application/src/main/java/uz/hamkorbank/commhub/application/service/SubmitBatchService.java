@@ -77,6 +77,7 @@ public class SubmitBatchService implements SubmitBatch {
                 command.expectedTotal(),
                 command.timingOptional().orElseGet(Timing::immediate),
                 now);
+        batch.applyItemDefaults(new Batch.ItemDefaults(command.trafficClass(), command.template(), command.test()));
         stream.touch(now);
         streams.save(stream);
         return mapper.toAcceptedResult(batches.save(batch));
@@ -111,9 +112,28 @@ public class SubmitBatchService implements SubmitBatch {
             }
         }
         batch.registerProcessed(duplicates + rejections.size());
+        closeIfNothingIsLeftInFlight(batch);
         batches.save(batch);
         return new BatchItemsResult(
                 batch.id(), accepted, duplicates, rejections, mapper.toProgressDto(batch.progress()));
+    }
+
+    /**
+     * Closes a batch whose items were all consumed on the way in (FR-3.1).
+     *
+     * <p>Normally a batch is closed by {@code BatchProgressRecorder}, when the last of its messages
+     * reaches a terminal status. A batch of nothing but duplicates and rejections has no such message —
+     * re-uploading the same file inside the dedup window is exactly that (FR-1.5) — so without this it
+     * stayed in {@code PROCESSING} for ever, with {@code processed} already equal to {@code total}.
+     *
+     * <p>The batch is closed only once the uploads have caught up with what the header announced
+     * ({@code total == uploaded}); a source system that announced a thousand items and has sent the
+     * first chunk is still owed the rest, however that chunk ended.
+     */
+    private static void closeIfNothingIsLeftInFlight(Batch batch) {
+        if (batch.progress().isComplete() && batch.total() == batch.uploaded()) {
+            batch.complete();
+        }
     }
 
     /**
@@ -127,9 +147,20 @@ public class SubmitBatchService implements SubmitBatch {
         }
     }
 
-    /** Expands one item into a submission, inheriting the header of the batch (FR-1.6). */
+    /**
+     * Expands one item into a submission, inheriting the header of the batch (FR-1.6).
+     *
+     * <p>The traffic class, the TEST flag and the template come from the header the batch was accepted
+     * with. They used to be dropped here — {@code POST /api/v1/batches} accepts all three (§8.2) and the
+     * items went out as ordinary, non-test messages of the stream's default class, whatever the caller
+     * had asked for.
+     *
+     * <p>{@code pinnedProvider} stays null in any case: the invariant of {@code Delivery} allows pinning
+     * only for a test send by an administrator, and choosing the provider is the Hub's job (FR-2.2).
+     */
     private static SubmitMessageCommand commandFor(
             AddBatchItemsCommand command, Batch batch, AddBatchItemsCommand.Item item) {
+        Batch.ItemDefaults defaults = batch.itemDefaults();
         return new SubmitMessageCommand(
                 command.streamId(),
                 item.externalMessageId(),
@@ -137,7 +168,8 @@ public class SubmitBatchService implements SubmitBatch {
                 item.recipient(),
                 item.contents(),
                 item.channelPlanOptional().orElseGet(() -> ChannelPlan.explicitChannel(batch.channel())),
-                item.template(),
-                new SubmitMessageCommand.Delivery(null, null, batch.timing(), null, null, false, null));
+                item.templateOptional().orElseGet(() -> defaults.template()),
+                new SubmitMessageCommand.Delivery(
+                        defaults.trafficClass(), null, batch.timing(), null, null, defaults.test(), null));
     }
 }

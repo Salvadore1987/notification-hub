@@ -68,14 +68,12 @@ public class SystemParameterService implements ManageSystemParameters {
                         : command.description(),
                 now,
                 actorId(command.actor())));
-        audit.write(new AuditEntry(
+        audit.write(AuditEntry.changed(
                 command.actor(),
                 before.isPresent() ? "system-parameter.update" : "system-parameter.create",
                 ENTITY_TYPE,
                 command.key(),
-                before.map(SystemParameter::value).orElse(null),
-                after.value(),
-                null,
+                AuditEntry.Change.of(before.map(SystemParameter::value).orElse(null), after.value()),
                 now));
         return mapper.toView(after);
     }
@@ -88,14 +86,12 @@ public class SystemParameterService implements ManageSystemParameters {
         SystemParameter before =
                 parameters.find(command.key()).orElseThrow(() -> NotFoundException.of(ENTITY_TYPE, command.key()));
         parameters.delete(command.key());
-        audit.write(new AuditEntry(
+        audit.write(AuditEntry.changed(
                 command.actor(),
                 "system-parameter.delete",
                 ENTITY_TYPE,
                 command.key(),
-                before.value(),
-                null,
-                null,
+                AuditEntry.Change.of(before.value(), null),
                 now));
     }
 

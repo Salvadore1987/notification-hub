@@ -122,10 +122,8 @@ public class TemplateConfigService implements ManageTemplates {
                 ENTITY,
                 template.code().value(),
                 before,
-                describe(template)
-                        + command.reasonOptional()
-                                .map(reason -> ", reason=" + reason)
-                                .orElse(""));
+                describe(template),
+                command.reasonOptional().orElse(null));
         return mapper.toView(template);
     }
 

@@ -123,12 +123,24 @@ export function AuditPage() {
           {
             title: t('audit.change'),
             render: (_, row) =>
-              row.before || row.after ? (
+              row.change?.before || row.change?.after ? (
                 <Typography.Text
-                  ellipsis={{ tooltip: `${row.before ?? ''} → ${row.after ?? ''}` }}
+                  ellipsis={{ tooltip: `${row.change.before ?? ''} → ${row.change.after ?? ''}` }}
                   style={{ maxWidth: 320 }}
                 >
-                  {row.before ?? '∅'} → {row.after ?? '∅'}
+                  {row.change.before ?? '∅'} → {row.change.after ?? '∅'}
+                </Typography.Text>
+              ) : (
+                '—'
+              ),
+          },
+          {
+            // FR-7.3: обоснование — своё поле записи; оператор вводил его в модалке подтверждения.
+            title: t('audit.reason'),
+            render: (_, row) =>
+              row.reason ? (
+                <Typography.Text ellipsis={{ tooltip: row.reason }} style={{ maxWidth: 240 }}>
+                  {row.reason}
                 </Typography.Text>
               ) : (
                 '—'

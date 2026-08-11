@@ -31,6 +31,8 @@ dependencies {
 
     api(project(":adapter:out:provider:apns"))
     api(project(":adapter:out:provider:fcm"))
+    // Фиктивный провайдер локального стенда: бины выключены по умолчанию (ADR-0041).
+    api(project(":adapter:out:provider:mock"))
     api(project(":adapter:out:provider:playmobile"))
     api(project(":adapter:out:provider:smsgate"))
     api(project(":adapter:out:provider:smtp"))

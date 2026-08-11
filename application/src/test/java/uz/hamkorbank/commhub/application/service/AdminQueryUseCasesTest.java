@@ -170,7 +170,9 @@ class AdminQueryUseCasesTest {
         assertThat(result.skipped()).containsExactly(alreadyArchived, gone);
         ArgumentCaptor<AuditEntry> entry = ArgumentCaptor.forClass(AuditEntry.class);
         verify(audit).write(entry.capture());
-        assertThat(entry.getValue().after()).isEqualTo("campaign cancelled");
+        // Обоснование — своё поле записи, а не строка в «стало»: по нему ищут и его выгружают (FR-7.3).
+        assertThat(entry.getValue().reason()).isEqualTo("campaign cancelled");
+        assertThat(entry.getValue().after()).isNull();
     }
 
     @Test

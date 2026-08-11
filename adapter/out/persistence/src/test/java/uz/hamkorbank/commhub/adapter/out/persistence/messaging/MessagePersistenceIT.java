@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 import uz.hamkorbank.commhub.adapter.out.persistence.AbstractPersistenceIT;
+import uz.hamkorbank.commhub.application.port.out.DispatchClaim;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.ChannelPlan;
 import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
@@ -32,6 +33,7 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
 import uz.hamkorbank.commhub.domain.model.vo.BatchId;
 import uz.hamkorbank.commhub.domain.model.vo.ExternalMessageId;
+import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
 import uz.hamkorbank.commhub.domain.model.vo.Msisdn;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
@@ -201,8 +203,8 @@ class MessagePersistenceIT extends AbstractPersistenceIT {
     }
 
     @Test
-    @DisplayName("dispatchable messages are limited to the traffic class and to what may be sent now (TC-01)")
-    void findsDispatchableOfTrafficClass() {
+    @DisplayName("a claim is limited to the traffic class and to what may be sent now (TC-01)")
+    void claimsDispatchableOfTrafficClass() {
         // Arrange
         Message otp = messages.save(accepted("otp-1", TrafficClass.CRITICAL_OTP, Timing.immediate()));
         messages.save(accepted("bulk-1", TrafficClass.NOTIFICATION, Timing.immediate()));
@@ -212,11 +214,57 @@ class MessagePersistenceIT extends AbstractPersistenceIT {
                 Timing.scheduled(ACCEPTED_AT.plus(Duration.ofHours(5)), ACCEPTED_AT.plus(Duration.ofHours(6)))));
 
         // Act
-        List<Message> dispatchable =
-                messages.findDispatchable(TrafficClass.CRITICAL_OTP, ACCEPTED_AT.plusSeconds(10), 50);
+        List<MessageId> claimed = messages.claimDispatchable(TrafficClass.CRITICAL_OTP, claim(ACCEPTED_AT, 50));
 
         // Assert
-        assertThat(dispatchable).extracting(Message::id).containsExactly(otp.id());
+        assertThat(claimed).containsExactly(otp.id());
+    }
+
+    @Test
+    @DisplayName("a claimed message is invisible to a second dispatcher until its lease elapses (ADR-0039)")
+    void holdsTheClaimForTheLeaseOnly() {
+        // Arrange — то, что делают два пода: разные owner'ы, один и тот же запрос
+        Message message = messages.save(accepted("lease-1", TrafficClass.TRANSACTIONAL, Timing.immediate()));
+        Instant firstPass = ACCEPTED_AT.plusSeconds(10);
+
+        // Act
+        List<MessageId> first = messages.claimDispatchable(
+                TrafficClass.TRANSACTIONAL, new DispatchClaim("pod-a", firstPass, Duration.ofMinutes(2), 50));
+        List<MessageId> second = messages.claimDispatchable(
+                TrafficClass.TRANSACTIONAL,
+                new DispatchClaim("pod-b", firstPass.plusSeconds(1), Duration.ofMinutes(2), 50));
+        List<MessageId> afterLease = messages.claimDispatchable(
+                TrafficClass.TRANSACTIONAL,
+                new DispatchClaim("pod-b", firstPass.plus(Duration.ofMinutes(3)), Duration.ofMinutes(2), 50));
+
+        // Assert
+        assertThat(first).containsExactly(message.id());
+        assertThat(second).isEmpty();
+        assertThat(afterLease).containsExactly(message.id());
+    }
+
+    @Test
+    @DisplayName("a released message stays out of reach until its next attempt is due (PR-01)")
+    void honoursTheNextAttemptTime() {
+        // Arrange
+        Message message = messages.save(accepted("backoff-1", TrafficClass.TRANSACTIONAL, Timing.immediate()));
+        Instant now = ACCEPTED_AT.plusSeconds(10);
+        messages.claimDispatchable(TrafficClass.TRANSACTIONAL, claim(now, 50));
+        messages.releaseClaim(message, now.plus(Duration.ofMinutes(5)));
+
+        // Act
+        List<MessageId> tooEarly =
+                messages.claimDispatchable(TrafficClass.TRANSACTIONAL, claim(now.plusSeconds(30), 50));
+        List<MessageId> due =
+                messages.claimDispatchable(TrafficClass.TRANSACTIONAL, claim(now.plus(Duration.ofMinutes(6)), 50));
+
+        // Assert
+        assertThat(tooEarly).isEmpty();
+        assertThat(due).containsExactly(message.id());
+    }
+
+    private static DispatchClaim claim(Instant now, int limit) {
+        return new DispatchClaim("test-instance", now, Duration.ofMinutes(2), limit);
     }
 
     @Test

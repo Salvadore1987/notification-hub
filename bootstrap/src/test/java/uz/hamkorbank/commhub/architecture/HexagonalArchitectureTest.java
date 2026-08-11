@@ -94,7 +94,7 @@ class HexagonalArchitectureTest {
     @DisplayName("AR-04: a provider adapter is self-contained — nothing outside its package names it")
     void providerAdaptersStaySelfContained() {
         // Arrange — every concrete provider of §9, one package each.
-        String[] providers = {"playmobile", "smsgate", "smtp", "fcm", "apns"};
+        String[] providers = {"playmobile", "smsgate", "smtp", "fcm", "apns", "mock"};
 
         // Act + Assert
         for (String provider : providers) {

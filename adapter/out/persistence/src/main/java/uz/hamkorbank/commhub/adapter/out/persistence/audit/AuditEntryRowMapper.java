@@ -26,9 +26,9 @@ class AuditEntryRowMapper implements RowMapper<AuditEntry> {
                 rs.getString("action"),
                 rs.getString("entity_type"),
                 rs.getString("entity_id"),
-                rs.getString("before_state"),
-                rs.getString("after_state"),
+                AuditEntry.Change.of(rs.getString("before_state"), rs.getString("after_state")),
                 rs.getString("ip"),
+                rs.getString("reason"),
                 SqlValues.instant(rs, "occurred_at"));
     }
 

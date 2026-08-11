@@ -18,6 +18,7 @@ import uz.hamkorbank.commhub.adapter.out.persistence.json.TimingJson;
 import uz.hamkorbank.commhub.adapter.out.persistence.messaging.MessageRowMapper.PartialMessage;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.JsonCodec;
 import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
+import uz.hamkorbank.commhub.application.port.out.DispatchClaim;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
 import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
 import uz.hamkorbank.commhub.domain.model.Message;
@@ -31,6 +32,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
+import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
  * {@link MessageRepository} over the partitioned {@code message} table with its history and attempts
@@ -56,6 +58,64 @@ public class MessagePersistenceAdapter implements MessageRepository {
 
     private static final String NON_TERMINAL_STATUSES =
             "'ACCEPTED', 'VALIDATED', 'ROUTED', 'QUEUED', 'SENDING', 'SENT_TO_PROVIDER', 'RETRYING'";
+
+    /**
+     * Push is finished at {@code SENT_TO_PROVIDER} — no platform ever reports a delivery (PU-12).
+     *
+     * <p>The aggregate knows this ({@code Message.isTerminalForChannel}), and that is where the rule is
+     * enforced; here it only keeps the TTL sweep from reading every delivered push on every pass, and
+     * lets a push batch reach {@code COMPLETED} at all.
+     */
+    private static final String NOT_DELIVERED_PUSH = "NOT (status = 'SENT_TO_PROVIDER' AND selected_channel = 'PUSH')";
+
+    /**
+     * One pass of the dispatcher of a traffic class: take a page and stamp the lease on it (ADR-0039).
+     *
+     * <p>{@code FOR UPDATE SKIP LOCKED} inside the CTE is what makes instances share the queue instead of
+     * duplicating it — the outbox relay's pattern. The lease is written in the same statement, so a row is
+     * never selected without being claimed, and it outlives this transaction because the provider call
+     * happens outside it: a row lock alone would be gone the moment the claim commits.
+     *
+     * <p>Only ids come back. The turn that acts on a message loads the aggregate itself, in the
+     * transaction that will save it.
+     */
+    private static final String CLAIM_DISPATCHABLE = """
+            WITH claimed AS (
+                SELECT id, accepted_at
+                  FROM message
+                 WHERE traffic_class = :trafficClass
+                   AND status IN (%s)
+                   AND (next_attempt_at IS NULL OR next_attempt_at <= :now)
+                   AND (dispatch_claimed_until IS NULL OR dispatch_claimed_until <= :now)
+                   AND (timing IS NULL
+                        OR timing ->> 'sendAfter' IS NULL
+                        OR (timing ->> 'sendAfter')::timestamptz <= :now)
+                 ORDER BY accepted_at
+                 LIMIT :limit
+                   FOR UPDATE SKIP LOCKED
+            )
+            UPDATE message m
+               SET dispatch_claimed_until = :leaseUntil,
+                   dispatch_owner = :owner
+              FROM claimed c
+             WHERE m.id = c.id AND m.accepted_at = c.accepted_at
+            RETURNING m.id
+            """.formatted(DISPATCHABLE_STATUSES);
+
+    /**
+     * Gives the message back to the queue and says when it may be taken again (PR-01).
+     *
+     * <p>Deliberately not part of {@code UPSERT_MESSAGE}: the three scheduling columns are queue
+     * bookkeeping rather than aggregate state, and every other save path — a provider report, the TTL
+     * sweep — would otherwise wipe a lease it knows nothing about.
+     */
+    private static final String RELEASE_CLAIM = """
+            UPDATE message
+               SET dispatch_claimed_until = NULL,
+                   dispatch_owner = NULL,
+                   next_attempt_at = :nextAttemptAt
+             WHERE id = :id AND accepted_at = :acceptedAt
+            """;
 
     private static final String SELECT_MESSAGE = """
             SELECT id, accepted_at, external_id, stream_id, batch_id, traffic_class, priority, dedup_key,
@@ -208,23 +268,31 @@ public class MessagePersistenceAdapter implements MessageRepository {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public List<Message> findDispatchable(TrafficClass trafficClass, Instant now, int limit) {
-        List<PartialMessage> rows = jdbcClient
-                .sql(SELECT_MESSAGE
-                        + " WHERE traffic_class = :trafficClass"
-                        + "   AND status IN (" + DISPATCHABLE_STATUSES + ")"
-                        + "   AND (timing IS NULL"
-                        + "        OR timing ->> 'sendAfter' IS NULL"
-                        + "        OR (timing ->> 'sendAfter')::timestamptz <= :now)"
-                        + " ORDER BY accepted_at"
-                        + " LIMIT :limit")
+    @Transactional
+    public List<MessageId> claimDispatchable(TrafficClass trafficClass, DispatchClaim claim) {
+        Guard.notNull(trafficClass, "trafficClass");
+        Guard.notNull(claim, "claim");
+        return jdbcClient
+                .sql(CLAIM_DISPATCHABLE)
                 .param("trafficClass", trafficClass.name())
-                .param("now", SqlValues.timestamp(now))
-                .param("limit", limit)
-                .query(messageRowMapper.partialRowMapper())
+                .param("now", SqlValues.timestamp(claim.now()))
+                .param("leaseUntil", SqlValues.timestamp(claim.leaseUntil()))
+                .param("owner", claim.owner())
+                .param("limit", claim.limit())
+                .query((rs, rowNum) -> MessageId.of(rs.getObject("id", UUID.class)))
                 .list();
-        return complete(rows);
+    }
+
+    @Override
+    @Transactional
+    public void releaseClaim(Message message, Instant nextAttemptAt) {
+        Guard.notNull(message, "message");
+        jdbcClient
+                .sql(RELEASE_CLAIM)
+                .param("id", message.id().value())
+                .param("acceptedAt", SqlValues.timestamp(message.acceptedAt()))
+                .param("nextAttemptAt", SqlValues.timestamp(nextAttemptAt))
+                .update();
     }
 
     @Override
@@ -233,6 +301,7 @@ public class MessagePersistenceAdapter implements MessageRepository {
         List<PartialMessage> rows = jdbcClient
                 .sql(SELECT_MESSAGE
                         + " WHERE status IN (" + NON_TERMINAL_STATUSES + ")"
+                        + "   AND " + NOT_DELIVERED_PUSH
                         + "   AND ((timing ->> 'sendBefore')::timestamptz <= :now"
                         + "        OR accepted_at + make_interval(secs => (timing ->> 'ttlSeconds')::bigint) <= :now)"
                         + " ORDER BY accepted_at"
@@ -279,8 +348,9 @@ public class MessagePersistenceAdapter implements MessageRepository {
     @Transactional(readOnly = true)
     public long countTerminalByBatch(BatchId batchId) {
         return jdbcClient
-                .sql("SELECT count(*) FROM message WHERE batch_id = :batchId" + " AND status NOT IN ("
-                        + NON_TERMINAL_STATUSES + ")")
+                .sql("SELECT count(*) FROM message WHERE batch_id = :batchId"
+                        + " AND (status NOT IN (" + NON_TERMINAL_STATUSES + ")"
+                        + "      OR NOT " + NOT_DELIVERED_PUSH + ")")
                 .param("batchId", batchId.value())
                 .query(Long.class)
                 .single();
