@@ -92,6 +92,16 @@ public class PushFanOut {
     }
 
     /**
+     * Push adapters this contour deployed, in no particular order (AR-04, §11.2).
+     *
+     * <p>Asked by the administration rather than by the saga: the {@code ObjectProvider} of push
+     * adapters lives here, so the answer has to come from here too.
+     */
+    public List<PushProviderPort> deployedAdapters() {
+        return adapters.stream().toList();
+    }
+
+    /**
      * Sends the notification to every device the routed adapter serves.
      *
      * @param attempt attempt of the saga this fan-out belongs to; every device row points at it

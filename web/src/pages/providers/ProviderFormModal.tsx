@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { components } from '../../api/generated/admin-schema';
 import { CHANNELS, enumOptions } from '../../shared/labels';
+import { AdapterTypeSelect } from './AdapterTypeSelect';
 
 type Provider = components['schemas']['Provider'];
 export type ProviderRequest = components['schemas']['ProviderRequest'];
@@ -16,6 +17,10 @@ interface FormValues extends Omit<ProviderRequest, 'endpointConfig'> {
 /**
  * endpointConfig — произвольные ключ-значение (originator, priorities, ttl…); форма ведёт их
  * списком пар, потому что набор ключей знает адаптер провайдера, а не панель.
+ *
+ * Канал и тип адаптера читаются только при регистрации: обновление профиля их не переносит, поэтому
+ * у заведённого провайдера они показаны, но заблокированы — как и код. Провайдер, сменивший канал
+ * или адаптер, — это другой провайдер, а не правка этого.
  */
 export function ProviderFormModal({
   open,
@@ -30,6 +35,7 @@ export function ProviderFormModal({
 }) {
   const { t } = useTranslation();
   const [form] = Form.useForm<FormValues>();
+  const channel = Form.useWatch('channel', form);
 
   useEffect(() => {
     if (!open) {
@@ -96,7 +102,13 @@ export function ProviderFormModal({
           rules={[{ required: true }]}
           tooltip={t('providers.channelHint')}
         >
-          <Select options={enumOptions(CHANNELS)} />
+          <Select
+            options={enumOptions(CHANNELS)}
+            disabled={initial !== null}
+            // Не useEffect на channel: тот сработал бы и на префилле формы и стёр бы только что
+            // загруженный тип. Здесь — только человек.
+            onChange={() => form.setFieldValue('adapterType', undefined)}
+          />
         </Form.Item>
         <Form.Item
           name="adapterType"
@@ -104,7 +116,7 @@ export function ProviderFormModal({
           rules={[{ required: true }]}
           tooltip={t('providers.adapterTypeHint')}
         >
-          <Input placeholder="PLAYMOBILE / SMS_GATE / SMTP / FCM / APNS" />
+          <AdapterTypeSelect channel={channel} disabled={initial !== null} />
         </Form.Item>
         <Form.Item name="weight" label={t('providers.weight')} tooltip={t('providers.weightHint')}>
           <InputNumber min={0} style={{ width: '100%' }} />

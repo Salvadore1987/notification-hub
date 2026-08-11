@@ -194,11 +194,23 @@ function handle(state: State, key: string, body: unknown): { status: number; bod
             providerId: '018f-provider-0001',
             code: 'playmobile',
             channel: 'SMS',
-            adapterType: 'PLAYMOBILE',
+            adapterType: 'playmobile-http',
             state: 'ACTIVE',
             priority: 10,
             weight: 1,
           },
+        ],
+      };
+    // Не справочник, а то, что развёрнуто на контуре: форма регистрации выбирает отсюда (AR-04).
+    case 'GET /providers/adapters':
+      return {
+        status: 200,
+        body: [
+          { adapterType: 'smtp', channel: 'EMAIL' },
+          { adapterType: 'apns-http2', channel: 'PUSH' },
+          { adapterType: 'fcm-http', channel: 'PUSH' },
+          { adapterType: 'playmobile-http', channel: 'SMS' },
+          { adapterType: 'smsgate-http', channel: 'SMS' },
         ],
       };
     case 'GET /channels':

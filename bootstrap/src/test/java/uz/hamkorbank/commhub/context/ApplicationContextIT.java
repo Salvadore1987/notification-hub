@@ -20,6 +20,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestPropertySource;
+import uz.hamkorbank.commhub.application.dto.DeployedAdapterView;
+import uz.hamkorbank.commhub.application.port.in.GetDeployedAdapters;
 import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.bootstrap.NotificationHubApplication;
 import uz.hamkorbank.commhub.support.HubTestContainers;
@@ -107,6 +109,20 @@ class ApplicationContextIT {
                         .query(String.class)
                         .single())
                 .isEqualTo("message");
+    }
+
+    @Test
+    @DisplayName("AR-04, §11.2: with no provider enabled the panel is offered no adapter type")
+    void deployedAdaptersFollowTheContour() {
+        // Arrange — this context enables none of the adapters of §9, mock included
+        GetDeployedAdapters adapters = context.getBean(GetDeployedAdapters.class);
+
+        // Act
+        List<DeployedAdapterView> offered = adapters.adapters();
+
+        // Assert — the list is a statement about the deployment, not a catalogue that always answers
+        // the same; ProviderAdaptersContextIT is the same call with every adapter switched on
+        assertThat(offered).isEmpty();
     }
 
     @Test

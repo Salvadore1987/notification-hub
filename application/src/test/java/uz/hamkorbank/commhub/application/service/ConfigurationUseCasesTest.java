@@ -22,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import uz.hamkorbank.commhub.application.dto.ChannelView;
+import uz.hamkorbank.commhub.application.dto.DeployedAdapterView;
 import uz.hamkorbank.commhub.application.dto.ProviderView;
 import uz.hamkorbank.commhub.application.dto.RoutingPolicyView;
 import uz.hamkorbank.commhub.application.dto.StreamView;
@@ -43,7 +44,9 @@ import uz.hamkorbank.commhub.application.port.out.AuditPort;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
 import uz.hamkorbank.commhub.application.port.out.StreamRepository;
+import uz.hamkorbank.commhub.application.port.out.provider.ProviderPort;
 import uz.hamkorbank.commhub.application.service.support.ConfigAuditor;
+import uz.hamkorbank.commhub.application.service.support.ProviderGateway;
 import uz.hamkorbank.commhub.domain.model.Actor;
 import uz.hamkorbank.commhub.domain.model.ChannelConfig;
 import uz.hamkorbank.commhub.domain.model.Provider;
@@ -419,6 +422,49 @@ class ConfigurationUseCasesTest {
         assertThat(queryService.streams()).singleElement().satisfies(view -> assertThat(view.streamId())
                 .isEqualTo(STREAM_ID));
         assertThat(queryService.policies()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("AR-04, §11.2: the deployed adapters are listed once each, by channel then type")
+    void listsDeployedAdapters() {
+        // Arrange — two SMS adapters, one of them registered twice, and an email one
+        List<ProviderPort> deployed = List.of(
+                adapterPort(Channel.SMS, "smsgate-http"),
+                adapterPort(Channel.EMAIL, "smtp"),
+                adapterPort(Channel.SMS, "playmobile-http"),
+                adapterPort(Channel.SMS, "playmobile-http"));
+        ProviderGateway gateway = mock(ProviderGateway.class);
+        when(gateway.deployedAdapters()).thenReturn(deployed);
+
+        // Act
+        List<DeployedAdapterView> adapters = new DeployedAdapterQueryService(gateway, mapper).adapters();
+
+        // Assert — order is what the operator reads, and a duplicate pair is one option, not two
+        assertThat(adapters)
+                .extracting(
+                        view -> view.channel().name() + "/" + view.adapterType().value())
+                .containsExactly("EMAIL/smtp", "SMS/playmobile-http", "SMS/smsgate-http");
+    }
+
+    @Test
+    @DisplayName("AR-04: a contour with no provider enabled offers nothing")
+    void listsNoAdapterWhenNoneIsDeployed() {
+        // Arrange
+        ProviderGateway gateway = mock(ProviderGateway.class);
+        when(gateway.deployedAdapters()).thenReturn(List.of());
+
+        // Act
+        List<DeployedAdapterView> adapters = new DeployedAdapterQueryService(gateway, mapper).adapters();
+
+        // Assert
+        assertThat(adapters).isEmpty();
+    }
+
+    private static ProviderPort adapterPort(Channel channel, String adapterType) {
+        ProviderPort port = mock(ProviderPort.class);
+        when(port.channel()).thenReturn(channel);
+        when(port.adapterType()).thenReturn(AdapterType.of(adapterType));
+        return port;
     }
 
     private String auditAction() {

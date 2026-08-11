@@ -7,6 +7,7 @@ import org.mapstruct.Mapper;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.AuditEntryResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.ChannelResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.DashboardResponse;
+import uz.hamkorbank.commhub.adapter.in.admin.dto.DeployedAdapterResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.DlqActionResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.DlqEntryResponse;
 import uz.hamkorbank.commhub.adapter.in.admin.dto.ImportResultResponse;
@@ -35,6 +36,7 @@ import uz.hamkorbank.commhub.application.dto.AuditEntryView;
 import uz.hamkorbank.commhub.application.dto.BatchView;
 import uz.hamkorbank.commhub.application.dto.ChannelView;
 import uz.hamkorbank.commhub.application.dto.DashboardView;
+import uz.hamkorbank.commhub.application.dto.DeployedAdapterView;
 import uz.hamkorbank.commhub.application.dto.DlqEntryView;
 import uz.hamkorbank.commhub.application.dto.KillSwitchResult;
 import uz.hamkorbank.commhub.application.dto.MessageDigestView;
@@ -214,6 +216,11 @@ public interface AdminViewMapper {
                         toQuota(view.state().quota()),
                         view.state().credentialsRef(),
                         view.state().endpointConfig()));
+    }
+
+    default DeployedAdapterResponse toDeployedAdapter(DeployedAdapterView view) {
+        return new DeployedAdapterResponse(
+                view.adapterType().value(), view.channel().name());
     }
 
     default RoutingPolicyResponse toRoutingPolicy(RoutingPolicyView view) {

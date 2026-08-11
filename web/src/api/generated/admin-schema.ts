@@ -877,6 +877,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/providers/adapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Типы адаптеров, развёрнутые на этом контуре
+         * @description ADMIN — уже, чем список провайдеров: единственный потребитель — форма регистрации,
+         *     а она за ADMIN.
+         *     Не справочник и не конфигурация: это реализации канальных портов, поднятые в этом
+         *     контуре бинами, — то есть ровно те `adapterType`, для которых отправка найдёт адаптер
+         *     (AR-04). Набор задаётся деплоем, а не правкой в панели, и потому зависит от контура:
+         *     на локальном стенде в нём есть и mock-адаптеры (ADR-0041).
+         *     Поле `adapterType` в `Provider`/`ProviderRequest` намеренно остаётся строкой без `enum`:
+         *     перечисление в опубликованном контракте заморозило бы набор в релизе.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Развёрнутые адаптеры, по каналу и типу */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeployedAdapter"][];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/providers/{code}": {
         parameters: {
             query?: never;
@@ -2929,11 +2976,25 @@ export interface components {
             quietHours?: components["schemas"]["QuietHours"];
             quota?: components["schemas"]["Quota"];
         };
+        /** @description Реализация канального порта, поднятая в этом контуре (AR-04) */
+        DeployedAdapter: {
+            /**
+             * @description Ключ адаптера, например `playmobile-http`. Непрозрачная строка: добавление провайдера —
+             *     это новый бин и ничего больше (AR-04).
+             */
+            adapterType?: string;
+            /** @description Канал, который обслуживает адаптер; профиль обязан назвать тот же */
+            channel?: components["schemas"]["Channel"];
+        };
         Provider: {
             /** Format: uuid */
             providerId?: string;
             code?: string;
             channel?: components["schemas"]["Channel"];
+            /**
+             * @description Значение из `GET /providers/adapters` — набор зависит от контура, поэтому здесь
+             *     намеренно нет `enum` (AR-04).
+             */
             adapterType?: string;
             weight?: number;
             tariff?: components["schemas"]["Tariff"];
@@ -2953,7 +3014,12 @@ export interface components {
             };
         };
         ProviderRequest: {
+            /** @description Читается только при регистрации; при обновлении профиля игнорируется */
             channel?: components["schemas"]["Channel"];
+            /**
+             * @description Значение из `GET /providers/adapters`, канал которого совпадает с `channel`.
+             *     Читается только при регистрации; при обновлении профиля игнорируется.
+             */
             adapterType?: string;
             weight?: number;
             tariff?: components["schemas"]["Tariff"];

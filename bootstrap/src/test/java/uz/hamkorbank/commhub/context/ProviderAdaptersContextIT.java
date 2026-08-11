@@ -13,6 +13,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestPropertySource;
 import uz.hamkorbank.commhub.adapter.in.callback.ProviderCallbackTranslator;
+import uz.hamkorbank.commhub.application.port.in.GetDeployedAdapters;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.PushProviderPort;
@@ -77,9 +78,11 @@ import uz.hamkorbank.commhub.support.HubTestContainers;
 class ProviderAdaptersContextIT {
 
     private final ApplicationContext context;
+    private final GetDeployedAdapters adapters;
 
-    ProviderAdaptersContextIT(ApplicationContext context) {
+    ProviderAdaptersContextIT(ApplicationContext context, GetDeployedAdapters adapters) {
         this.context = context;
+        this.adapters = adapters;
     }
 
     @DynamicPropertySource
@@ -115,6 +118,20 @@ class ProviderAdaptersContextIT {
 
         // Assert
         assertThat(types).containsExactlyInAnyOrder("fcm-http", "apns-http2");
+    }
+
+    @Test
+    @DisplayName("AR-04, §11.2: the provider form is offered exactly the adapters this contour deployed")
+    void deployedAdaptersAreOfferedToTheProviderForm() {
+        // Arrange + Act — the same question the panel asks, through the use case behind the endpoint
+        List<String> offered = adapters.adapters().stream()
+                .map(view -> view.adapterType().value() + "/" + view.channel().name())
+                .toList();
+
+        // Assert — every adapter wired above, with the channel a profile has to name alongside it
+        assertThat(offered)
+                .containsExactly(
+                        "smtp/EMAIL", "apns-http2/PUSH", "fcm-http/PUSH", "playmobile-http/SMS", "smsgate-http/SMS");
     }
 
     @Test

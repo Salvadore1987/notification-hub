@@ -5,6 +5,7 @@ import type { components } from '../api/generated/admin-schema';
 
 type Stream = components['schemas']['Stream'];
 type Provider = components['schemas']['Provider'];
+type DeployedAdapter = components['schemas']['DeployedAdapter'];
 type TemplateSummary = components['schemas']['TemplateSummary'];
 
 /**
@@ -107,6 +108,20 @@ export function useProviders(): Reference<Provider> {
     return result.data ?? [];
   }, []);
   return useReference('providers', loader);
+}
+
+/**
+ * Типы адаптеров, развёрнутые на этом контуре (AR-04).
+ *
+ * Единственный справочник здесь, который не хранится в базе: это поднятые бины канальных портов.
+ * Меняется деплоем, а не панелью, поэтому TTL ему велик с запасом.
+ */
+export function useAdapters(): Reference<DeployedAdapter> {
+  const loader = useCallback(async () => {
+    const result = await api().GET('/providers/adapters');
+    return result.data ?? [];
+  }, []);
+  return useReference('adapters', loader);
 }
 
 /**

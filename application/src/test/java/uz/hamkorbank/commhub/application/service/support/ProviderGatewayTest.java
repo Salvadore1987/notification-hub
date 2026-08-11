@@ -17,7 +17,10 @@ import uz.hamkorbank.commhub.application.mapper.ProviderSubmissionMapperImpl;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.MetricsPort;
 import uz.hamkorbank.commhub.application.port.out.PushDeliveryLogPort;
+import uz.hamkorbank.commhub.application.port.out.provider.EmailProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
+import uz.hamkorbank.commhub.application.port.out.provider.ProviderPort;
+import uz.hamkorbank.commhub.application.port.out.provider.PushProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
 import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
@@ -123,6 +126,39 @@ class ProviderGatewayTest {
 
         // Assert
         assertThat(id.value()).hasSizeLessThanOrEqualTo(ProviderMessageIdFactory.MAX_LENGTH);
+    }
+
+    @Test
+    @DisplayName("AR-04: the deployed adapters of all three channels are reported, push through the fan-out")
+    void reportsDeployedAdaptersOfEveryChannel() {
+        // Arrange — the push branch is the one that can rot: its ObjectProvider lives in the fan-out
+        ClockPort clock = mock(ClockPort.class);
+        when(clock.now()).thenReturn(NOW);
+        EmailProviderPort email = mock(EmailProviderPort.class);
+        when(email.adapterType()).thenReturn(AdapterType.of("smtp"));
+        PushProviderPort push = mock(PushProviderPort.class);
+        when(push.adapterType()).thenReturn(AdapterType.of("fcm-http"));
+        ProviderGateway all = new ProviderGateway(
+                ports(playmobileAdapter),
+                ports(email),
+                new PushFanOut(
+                        ports(push),
+                        new ProviderSubmissionMapperImpl(),
+                        mock(PushTokenRegistrar.class),
+                        mock(PushDeliveryLogPort.class),
+                        clock),
+                new ProviderSubmissionMapperImpl(),
+                new ProviderMessageIdFactory(),
+                mock(MetricsPort.class),
+                clock);
+
+        // Act
+        List<ProviderPort> deployed = all.deployedAdapters();
+
+        // Assert
+        assertThat(deployed)
+                .extracting(port -> port.adapterType().value())
+                .containsExactlyInAnyOrder(playmobile.adapterType().value(), "smtp", "fcm-http");
     }
 
     /** A fan-out with no push adapters deployed; this test is about the SMS branch of the gateway. */

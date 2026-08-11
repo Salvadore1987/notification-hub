@@ -1,6 +1,8 @@
 package uz.hamkorbank.commhub.application.service.support;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
@@ -67,6 +69,24 @@ public class ProviderGateway {
     /** Whether an adapter is deployed for the routed provider. */
     public boolean supports(ProviderRef provider) {
         return provider != null && adapterExists(provider);
+    }
+
+    /**
+     * Every channel adapter this contour deployed (AR-04, §11.2).
+     *
+     * <p>Not on the sending path: it answers the administration's "which adapter types may a provider
+     * profile name here", and it answers it from the very beans a routed message would be matched
+     * against, so a type offered by the panel is a type {@link #supports(ProviderRef)} will accept.
+     *
+     * <p>The set is a property of the deployment rather than of the configuration — every adapter is a
+     * conditional bean — so it is read live and never cached.
+     */
+    public List<ProviderPort> deployedAdapters() {
+        List<ProviderPort> deployed = new ArrayList<>();
+        smsPorts.forEach(deployed::add);
+        emailPorts.forEach(deployed::add);
+        deployed.addAll(pushFanOut.deployedAdapters());
+        return List.copyOf(deployed);
     }
 
     /**

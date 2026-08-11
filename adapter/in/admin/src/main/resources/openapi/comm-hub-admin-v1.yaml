@@ -481,6 +481,29 @@ paths:
                 items: { $ref: '#/components/schemas/Provider' }
         '403': { $ref: '#/components/responses/Problem' }
 
+  /providers/adapters:
+    get:
+      tags: [providers]
+      summary: Типы адаптеров, развёрнутые на этом контуре
+      description: |
+        ADMIN — уже, чем список провайдеров: единственный потребитель — форма регистрации,
+        а она за ADMIN.
+        Не справочник и не конфигурация: это реализации канальных портов, поднятые в этом
+        контуре бинами, — то есть ровно те `adapterType`, для которых отправка найдёт адаптер
+        (AR-04). Набор задаётся деплоем, а не правкой в панели, и потому зависит от контура:
+        на локальном стенде в нём есть и mock-адаптеры (ADR-0041).
+        Поле `adapterType` в `Provider`/`ProviderRequest` намеренно остаётся строкой без `enum`:
+        перечисление в опубликованном контракте заморозило бы набор в релизе.
+      responses:
+        '200':
+          description: Развёрнутые адаптеры, по каналу и типу
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DeployedAdapter' }
+        '403': { $ref: '#/components/responses/Problem' }
+
   /providers/{code}:
     post:
       tags: [providers]
@@ -1791,13 +1814,30 @@ components:
         quietHours: { $ref: '#/components/schemas/QuietHours' }
         quota: { $ref: '#/components/schemas/Quota' }
 
+    DeployedAdapter:
+      type: object
+      description: Реализация канального порта, поднятая в этом контуре (AR-04)
+      properties:
+        adapterType:
+          type: string
+          description: |
+            Ключ адаптера, например `playmobile-http`. Непрозрачная строка: добавление провайдера —
+            это новый бин и ничего больше (AR-04).
+        channel:
+          allOf: [{ $ref: '#/components/schemas/Channel' }]
+          description: Канал, который обслуживает адаптер; профиль обязан назвать тот же
+
     Provider:
       type: object
       properties:
         providerId: { type: string, format: uuid }
         code: { type: string }
         channel: { $ref: '#/components/schemas/Channel' }
-        adapterType: { type: string }
+        adapterType:
+          type: string
+          description: |
+            Значение из `GET /providers/adapters` — набор зависит от контура, поэтому здесь
+            намеренно нет `enum` (AR-04).
         weight: { type: integer }
         tariff: { $ref: '#/components/schemas/Tariff' }
         rateLimit: { $ref: '#/components/schemas/RateLimit' }
@@ -1819,8 +1859,14 @@ components:
     ProviderRequest:
       type: object
       properties:
-        channel: { $ref: '#/components/schemas/Channel' }
-        adapterType: { type: string }
+        channel:
+          allOf: [{ $ref: '#/components/schemas/Channel' }]
+          description: Читается только при регистрации; при обновлении профиля игнорируется
+        adapterType:
+          type: string
+          description: |
+            Значение из `GET /providers/adapters`, канал которого совпадает с `channel`.
+            Читается только при регистрации; при обновлении профиля игнорируется.
         weight: { type: integer }
         tariff: { $ref: '#/components/schemas/Tariff' }
         rateLimit: { $ref: '#/components/schemas/RateLimit' }

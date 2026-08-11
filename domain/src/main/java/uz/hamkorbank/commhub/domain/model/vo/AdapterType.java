@@ -5,10 +5,12 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
  * Technical adapter behind a provider profile, e.g. {@code playmobile-http}, {@code smsgate-http},
- * {@code smtp}, {@code fcm-http-v1}, {@code apns-http2} (§10.1 {@code provider.adapter_type}).
+ * {@code smtp}, {@code fcm-http}, {@code apns-http2} (§10.1 {@code provider.adapter_type}).
  *
  * <p>The application layer resolves the channel port implementation by this value. It stays an
- * opaque string so that adding a provider adapter needs no domain change (AR-04).
+ * opaque string so that adding a provider adapter needs no domain change (AR-04) — which is also why
+ * the administration reads the offerable values off the deployed adapters rather than off a list
+ * kept here (ADR-0042).
  */
 public record AdapterType(String value) {
 

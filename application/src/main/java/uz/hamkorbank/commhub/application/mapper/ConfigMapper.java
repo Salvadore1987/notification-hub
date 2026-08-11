@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Map;
 import org.mapstruct.Mapper;
 import uz.hamkorbank.commhub.application.dto.ChannelView;
+import uz.hamkorbank.commhub.application.dto.DeployedAdapterView;
 import uz.hamkorbank.commhub.application.dto.ProviderView;
 import uz.hamkorbank.commhub.application.dto.RouteEvaluationView;
 import uz.hamkorbank.commhub.application.dto.RoutingPolicyView;
 import uz.hamkorbank.commhub.application.dto.StreamView;
+import uz.hamkorbank.commhub.application.port.out.provider.ProviderPort;
 import uz.hamkorbank.commhub.domain.model.ChannelConfig;
 import uz.hamkorbank.commhub.domain.model.Provider;
 import uz.hamkorbank.commhub.domain.model.RoutingPolicy;
@@ -45,6 +47,11 @@ public interface ConfigMapper {
                         provider.quota(),
                         provider.credentialsRef().orElse(null),
                         endpointConfig));
+    }
+
+    /** A deployed adapter as the provider form sees it (AR-04, §11.2). */
+    default DeployedAdapterView toView(ProviderPort port) {
+        return new DeployedAdapterView(port.adapterType(), port.channel());
     }
 
     default ChannelView toView(ChannelConfig config) {

@@ -60,6 +60,7 @@
 | [0024](ADR-0024-email-smtp-decisions.md) | Email: пул как предел канала, свой Message-ID, возвраты через IMAP | EM-01…EM-03 |
 | [0025](ADR-0025-push-fanout-and-terminal-status.md) | Push: fan-out над портом, правило агрегации, терминальный `SENT_TO_PROVIDER` | PU-09, PU-12 |
 | [0041](ADR-0041-mock-provider-for-local-stand.md) | Фиктивный провайдер адаптером, выключен по умолчанию | AR-04, QA-04 |
+| [0042](ADR-0042-adapter-types-from-the-contour.md) | Типы адаптеров — с контура, а не перечислением; регистрация их не проверяет | AR-04, FR-2.1, §11.2 |
 
 ## Прикладные политики и эксплуатация
 
