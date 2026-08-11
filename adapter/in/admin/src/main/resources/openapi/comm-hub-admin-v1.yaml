@@ -1499,6 +1499,11 @@ components:
       type: string
       enum: [SMS, EMAIL, PUSH]
 
+    BalancingStrategy:
+      type: string
+      description: Стратегия балансировки между провайдерами канала (FR-2.3)
+      enum: [ROUND_ROBIN, WEIGHTED, LEAST_COST, PRIMARY_ONLY]
+
     ContentLocale:
       type: string
       enum: [RU, UZ, EN]
@@ -1789,7 +1794,7 @@ components:
         provider: { type: string }
         trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
         priority: { type: string, enum: [HIGH, NORMAL, LOW] }
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
 
     StreamRequest:
       type: object
@@ -1813,7 +1818,7 @@ components:
       properties:
         channel: { $ref: '#/components/schemas/Channel' }
         status: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
         fallbackOrder:
           type: array
           items: { type: string }
@@ -1824,7 +1829,7 @@ components:
     ChannelRequest:
       type: object
       properties:
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
         fallbackOrder:
           type: array
           items: { type: string }
@@ -1919,7 +1924,7 @@ components:
         providerOrder:
           type: array
           items: { type: string }
-        balancingStrategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
 
     RoutingPolicyRequest:
       type: object
@@ -1949,7 +1954,7 @@ components:
         fallbackProviders:
           type: array
           items: { type: string }
-        strategy: { type: string, enum: [PRIORITY, ROUND_ROBIN, WEIGHTED, LEAST_COST] }
+        strategy: { $ref: '#/components/schemas/BalancingStrategy' }
         segments: { type: integer }
         estimatedCost: { $ref: '#/components/schemas/Money' }
         rejection:

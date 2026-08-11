@@ -11,17 +11,18 @@ import {
   Table,
   Tag,
 } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '../../api/client';
 import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
-import { BALANCING_STRATEGIES, enumOptions } from '../../shared/labels';
+import { BALANCING_STRATEGIES, CHANNELS, enumOptions } from '../../shared/labels';
 import { ProviderOrderSelect } from './ProviderSelect';
 import { reasonHeader } from '../../shared/reason';
 
+type Channel = components['schemas']['Channel'];
 type ChannelConfig = components['schemas']['ChannelConfig'];
 type ChannelRequest = components['schemas']['ChannelRequest'];
 type ChannelState = 'ACTIVE' | 'DISABLED' | 'MAINTENANCE';
@@ -60,7 +61,25 @@ export function ChannelsTab() {
     void load();
   }, [load]);
 
+  // Каналов ровно три, и это перечисление (AR-05), а профиль канала заводится первой же правкой —
+  // ненастроенный не приходит с backend и без этой строки настроить его было бы неоткуда.
+  const configured = useMemo(() => new Set(rows.map((row) => row.channel)), [rows]);
+  const isConfigured = (row: ChannelConfig) => configured.has(row.channel);
+  const table = useMemo<ChannelConfig[]>(
+    () =>
+      CHANNELS.map(
+        (channel) =>
+          rows.find((row) => row.channel === channel) ?? {
+            channel,
+            fallbackOrder: [],
+            available: false,
+          },
+      ),
+    [rows],
+  );
+
   const openEdit = (channel: ChannelConfig) => {
+    form.resetFields();
     form.setFieldsValue({
       balancingStrategy: channel.balancingStrategy,
       fallbackOrder: channel.fallbackOrder,
@@ -74,8 +93,12 @@ export function ChannelsTab() {
     if (!editing) {
       return;
     }
+    // Незаполненную форму подсвечивает сама Form; наружу это не ошибка сохранения, а его отсутствие.
+    const values = await form.validateFields().catch(() => null);
+    if (!values) {
+      return;
+    }
     try {
-      const values = await form.validateFields();
       await api().PUT('/channels/{channel}', {
         params: { path: { channel: editing.channel ?? 'SMS' } },
         body: values,
@@ -112,7 +135,7 @@ export function ChannelsTab() {
       {error && <Alert type="error" showIcon message={error} />}
       <Table<ChannelConfig>
         rowKey={(row) => row.channel ?? ''}
-        dataSource={rows as ChannelConfig[]}
+        dataSource={table}
         loading={loading}
         pagination={false}
         locale={{ emptyText: t('table.empty') }}
@@ -120,9 +143,12 @@ export function ChannelsTab() {
           { title: t('dashboard.channel'), dataIndex: 'channel' },
           {
             title: t('batches.status'),
-            render: (_, row) => (
-              <Tag color={row.status ? STATE_COLORS[row.status] : 'default'}>{row.status}</Tag>
-            ),
+            render: (_, row) =>
+              row.status ? (
+                <Tag color={STATE_COLORS[row.status]}>{row.status}</Tag>
+              ) : (
+                <Tag>{t('providers.channelNotConfigured')}</Tag>
+              ),
           },
           { title: t('providers.balancingStrategy'), dataIndex: 'balancingStrategy' },
           {
@@ -143,27 +169,33 @@ export function ChannelsTab() {
             render: (_, row) => (
               <Space wrap>
                 <Button size="small" onClick={() => openEdit(row)}>
-                  {t('common.edit')}
+                  {isConfigured(row) ? t('common.edit') : t('providers.configureChannel')}
                 </Button>
-                {(['ACTIVE', 'DISABLED', 'MAINTENANCE'] as const)
-                  .filter((state) => state !== row.status)
-                  .map((state) => (
-                    <Button
-                      key={state}
-                      size="small"
-                      danger={state === 'DISABLED'}
-                      onClick={() => void setState(row, state)}
-                    >
-                      {state}
-                    </Button>
-                  ))}
+                {/* Смена состояния у незаведённого профиля — гарантированный 409, предлагать нечего. */}
+                {isConfigured(row) &&
+                  (['ACTIVE', 'DISABLED', 'MAINTENANCE'] as const)
+                    .filter((state) => state !== row.status)
+                    .map((state) => (
+                      <Button
+                        key={state}
+                        size="small"
+                        danger={state === 'DISABLED'}
+                        onClick={() => void setState(row, state)}
+                      >
+                        {state}
+                      </Button>
+                    ))}
               </Space>
             ),
           },
         ]}
       />
       <Modal
-        title={t('providers.editChannel', { channel: editing?.channel })}
+        title={
+          editing && isConfigured(editing)
+            ? t('providers.editChannel', { channel: editing.channel })
+            : t('providers.configureChannelTitle', { channel: editing?.channel })
+        }
         open={editing !== null}
         onOk={() => void save()}
         onCancel={() => setEditing(null)}
@@ -171,12 +203,14 @@ export function ChannelsTab() {
         cancelText={t('common.cancel')}
       >
         <Form form={form} layout="vertical">
+          {/* Обязательна: BFF разбирает её как requiredEnum, и без неё профиль канала не построить. */}
           <Form.Item
             name="balancingStrategy"
             label={t('providers.balancingStrategy')}
             tooltip={t('providers.balancingStrategyHint')}
+            rules={[{ required: true }]}
           >
-            <Select allowClear options={enumOptions(BALANCING_STRATEGIES)} />
+            <Select options={enumOptions(BALANCING_STRATEGIES)} />
           </Form.Item>
           <Form.Item
             name="fallbackOrder"

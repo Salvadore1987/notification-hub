@@ -2728,6 +2728,11 @@ export interface components {
         };
         /** @enum {string} */
         Channel: "SMS" | "EMAIL" | "PUSH";
+        /**
+         * @description Стратегия балансировки между провайдерами канала (FR-2.3)
+         * @enum {string}
+         */
+        BalancingStrategy: "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST" | "PRIMARY_ONLY";
         /** @enum {string} */
         ContentLocale: "RU" | "UZ" | "EN";
         /** @enum {string} */
@@ -3004,8 +3009,7 @@ export interface components {
             trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
             /** @enum {string} */
             priority?: "HIGH" | "NORMAL" | "LOW";
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
         };
         StreamRequest: {
             name?: string;
@@ -3027,16 +3031,14 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             /** @enum {string} */
             status?: "ACTIVE" | "DISABLED" | "MAINTENANCE";
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
             fallbackOrder?: string[];
             quietHours?: components["schemas"]["QuietHours"];
             quota?: components["schemas"]["Quota"];
             available?: boolean;
         };
         ChannelRequest: {
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
             /** @description Порядок и есть конфигурация, поэтому список присылается целиком */
             fallbackOrder?: string[];
             quietHours?: components["schemas"]["QuietHours"];
@@ -3117,8 +3119,7 @@ export interface components {
         RoutingAction: {
             channel?: components["schemas"]["Channel"];
             providerOrder?: string[];
-            /** @enum {string} */
-            balancingStrategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            balancingStrategy?: components["schemas"]["BalancingStrategy"];
         };
         RoutingPolicyRequest: {
             match: components["schemas"]["RoutingMatch"];
@@ -3141,8 +3142,7 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             provider?: string;
             fallbackProviders?: string[];
-            /** @enum {string} */
-            strategy?: "PRIORITY" | "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST";
+            strategy?: components["schemas"]["BalancingStrategy"];
             segments?: number;
             estimatedCost?: components["schemas"]["Money"];
             rejection?: {

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  BALANCING_STRATEGIES,
   BATCH_STATUSES,
   CHANNELS,
   CONTENT_LOCALES,
@@ -36,6 +37,7 @@ describe('contract enums', () => {
     ['MessageStatus', MESSAGE_STATUSES],
     ['BatchStatus', BATCH_STATUSES],
     ['Channel', CHANNELS],
+    ['BalancingStrategy', BALANCING_STRATEGIES],
     ['ContentLocale', CONTENT_LOCALES],
     ['RejectionReason', REJECTION_REASONS],
     ['SuppressionReason', SUPPRESSION_REASONS],

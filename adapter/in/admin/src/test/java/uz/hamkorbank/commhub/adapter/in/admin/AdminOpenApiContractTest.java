@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
@@ -96,6 +97,7 @@ class AdminOpenApiContractTest {
      */
     private static final Map<String, Class<? extends Enum<?>>> ENUM_SCHEMAS = Map.of(
             "Channel", Channel.class,
+            "BalancingStrategy", BalancingStrategy.class,
             "ContentLocale", ContentLocale.class,
             "MessageStatus", MessageStatus.class,
             "BatchStatus", BatchStatus.class,

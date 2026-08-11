@@ -38,6 +38,7 @@ import { TemplatePreviewModal } from './TemplatePreviewModal';
 type Template = components['schemas']['Template'];
 type TemplateVersion = components['schemas']['TemplateVersion'];
 type ContentLocale = components['schemas']['ContentLocale'];
+type Channel = components['schemas']['Channel'];
 type ProviderMapping = NonNullable<Template['providerMappings']>[number];
 
 interface VersionForm {

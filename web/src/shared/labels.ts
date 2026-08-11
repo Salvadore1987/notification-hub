@@ -115,7 +115,12 @@ export const TRAFFIC_CLASSES = ['CRITICAL_OTP', 'TRANSACTIONAL', 'NOTIFICATION']
 
 export const PRIORITIES = ['HIGH', 'NORMAL', 'LOW'] as const;
 
-export const BALANCING_STRATEGIES = ['PRIORITY', 'ROUND_ROBIN', 'WEIGHTED', 'LEAST_COST'] as const;
+export const BALANCING_STRATEGIES: readonly Schemas['BalancingStrategy'][] = [
+  'ROUND_ROBIN',
+  'WEIGHTED',
+  'LEAST_COST',
+  'PRIMARY_ONLY',
+];
 
 export const CONTENT_LOCALES: readonly Schemas['ContentLocale'][] = ['RU', 'UZ', 'EN'];
 

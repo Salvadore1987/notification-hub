@@ -220,9 +220,10 @@ function handle(state: State, key: string, body: unknown): { status: number; bod
         body: [
           {
             channel: 'SMS',
-            state: 'ACTIVE',
-            balancingStrategy: 'PRIORITY',
+            status: 'ACTIVE',
+            balancingStrategy: 'PRIMARY_ONLY',
             fallbackOrder: ['playmobile'],
+            available: true,
           },
         ],
       };
