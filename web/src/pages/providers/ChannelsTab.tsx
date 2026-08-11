@@ -207,7 +207,7 @@ export function ChannelsTab() {
           <Form.Item
             name="balancingStrategy"
             label={t('providers.balancingStrategy')}
-            tooltip={t('providers.balancingStrategyHint')}
+            tooltip={t('providers.balancingStrategyChannelHint')}
             rules={[{ required: true }]}
           >
             <Select options={enumOptions(BALANCING_STRATEGIES)} />

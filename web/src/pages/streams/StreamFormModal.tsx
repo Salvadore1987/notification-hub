@@ -1,4 +1,4 @@
-import { Checkbox, Divider, Form, Input, InputNumber, Modal, Select } from 'antd';
+import { Alert, Checkbox, Divider, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -113,6 +113,14 @@ export function StreamFormModal({
         </Form.Item>
 
         <Divider plain>{t('streams.defaults')}</Divider>
+        {/* Приоритет уровней виден только при наведении на «?», а его пропускает как раз тот,
+            кто уверен, что уже всё это настроил на канале, — поэтому баннером, а не подсказкой. */}
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('streams.defaultsOverrideHint')}
+        />
         <Form.Item
           name={['defaults', 'channel']}
           label={t('dashboard.channel')}
@@ -144,7 +152,7 @@ export function StreamFormModal({
         <Form.Item
           name={['defaults', 'balancingStrategy']}
           label={t('providers.balancingStrategy')}
-          tooltip={t('providers.balancingStrategyHint')}
+          tooltip={t('streams.defaultBalancingStrategyHint')}
         >
           <Select allowClear options={enumOptions(BALANCING_STRATEGIES)} />
         </Form.Item>
@@ -206,6 +214,14 @@ export function StreamFormModal({
         </Form.Item>
 
         <Divider plain>{t('streams.quietHours')}</Divider>
+        {/* Свой баннер, а не один общий сверху: блок в самом низу длинной модалки — верхний
+            к этому месту уже уехал бы за экран. */}
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('streams.quietHoursOverrideHint')}
+        />
         <Form.Item
           name={['quietHours', 'start']}
           label={t('streams.quietStart')}
