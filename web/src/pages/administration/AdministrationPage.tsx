@@ -279,10 +279,19 @@ export function AdministrationPage() {
           style={{ marginBottom: 16 }}
         />
         <Form form={killSwitchForm} layout="vertical">
-          <Form.Item name="reason" label={t('common.reason')} rules={[{ required: true }]}>
+          <Form.Item
+            name="reason"
+            label={t('common.reason')}
+            rules={[{ required: true }]}
+            tooltip={t('administration.killSwitchReasonHint')}
+          >
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="includeCriticalOtp" valuePropName="checked">
+          <Form.Item
+            name="includeCriticalOtp"
+            valuePropName="checked"
+            tooltip={t('administration.includeOtpHint')}
+          >
             <Checkbox>{t('administration.includeOtp')}</Checkbox>
           </Form.Item>
         </Form>
@@ -297,13 +306,27 @@ export function AdministrationPage() {
         cancelText={t('common.cancel')}
       >
         <Form form={parameterForm} layout="vertical">
-          <Form.Item name="key" label={t('administration.key')} rules={[{ required: true }]}>
+          <Form.Item
+            name="key"
+            label={t('administration.key')}
+            rules={[{ required: true }]}
+            tooltip={t('administration.keyHint')}
+          >
             <Input disabled={editingKey !== null} />
           </Form.Item>
-          <Form.Item name="value" label={t('administration.value')} rules={[{ required: true }]}>
+          <Form.Item
+            name="value"
+            label={t('administration.value')}
+            rules={[{ required: true }]}
+            tooltip={t('administration.valueHint')}
+          >
             <Input />
           </Form.Item>
-          <Form.Item name="description" label={t('administration.description')}>
+          <Form.Item
+            name="description"
+            label={t('administration.description')}
+            tooltip={t('administration.descriptionHint')}
+          >
             <Input />
           </Form.Item>
         </Form>

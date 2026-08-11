@@ -119,19 +119,43 @@ export function SingleSendTab() {
         initialValues={{ channel: 'SMS', locale: 'RU' }}
         onValuesChange={() => setEstimate(null)}
       >
-        <Form.Item name="streamId" label={t('batches.streamId')} rules={[{ required: true }]}>
+        <Form.Item
+          name="streamId"
+          label={t('batches.streamId')}
+          tooltip={t('batches.streamIdHint')}
+          rules={[{ required: true }]}
+        >
           <Input />
         </Form.Item>
-        <Form.Item name="templateCode" label={t('templates.code')} rules={[{ required: true }]}>
+        <Form.Item
+          name="templateCode"
+          label={t('templates.code')}
+          tooltip={t('templates.codeHint')}
+          rules={[{ required: true }]}
+        >
           <Input placeholder="OTP_LOGIN" />
         </Form.Item>
-        <Form.Item name="locale" label={t('templates.locale')} rules={[{ required: true }]}>
-          <Select options={enumOptions(CONTENT_LOCALES)} aria-label={t('templates.locale')} />
+        <Form.Item
+          name="locale"
+          label={t('templates.localeField')}
+          tooltip={t('templates.localeFieldHint')}
+          rules={[{ required: true }]}
+        >
+          <Select options={enumOptions(CONTENT_LOCALES)} aria-label={t('templates.localeField')} />
         </Form.Item>
-        <Form.Item name="channel" label={t('dashboard.channel')} rules={[{ required: true }]}>
+        <Form.Item
+          name="channel"
+          label={t('dashboard.channel')}
+          tooltip={t('send.channelHint')}
+          rules={[{ required: true }]}
+        >
           <Select options={enumOptions(CHANNELS)} aria-label={t('dashboard.channel')} />
         </Form.Item>
-        <Form.Item name="trafficClass" label={t('streams.trafficClass')}>
+        <Form.Item
+          name="trafficClass"
+          label={t('streams.trafficClass')}
+          tooltip={t('send.trafficClassHint')}
+        >
           <Select
             allowClear
             options={enumOptions(TRAFFIC_CLASSES)}
@@ -139,21 +163,40 @@ export function SingleSendTab() {
           />
         </Form.Item>
         {channel === 'SMS' && (
-          <Form.Item name="msisdn" label="MSISDN" rules={[{ required: true }]}>
+          <Form.Item
+            name="msisdn"
+            label="MSISDN"
+            tooltip={t('send.msisdnHint')}
+            rules={[{ required: true }]}
+          >
             <Input placeholder="998901234567" />
           </Form.Item>
         )}
         {channel === 'EMAIL' && (
-          <Form.Item name="email" label="Email" rules={[{ required: true }]}>
+          <Form.Item
+            name="email"
+            label="Email"
+            tooltip={t('send.emailHint')}
+            rules={[{ required: true }]}
+          >
             <Input type="email" />
           </Form.Item>
         )}
         {channel === 'PUSH' && (
-          <Form.Item name="pushToken" label={t('providers.pushToken')} rules={[{ required: true }]}>
+          <Form.Item
+            name="pushToken"
+            label={t('providers.pushToken')}
+            tooltip={t('send.pushTokenHint')}
+            rules={[{ required: true }]}
+          >
             <Input />
           </Form.Item>
         )}
-        <Form.Item name="clientId" label={t('suppressions.clientId')}>
+        <Form.Item
+          name="clientId"
+          label={t('suppressions.clientId')}
+          tooltip={t('send.clientIdHint')}
+        >
           <Input />
         </Form.Item>
         <VariablesField />

@@ -170,7 +170,11 @@ export function ChannelsTab() {
         cancelText={t('common.cancel')}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="balancingStrategy" label={t('providers.balancingStrategy')}>
+          <Form.Item
+            name="balancingStrategy"
+            label={t('providers.balancingStrategy')}
+            tooltip={t('providers.balancingStrategyHint')}
+          >
             <Select allowClear options={enumOptions(BALANCING_STRATEGIES)} />
           </Form.Item>
           <Form.Item
@@ -180,19 +184,39 @@ export function ChannelsTab() {
           >
             <Select mode="tags" open={false} suffixIcon={null} tokenSeparators={[',', ' ']} />
           </Form.Item>
-          <Form.Item name={['quietHours', 'start']} label={t('streams.quietStart')}>
+          <Form.Item
+            name={['quietHours', 'start']}
+            label={t('streams.quietStart')}
+            tooltip={t('providers.quietHoursChannelHint')}
+          >
             <Input placeholder="21:00" />
           </Form.Item>
-          <Form.Item name={['quietHours', 'end']} label={t('streams.quietEnd')}>
+          <Form.Item
+            name={['quietHours', 'end']}
+            label={t('streams.quietEnd')}
+            tooltip={t('streams.quietEndHint')}
+          >
             <Input placeholder="09:00" />
           </Form.Item>
-          <Form.Item name={['quietHours', 'behavior']} label={t('streams.quietBehavior')}>
+          <Form.Item
+            name={['quietHours', 'behavior']}
+            label={t('streams.quietBehavior')}
+            tooltip={t('streams.quietBehaviorHint')}
+          >
             <Select allowClear options={enumOptions(['DEFER', 'REJECT'])} />
           </Form.Item>
-          <Form.Item name={['quota', 'dailyCount']} label={t('streams.dailyCount')}>
+          <Form.Item
+            name={['quota', 'dailyCount']}
+            label={t('streams.dailyCount')}
+            tooltip={t('streams.dailyCountHint')}
+          >
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name={['quota', 'behavior']} label={t('streams.quotaBehavior')}>
+          <Form.Item
+            name={['quota', 'behavior']}
+            label={t('streams.quotaBehavior')}
+            tooltip={t('streams.quotaBehaviorHint')}
+          >
             <Select allowClear options={enumOptions(['BLOCK', 'ALERT_ONLY'])} />
           </Form.Item>
         </Form>

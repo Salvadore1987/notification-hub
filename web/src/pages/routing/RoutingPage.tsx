@@ -15,6 +15,7 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -252,45 +253,61 @@ export function RoutingPage() {
           message={t('routing.dryRunHint')}
           style={{ marginBottom: 16 }}
         />
+        {/* Форма inline и подписей у полей нет — иконка подсказки у метки здесь не рисуется,
+            поэтому подсказка висит на самом контроле и всплывает по наведению на него. */}
         <Form form={evaluateForm} layout="inline" style={{ rowGap: 12 }}>
           <Form.Item name="streamId" rules={[{ required: true }]}>
-            <Input placeholder={t('batches.streamId')} style={{ width: 160 }} />
+            <Tooltip title={t('routing.dryRunStreamIdHint')}>
+              <Input placeholder={t('batches.streamId')} style={{ width: 160 }} />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="msisdn">
-            <Input placeholder="MSISDN" style={{ width: 150 }} />
+            <Tooltip title={t('routing.dryRunRecipientHint')}>
+              <Input placeholder="MSISDN" style={{ width: 150 }} />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="email">
-            <Input placeholder="Email" style={{ width: 180 }} />
+            <Tooltip title={t('routing.dryRunRecipientHint')}>
+              <Input placeholder="Email" style={{ width: 180 }} />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="channel">
-            <Select
-              allowClear
-              placeholder={t('dashboard.channel')}
-              aria-label={t('dashboard.channel')}
-              options={enumOptions(CHANNELS)}
-              style={{ width: 120 }}
-            />
+            <Tooltip title={t('routing.dryRunChannelHint')}>
+              <Select
+                allowClear
+                placeholder={t('dashboard.channel')}
+                aria-label={t('dashboard.channel')}
+                options={enumOptions(CHANNELS)}
+                style={{ width: 120 }}
+              />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="trafficClass">
-            <Select
-              allowClear
-              placeholder={t('streams.trafficClass')}
-              aria-label={t('streams.trafficClass')}
-              options={enumOptions(TRAFFIC_CLASSES)}
-              style={{ width: 170 }}
-            />
+            <Tooltip title={t('routing.dryRunTrafficClassHint')}>
+              <Select
+                allowClear
+                placeholder={t('streams.trafficClass')}
+                aria-label={t('streams.trafficClass')}
+                options={enumOptions(TRAFFIC_CLASSES)}
+                style={{ width: 170 }}
+              />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="priority">
-            <Select
-              allowClear
-              placeholder={t('streams.priority')}
-              aria-label={t('streams.priority')}
-              options={enumOptions(PRIORITIES)}
-              style={{ width: 130 }}
-            />
+            <Tooltip title={t('routing.dryRunPriorityHint')}>
+              <Select
+                allowClear
+                placeholder={t('streams.priority')}
+                aria-label={t('streams.priority')}
+                options={enumOptions(PRIORITIES)}
+                style={{ width: 130 }}
+              />
+            </Tooltip>
           </Form.Item>
           <Form.Item name="text">
-            <Input placeholder={t('routing.textForSegments')} style={{ width: 240 }} />
+            <Tooltip title={t('routing.textForSegmentsHint')}>
+              <Input placeholder={t('routing.textForSegments')} style={{ width: 240 }} />
+            </Tooltip>
           </Form.Item>
           <Button type="primary" loading={evaluating} onClick={() => void evaluate()}>
             {t('routing.evaluate')}
@@ -352,20 +369,40 @@ export function RoutingPage() {
       >
         <Form form={policyForm} layout="vertical">
           <Divider plain>{t('routing.match')}</Divider>
-          <Form.Item name={['match', 'streamId']} label={t('batches.streamId')}>
+          <Form.Item
+            name={['match', 'streamId']}
+            label={t('batches.streamId')}
+            tooltip={t('routing.matchStreamIdHint')}
+          >
             <Input />
           </Form.Item>
-          <Form.Item name={['match', 'trafficClass']} label={t('streams.trafficClass')}>
+          <Form.Item
+            name={['match', 'trafficClass']}
+            label={t('streams.trafficClass')}
+            tooltip={t('routing.matchTrafficClassHint')}
+          >
             <Select allowClear options={enumOptions(TRAFFIC_CLASSES)} />
           </Form.Item>
-          <Form.Item name={['match', 'minPriority']} label={t('routing.minPriority')}>
+          <Form.Item
+            name={['match', 'minPriority']}
+            label={t('routing.minPriority')}
+            tooltip={t('routing.minPriorityHint')}
+          >
             <Select allowClear options={enumOptions(PRIORITIES)} />
           </Form.Item>
-          <Form.Item name={['match', 'channel']} label={t('dashboard.channel')}>
+          <Form.Item
+            name={['match', 'channel']}
+            label={t('dashboard.channel')}
+            tooltip={t('routing.matchChannelHint')}
+          >
             <Select allowClear options={enumOptions(CHANNELS)} />
           </Form.Item>
           <Divider plain>{t('routing.action')}</Divider>
-          <Form.Item name={['action', 'channel']} label={t('dashboard.channel')}>
+          <Form.Item
+            name={['action', 'channel']}
+            label={t('dashboard.channel')}
+            tooltip={t('routing.actionChannelHint')}
+          >
             <Select allowClear options={enumOptions(CHANNELS)} />
           </Form.Item>
           <Form.Item
@@ -378,6 +415,8 @@ export function RoutingPage() {
           <Form.Item
             name={['action', 'balancingStrategy']}
             label={t('providers.balancingStrategy')}
+
+            tooltip={t('providers.balancingStrategyHint')}
           >
             <Select allowClear options={enumOptions(BALANCING_STRATEGIES)} />
           </Form.Item>

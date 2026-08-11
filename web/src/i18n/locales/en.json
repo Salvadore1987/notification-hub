@@ -106,7 +106,8 @@
       "pause": "Pause",
       "resume": "Resume",
       "stop": "Stop"
-    }
+    },
+    "streamIdHint": "The stream the send is made on behalf of: its quotas, limits and quiet hours apply to the message. The identifier from «Входящие потоки», e.g. payroll"
   },
   "messages": {
     "messageId": "Message ID",
@@ -137,7 +138,16 @@
     "accepted": "Accepted",
     "duplicates": "Duplicates",
     "rejected": "Rejected",
-    "openBatch": "Open the batch"
+    "openBatch": "Open the batch",
+    "channelHint": "Which channel the message goes out on. The recipient needs an address for it and the template needs text for it",
+    "trafficClassHint": "Empty leaves it to the stream. CRITICAL_OTP is not held by the kill switch and does not wait for quiet hours",
+    "msisdnHint": "The number as 998XXXXXXXXX — no plus sign, spaces or dashes",
+    "emailHint": "The recipient's address. If it is on the suppression list the message is rejected at acceptance",
+    "pushTokenHint": "The device token. A dead one is refused by the platform and lands on the suppression list by itself",
+    "clientIdHint": "Optional. It is what lets a ban placed on the whole customer, rather than on one address, stop the send",
+    "variablesHint": "Values of the template's merge fields: a NAME column fills {NAME} in the text. Unfilled ones are listed in the estimate",
+    "fileLabel": "Recipient list",
+    "fileHint": "A CSV with columns by header name: the channel's address column (msisdn / email / pushToken) plus any variable columns. Case matters: a NAME column fills {NAME}, a name column does not"
   },
   "dlq": {
     "reason": "Reason",
@@ -181,7 +191,28 @@
     "suspend": "Suspend intake",
     "resume": "Resume intake",
     "connection": "Connection",
-    "lastActivity": "Last activity"
+    "lastActivity": "Last activity",
+    "streamIdHint": "The identifier every submission of this source system will carry. Permanent: it cannot be changed after registration",
+    "integrationTypeHint": "Which transport this stream submits over: REST, Kafka or both",
+    "credentialsRefHint": "A reference to the secret, never the secret: env:NAME or prop:key. The Hub resolves it on use and stores no value (SEC-04)",
+    "defaultChannelHint": "Default channel for this stream's messages when the source system names none",
+    "defaultProviderHint": "The stream's preferred provider. Routing still fails over to the reserve when it is unavailable (FR-6.3)",
+    "trafficClassHint": "The default class. Queue isolation follows from it: a bulk campaign may not take turns away from OTP (TC-01)",
+    "priorityHint": "Default priority within the traffic class",
+    "dailyCountHint": "Ceiling of messages per day. Over it, the rule below decides: refuse, or only raise an alert",
+    "monthlyCountHint": "Ceiling of messages per month, counted independently of the daily one",
+    "dailyCostHint": "Ceiling of spend per day by provider tariffs rather than by message count",
+    "monthlyCostHint": "Ceiling of spend per month by provider tariffs",
+    "quotaBehaviorHint": "BLOCK refuses messages over the quota; ALERT_ONLY lets them through and raises an alert",
+    "tpsHint": "How many messages a second the stream may submit. A limit on ingest, not on sending (IR-02)",
+    "perMinuteHint": "The per-minute ceiling; it smooths bursts that slip through the per-second one",
+    "perRecipientPerHourHint": "How many messages one address gets per hour. It protects the customer from a flood, not the Hub from load (FR-5.4)",
+    "quietStartHint": "Start of the quiet-hours window, HH:MM. Messages inside it are held or refused by the rule below (FR-5.3)",
+    "quietEndHint": "End of the quiet-hours window, HH:MM. The window may cross midnight",
+    "quietZoneHint": "Timezone of the window. Usually Asia/Tashkent — the window is the customer's local time, not the server's",
+    "quietBehaviorHint": "DEFER holds the message until the window closes, REJECT refuses it at once. OTP does not observe quiet hours",
+    "clearQuietHoursHint": "Removes the quiet-hours window altogether. Clearing the fields above does not — that means 'leave unchanged'",
+    "nameHint": "The human-readable name shown in lists and reports. The identifier is the field above and, unlike the name, never changes"
   },
   "providers": {
     "tabProviders": "Providers",
@@ -216,7 +247,19 @@
     "text": "Text",
     "send": "Send",
     "testSendResult": "Acceptance result",
-    "sentTo": "Recipient"
+    "sentTo": "Recipient",
+    "codeHint": "The profile's permanent code: routing, statistics and the provider's own reports all use it. It cannot be changed",
+    "channelHint": "The channel this profile serves. An SMS provider cannot become an email one",
+    "weightHint": "Share of traffic under weighted balancing. Unused by the other strategies",
+    "perMessageHint": "Price of a whole message. For SMS the per-segment price is the accurate one",
+    "perSegmentHint": "Price of one SMS segment. A long message is several segments, and the estimate counts them (§18.3)",
+    "balancingStrategyHint": "How a provider is picked from the list: by priority, round robin, by weight or by lowest cost",
+    "quietHoursChannelHint": "The channel's quiet-hours window. A stream may have its own, and that one wins because it knows the customer's timezone",
+    "pushPlatformHint": "APNS or FCM. A token belongs to one platform, and the adapter is chosen by it",
+    "subjectHint": "The subject line; SMS and push have none",
+    "testTextHint": "The text of the test message. Free-form on purpose: what is being checked is the transport, not the wording",
+    "testStreamIdHint": "The stream the check is made on behalf of: its quotas and filters apply (FR-7.4)",
+    "testChannelHint": "Which channel the check goes out on. The message really does reach the address given"
   },
   "routing": {
     "policies": "Routing policies",
@@ -237,7 +280,18 @@
     "estimatedCost": "Estimated cost",
     "minPriority": "Minimum priority",
     "providerOrder": "Provider order",
-    "textForSegments": "Text for segment count"
+    "textForSegments": "Text for segment count",
+    "matchStreamIdHint": "The rule matches this stream only. Empty means any stream",
+    "matchTrafficClassHint": "The rule matches this traffic class only. Empty means any class",
+    "minPriorityHint": "The rule matches messages of at least this priority",
+    "matchChannelHint": "The rule matches messages of this channel only. Empty means any channel",
+    "actionChannelHint": "Which channel the matched messages go out on",
+    "dryRunStreamIdHint": "The stream the route is computed for: different streams have different policies and limits",
+    "dryRunRecipientHint": "The address is needed to compute the route; nothing is sent anywhere",
+    "dryRunChannelHint": "Channel of the hypothetical message. Empty lets the Hub choose",
+    "dryRunTrafficClassHint": "Traffic class of the hypothetical message: which rule matches depends on it",
+    "dryRunPriorityHint": "Priority of the hypothetical message",
+    "textForSegmentsHint": "The text is only used to count segments and cost — it is not sent anywhere"
   },
   "templates": {
     "create": "Create template",
@@ -249,7 +303,7 @@
     "imported": "Versions imported",
     "skipped": "Skipped",
     "failures": "Failures",
-    "code": "Code",
+    "code": "Template code",
     "direction": "Direction",
     "owner": "Owner",
     "catalogStatus": "Card status",
@@ -288,7 +342,22 @@
     "addMapping": "Add registration",
     "providerTemplateId": "Provider template ID",
     "approved": "Approved",
-    "removeMappingConfirm": "Remove the provider registration?"
+    "removeMappingConfirm": "Remove the provider registration?",
+    "codeHint": "The template code from «Шаблоны», e.g. OTP_LOGIN. The text comes only from it — free text cannot be sent from here (FR-4.2)",
+    "newCodeHint": "The template's permanent name: source systems refer to it by this, and it stays in the history of every message sent from it. It cannot be changed later",
+    "localeField": "Template language",
+    "localeFieldHint": "The language variant of the template. A version published in that very language is required, or the estimate refuses",
+    "channelHint": "The template's channel: an SMS template cannot go out as an email. It cannot be changed later",
+    "directionHint": "A free-form note on what the template is for — service notices, marketing. It only affects the catalogue filter",
+    "ownerHint": "Who owns the wording: whom to go to when it needs changing",
+    "textHint": "The text of the version. Variables are written as {NAME}; an unfilled one stops the message on a real send and simply stays visible in the preview",
+    "subjectHint": "The subject line. Email only — SMS and push have none",
+    "htmlHint": "The HTML alternative of the email. It travels alongside the text: text is always required, HTML only next to it (EM-01)",
+    "mappingProviderHint": "Code of the provider the template is registered with",
+    "providerTemplateIdHint": "The template's identifier on the provider's side. Needed where the provider requires the wording to be registered first (FR-4.5)",
+    "approvedHint": "The provider has confirmed the registration. Until it has, a send on this template may be refused",
+    "previewLocaleHint": "The language variant to render",
+    "previewVariablesHint": "Values for the preview. Unfilled ones stay visible as {NAME} and are listed — the preview is deliberately not strict"
   },
   "suppressions": {
     "check": "Address check (FR-5.1)",
@@ -307,7 +376,15 @@
     "validUntil": "Valid until",
     "createdBy": "Created by",
     "remove": "Remove entry",
-    "removeConfirm": "Remove the entry — opt-in after opt-out?"
+    "removeConfirm": "Remove the entry — opt-in after opt-out?",
+    "channelHint": "Channel of the ban. Empty bans the address on every channel at once",
+    "addressHint": "The address is validated and hashed on the server: the list keeps the hash, never the address",
+    "clientIdHint": "Bans the whole customer rather than one address. Given instead of an address, not alongside it",
+    "reasonHint": "Why the address is banned. It shows in the list and explains how it got there",
+    "validUntilHint": "When the ban expires. Empty means never",
+    "checkChannelHint": "The channel the address is checked for",
+    "checkAddressHint": "The address to check. It is not stored — only hashed to look the ban up",
+    "checkClientIdHint": "Check for bans placed on the whole customer"
   },
   "statistics": {
     "dimension": {
@@ -352,6 +429,11 @@
     "ssoMappingHint": "The Hub stores no users and no passwords: identity comes from the corporate SSO, the group → role mapping is deployment configuration (config.json) and is read-only here",
     "ssoMappingEmpty": "No mapping set — a group named like a role passes as is",
     "ssoGroup": "SSO group",
-    "role": "Role"
+    "role": "Role",
+    "killSwitchReasonHint": "Required. The entry 'everything stopped at 03:14' is worth reading only if it says why (FR-7.3)",
+    "includeOtpHint": "By default one-time codes keep going. The checkbox stops them too — which cuts customers out of the app",
+    "keyHint": "The parameter's name. It overrides the deployment default of the same name; the name cannot be changed later",
+    "valueHint": "The value that beats the deployment default. Deleting the parameter restores that default",
+    "descriptionHint": "Why the parameter exists: whoever finds it in six months has nothing but this line to go on"
   }
 }

@@ -30,7 +30,7 @@ describe('SingleSendTab', () => {
 
   async function fillTheForm() {
     await userEvent.type(screen.getByLabelText('Поток'), 'payroll');
-    await userEvent.type(screen.getByLabelText('Код'), 'PAYROLL');
+    await userEvent.type(screen.getByLabelText('Код шаблона'), 'PAYROLL');
     await userEvent.type(screen.getByLabelText('MSISDN'), '998901234567');
   }
 

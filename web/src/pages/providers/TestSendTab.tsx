@@ -76,10 +76,20 @@ export function TestSendTab() {
     <Space direction="vertical" size="large" style={{ width: '100%', maxWidth: 640 }}>
       <Alert type="info" showIcon message={t('providers.testSendHint')} />
       <Form form={form} layout="vertical" initialValues={{ channel: 'SMS' }}>
-        <Form.Item name="streamId" label={t('batches.streamId')} rules={[{ required: true }]}>
+        <Form.Item
+          name="streamId"
+          label={t('batches.streamId')}
+          rules={[{ required: true }]}
+          tooltip={t('providers.testStreamIdHint')}
+        >
           <Input />
         </Form.Item>
-        <Form.Item name="channel" label={t('dashboard.channel')} rules={[{ required: true }]}>
+        <Form.Item
+          name="channel"
+          label={t('dashboard.channel')}
+          rules={[{ required: true }]}
+          tooltip={t('providers.testChannelHint')}
+        >
           <Select options={enumOptions(CHANNELS)} />
         </Form.Item>
         <Form.Item
@@ -90,16 +100,30 @@ export function TestSendTab() {
           <Input />
         </Form.Item>
         {channel === 'SMS' && (
-          <Form.Item name="msisdn" label="MSISDN" rules={[{ required: true }]}>
+          <Form.Item
+            name="msisdn"
+            label="MSISDN"
+            rules={[{ required: true }]}
+            tooltip={t('send.msisdnHint')}
+          >
             <Input placeholder="998901234567" />
           </Form.Item>
         )}
         {channel === 'EMAIL' && (
           <>
-            <Form.Item name="email" label="Email" rules={[{ required: true }]}>
+            <Form.Item
+              name="email"
+              label="Email"
+              rules={[{ required: true }]}
+              tooltip={t('send.emailHint')}
+            >
               <Input type="email" />
             </Form.Item>
-            <Form.Item name="subject" label={t('providers.subject')}>
+            <Form.Item
+              name="subject"
+              label={t('providers.subject')}
+              tooltip={t('providers.subjectHint')}
+            >
               <Input />
             </Form.Item>
           </>
@@ -110,21 +134,35 @@ export function TestSendTab() {
               name="pushToken"
               label={t('providers.pushToken')}
               rules={[{ required: true }]}
+
+              tooltip={t('send.pushTokenHint')}
             >
               <Input />
             </Form.Item>
-            <Form.Item name="pushPlatform" label={t('providers.pushPlatform')}>
+            <Form.Item
+              name="pushPlatform"
+              label={t('providers.pushPlatform')}
+              tooltip={t('providers.pushPlatformHint')}
+            >
               <Select allowClear options={enumOptions(['APNS', 'FCM'])} />
             </Form.Item>
-            <Form.Item name="subject" label={t('providers.subject')}>
+            <Form.Item
+              name="subject"
+              label={t('providers.subject')}
+              tooltip={t('providers.subjectHint')}
+            >
               <Input />
             </Form.Item>
           </>
         )}
-        <Form.Item name="clientId" label={t('suppressions.clientId')}>
+        <Form.Item
+          name="clientId"
+          label={t('suppressions.clientId')}
+          tooltip={t('send.clientIdHint')}
+        >
           <Input />
         </Form.Item>
-        <Form.Item name="text" label={t('providers.text')}>
+        <Form.Item name="text" label={t('providers.text')} tooltip={t('providers.testTextHint')}>
           <Input.TextArea rows={3} />
         </Form.Item>
         <Button type="primary" loading={sending} onClick={() => void send()}>

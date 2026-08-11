@@ -8,8 +8,11 @@ import {
   Input,
   Select,
   Space,
+  Tooltip,
+  Typography,
   Upload,
 } from 'antd';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -120,19 +123,43 @@ export function BulkSendTab() {
         initialValues={{ channel: 'SMS', locale: 'RU' }}
         onValuesChange={() => setEstimate(null)}
       >
-        <Form.Item name="streamId" label={t('batches.streamId')} rules={[{ required: true }]}>
+        <Form.Item
+          name="streamId"
+          label={t('batches.streamId')}
+          tooltip={t('batches.streamIdHint')}
+          rules={[{ required: true }]}
+        >
           <Input />
         </Form.Item>
-        <Form.Item name="templateCode" label={t('templates.code')} rules={[{ required: true }]}>
+        <Form.Item
+          name="templateCode"
+          label={t('templates.code')}
+          tooltip={t('templates.codeHint')}
+          rules={[{ required: true }]}
+        >
           <Input placeholder="PAYROLL" />
         </Form.Item>
-        <Form.Item name="locale" label={t('templates.locale')} rules={[{ required: true }]}>
-          <Select options={enumOptions(CONTENT_LOCALES)} aria-label={t('templates.locale')} />
+        <Form.Item
+          name="locale"
+          label={t('templates.localeField')}
+          tooltip={t('templates.localeFieldHint')}
+          rules={[{ required: true }]}
+        >
+          <Select options={enumOptions(CONTENT_LOCALES)} aria-label={t('templates.localeField')} />
         </Form.Item>
-        <Form.Item name="channel" label={t('dashboard.channel')} rules={[{ required: true }]}>
+        <Form.Item
+          name="channel"
+          label={t('dashboard.channel')}
+          tooltip={t('send.channelHint')}
+          rules={[{ required: true }]}
+        >
           <Select options={enumOptions(CHANNELS)} aria-label={t('dashboard.channel')} />
         </Form.Item>
-        <Form.Item name="trafficClass" label={t('streams.trafficClass')}>
+        <Form.Item
+          name="trafficClass"
+          label={t('streams.trafficClass')}
+          tooltip={t('send.trafficClassHint')}
+        >
           <Select
             allowClear
             options={enumOptions(TRAFFIC_CLASSES)}
@@ -141,21 +168,30 @@ export function BulkSendTab() {
         </Form.Item>
       </Form>
 
-      <Upload.Dragger
-        accept=".csv,text/csv"
-        maxCount={1}
-        showUploadList={false}
-        beforeUpload={(file) => {
-          void readFileText(file).then((text) => {
-            setCsv(text);
-            setFileName(file.name);
-            setEstimate(null);
-          });
-          return false;
-        }}
-      >
-        <p>{fileName || t('templates.dropCsv')}</p>
-      </Upload.Dragger>
+      {/* Зона загрузки живёт вне формы, поэтому подпись и подсказка ставятся руками. */}
+      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <Space size={6}>
+          <Typography.Text strong>{t('send.fileLabel')}</Typography.Text>
+          <Tooltip title={t('send.fileHint')}>
+            <QuestionCircleOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />
+          </Tooltip>
+        </Space>
+        <Upload.Dragger
+          accept=".csv,text/csv"
+          maxCount={1}
+          showUploadList={false}
+          beforeUpload={(file) => {
+            void readFileText(file).then((text) => {
+              setCsv(text);
+              setFileName(file.name);
+              setEstimate(null);
+            });
+            return false;
+          }}
+        >
+          <p>{fileName || t('templates.dropCsv')}</p>
+        </Upload.Dragger>
+      </Space>
 
       <Button type="primary" loading={estimating} onClick={() => void runEstimate()}>
         {t('send.estimate')}

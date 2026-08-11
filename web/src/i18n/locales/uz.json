@@ -106,7 +106,8 @@
       "pause": "Pauza qilish",
       "resume": "Davom ettirish",
       "stop": "Toʻxtatish"
-    }
+    },
+    "streamIdHint": "Yuborish qaysi oqim nomidan ketadi: uning kvotalari, limitlari va sukunat oynasi xabarga qo‘llanadi. Identifikator «Kiruvchi oqimlar» bo‘limidan, masalan payroll"
   },
   "messages": {
     "messageId": "Xabar ID",
@@ -137,7 +138,16 @@
     "accepted": "Qabul qilindi",
     "duplicates": "Dublikatlar",
     "rejected": "Rad etildi",
-    "openBatch": "Yuborishni ochish"
+    "openBatch": "Yuborishni ochish",
+    "channelHint": "Xabar qaysi kanal orqali ketadi. Qabul qiluvchida shu kanal manzili, shablonda esa unga mos matn bo‘lishi kerak",
+    "trafficClassHint": "Bo‘sh bo‘lsa — oqim hal qiladi. CRITICAL_OTP kill switch bilan ushlab turilmaydi va sukunat oynasini kutmaydi",
+    "msisdnHint": "Raqam 998XXXXXXXXX ko‘rinishida — plyus, bo‘sh joy va chiziqchasiz",
+    "emailHint": "Qabul qiluvchi manzili. Agar u suppression ro‘yxatida bo‘lsa, xabar qabulda rad etiladi",
+    "pushTokenHint": "Qurilma tokeni. O‘lik tokenni provayder rad etadi va u avtomatik suppression ro‘yxatiga tushadi",
+    "clientIdHint": "Majburiy emas. Butun mijozga qo‘yilgan taqiqlar yuborishni to‘xtatishi uchun kerak, faqat bitta manzilga emas",
+    "variablesHint": "Shablon merge-maydonlari qiymatlari: NAME maydoni matndagi {NAME} ni to‘ldiradi. To‘ldirilmaganlari smetada ko‘rsatiladi",
+    "fileLabel": "Qabul qiluvchilar ro‘yxati",
+    "fileHint": "Sarlavha nomlari bo‘yicha ustunli CSV: kanalning manzil ustuni (msisdn / email / pushToken) va istalgan o‘zgaruvchi ustunlar. Registr muhim: NAME ustuni {NAME} ni to‘ldiradi, name esa yo‘q"
   },
   "dlq": {
     "reason": "Sabab",
@@ -181,7 +191,28 @@
     "suspend": "Qabulni toʻxtatib turish",
     "resume": "Qabulni davom ettirish",
     "connection": "Ulanish",
-    "lastActivity": "Oxirgi faollik"
+    "lastActivity": "Oxirgi faollik",
+    "streamIdHint": "Manba tizimlar har bir xabarda ko‘rsatadigan identifikator. Doimiy: ro‘yxatdan o‘tgandan keyin o‘zgartirib bo‘lmaydi",
+    "integrationTypeHint": "Oqim xabarlarni qaysi transport orqali yuboradi: REST, Kafka yoki ikkalasi",
+    "credentialsRefHint": "Sirning o‘zi emas, unga havola: env:NOM yoki prop:kalit. Qiymatni Modul murojaat vaqtida o‘qiydi va o‘zida saqlamaydi (SEC-04)",
+    "defaultChannelHint": "Manba o‘zinikini ko‘rsatmasa, shu oqim xabarlari uchun standart kanal",
+    "defaultProviderHint": "Oqimning afzal provayderi. U mavjud bo‘lmasa, marshrutlash xabarni baribir zaxiraga o‘tkazadi (FR-6.3)",
+    "trafficClassHint": "Standart sinf. Navbatlar izolyatsiyasi unga bog‘liq: ommaviy yuborish OTP uchun ajratilgan navbatlarni egallashi mumkin emas (TC-01)",
+    "priorityHint": "Trafik sinfi ichidagi standart ustuvorlik",
+    "dailyCountHint": "Kunlik xabarlar chegarasi. Oshib ketganda quyidagi qoida bo‘yicha: rad etish yoki faqat ogohlantirish",
+    "monthlyCountHint": "Oylik xabarlar chegarasi; kunlikdan mustaqil hisoblanadi",
+    "dailyCostHint": "Provayder tariflari bo‘yicha kunlik xarajat chegarasi, xabarlar soni bo‘yicha emas",
+    "monthlyCostHint": "Provayder tariflari bo‘yicha oylik xarajat chegarasi",
+    "quotaBehaviorHint": "BLOCK — kvotadan ortiq xabarlar rad etiladi, ALERT_ONLY — o‘tadi, lekin kvota ogohlantiradi",
+    "tpsHint": "Oqim sekundiga nechta xabar yubora oladi. Qabul chegaralovchisi, yuborish emas (IR-02)",
+    "perMinuteHint": "Daqiqadagi chegara — sekundlik limitdan o‘tadigan portlashlarni tekislaydi",
+    "perRecipientPerHourHint": "Bitta manzil soatiga nechta xabar oladi. Mijozni oqimdan himoya qilish, yuklamadan emas (FR-5.4)",
+    "quietStartHint": "Sukunat oynasining boshlanishi, SS:DD. Bu oynadagi xabarlar quyidagi qoida bo‘yicha ushlab turiladi yoki rad etiladi (FR-5.3)",
+    "quietEndHint": "Sukunat oynasining tugashi, SS:DD. Oyna yarim tundan o‘tishi mumkin",
+    "quietZoneHint": "Oyna vaqt mintaqasi. Odatda Asia/Tashkent — oyna mijoz vaqti bo‘yicha hisoblanadi, server emas",
+    "quietBehaviorHint": "DEFER — oyna tugaguncha ushlab turish, REJECT — darhol rad etish. OTP sukunat oynasiga bo‘ysunmaydi",
+    "clearQuietHoursHint": "Sukunat oynasini butunlay olib tashlash. Yuqoridagi bo‘sh maydonlar oynani olib tashlamaydi — ular «o‘zgartirmaslik» degani",
+    "nameHint": "Ro‘yxatlar va hisobotlar uchun oqimning odamga tushunarli nomi. Identifikator yuqoridagi maydonda beriladi va nomdan farqli o‘laroq o‘zgarmaydi"
   },
   "providers": {
     "tabProviders": "Provayderlar",
@@ -216,7 +247,19 @@
     "text": "Matn",
     "send": "Yuborish",
     "testSendResult": "Qabul natijasi",
-    "sentTo": "Qabul qiluvchi"
+    "sentTo": "Qabul qiluvchi",
+    "codeHint": "Profilning doimiy kodi: undan marshrutlash, statistika va provayder hisobotlari foydalanadi. O‘zgartirib bo‘lmaydi",
+    "channelHint": "Ushbu profil xizmat ko‘rsatadigan kanal. SMS provayderi pochta provayderiga aylana olmaydi",
+    "weightHint": "Vaznli balanslashda trafik ulushi. Boshqa strategiyalarda ishlatilmaydi",
+    "perMessageHint": "Butun xabar uchun narx. SMS uchun odatda segment narxi beriladi — u aniqroq",
+    "perSegmentHint": "SMS segmenti narxi. Uzun xabar — bir necha segment, smeta shular bo‘yicha hisoblanadi (§18.3)",
+    "balancingStrategyHint": "Ro‘yxatdan provayder qanday tanlanadi: ustuvorlik, aylana, vazn yoki eng arzon narx bo‘yicha",
+    "quietHoursChannelHint": "Kanalning sukunat oynasi. Oqimda o‘ziniki bo‘lishi mumkin — o‘sha ustun keladi, chunki u mijoz vaqt mintaqasini biladi",
+    "pushPlatformHint": "APNS yoki FCM. Token bitta platformaga tegishli va adapter shunga qarab tanlanadi",
+    "subjectHint": "Xat mavzusi; SMS va push’da u yo‘q",
+    "testTextHint": "Sinov xabari matni. Bu yerda u ataylab ixtiyoriy: ifoda emas, transport tekshiriladi",
+    "testStreamIdHint": "Tekshiruv qaysi oqim nomidan ketadi: uning kvotalari va filtrlari qo‘llanadi (FR-7.4)",
+    "testChannelHint": "Tekshiruv qaysi kanal orqali ketadi. Xabar ko‘rsatilgan manzilga haqiqatan yetib boradi"
   },
   "routing": {
     "policies": "Marshrutlash siyosatlari",
@@ -237,7 +280,18 @@
     "estimatedCost": "Narx bahosi",
     "minPriority": "Minimal ustuvorlik",
     "providerOrder": "Provayderlar tartibi",
-    "textForSegments": "Segmentlar hisobi uchun matn"
+    "textForSegments": "Segmentlar hisobi uchun matn",
+    "matchStreamIdHint": "Qoida faqat shu oqim uchun ishlaydi. Bo‘sh bo‘lsa — har qanday uchun",
+    "matchTrafficClassHint": "Qoida faqat shu sinf uchun ishlaydi. Bo‘sh bo‘lsa — har qanday uchun",
+    "minPriorityHint": "Qoida shu ustuvorlikdan past bo‘lmagan xabarlar uchun ishlaydi",
+    "matchChannelHint": "Qoida faqat shu kanal xabarlari uchun ishlaydi. Bo‘sh bo‘lsa — har qanday uchun",
+    "actionChannelHint": "Mos kelgan xabarlarni qaysi kanal orqali yuborish",
+    "dryRunStreamIdHint": "Marshrut qaysi oqim nomidan hisoblanadi: turli oqimlarda turli siyosat va limitlar",
+    "dryRunRecipientHint": "Manzil marshrutni hisoblash uchun kerak; hech narsa hech qayerga ketmaydi",
+    "dryRunChannelHint": "Faraziy xabarning kanali. Bo‘sh bo‘lsa — kanalni Modulning o‘zi tanlaydi",
+    "dryRunTrafficClassHint": "Faraziy xabarning trafik sinfi: qaysi qoida mos kelishi shunga bog‘liq",
+    "dryRunPriorityHint": "Faraziy xabarning ustuvorligi",
+    "textForSegmentsHint": "Matn faqat segment va narxni hisoblash uchun kerak — u hech qayerga yuborilmaydi"
   },
   "templates": {
     "create": "Shablon yaratish",
@@ -249,7 +303,7 @@
     "imported": "Import qilingan versiyalar",
     "skipped": "Oʻtkazib yuborilgan",
     "failures": "Xatolar",
-    "code": "Kod",
+    "code": "Shablon kodi",
     "direction": "Yoʻnalish",
     "owner": "Egasi",
     "catalogStatus": "Karta holati",
@@ -288,7 +342,22 @@
     "addMapping": "Roʻyxatga olish qoʻshish",
     "providerTemplateId": "Provayderdagi shablon ID",
     "approved": "Tasdiqlangan",
-    "removeMappingConfirm": "Provayderdagi roʻyxatga olish olib tashlansinmi?"
+    "removeMappingConfirm": "Provayderdagi roʻyxatga olish olib tashlansinmi?",
+    "codeHint": "«Shablonlar» bo‘limidagi shablon kodi, masalan OTP_LOGIN. Matn faqat undan olinadi — bu yerdan ixtiyoriy matn yuborib bo‘lmaydi (FR-4.2)",
+    "newCodeHint": "Shablonning doimiy nomi: manba tizimlar unga shu nom bilan murojaat qiladi va u yuborilgan xabarlar tarixida qoladi. Keyin o‘zgartirib bo‘lmaydi",
+    "localeField": "Shablon tili",
+    "localeFieldHint": "Shablonning til versiyasi. Aynan shu tilda chop etilgan versiya kerak, aks holda smeta rad etadi",
+    "channelHint": "Shablon kanali: SMS-shablonni xat sifatida yuborib bo‘lmaydi. Keyin o‘zgartirib bo‘lmaydi",
+    "directionHint": "Shablon nima uchunligi haqida erkin belgi — xizmat xabarlari, marketing. Faqat katalog filtriga ta’sir qiladi",
+    "ownerHint": "Matn uchun kim javobgar: ifodani o‘zgartirish kerak bo‘lsa, kimga borish",
+    "textHint": "Versiya matni. O‘zgaruvchilar {NAME} ko‘rinishida yoziladi; to‘ldirilmagan o‘zgaruvchi yuborishda xabarni to‘xtatadi, ko‘rib chiqishda esa ko‘rinib qoladi",
+    "subjectHint": "Xat mavzusi. Faqat email uchun — SMS va push’da u yo‘q",
+    "htmlHint": "Xatning HTML varianti. Matn bilan birga yuboriladi: matn har doim majburiy, HTML esa faqat u bilan birga (EM-01)",
+    "mappingProviderHint": "Shablon ro‘yxatdan o‘tgan provayder kodi",
+    "providerTemplateIdHint": "Provayder tomonidagi shablon identifikatori. Provayder matnni oldindan ro‘yxatdan o‘tkazishni talab qilganda kerak (FR-4.5)",
+    "approvedHint": "Provayder ro‘yxatdan o‘tishni tasdiqladi. Tasdiqlanmaguncha shu shablon bo‘yicha yuborish rad etilishi mumkin",
+    "previewLocaleHint": "Qaysi til versiyasini render qilish kerak",
+    "previewVariablesHint": "Ko‘rib chiqish uchun o‘zgaruvchilar qiymatlari. To‘ldirilmaganlari {NAME} ko‘rinishida qoladi va sanab o‘tiladi — ko‘rib chiqish qat’iy emas"
   },
   "suppressions": {
     "check": "Manzilni tekshirish (FR-5.1)",
@@ -307,7 +376,15 @@
     "validUntil": "Amal qilish muddati",
     "createdBy": "Kim yaratgan",
     "remove": "Yozuvni olib tashlash",
-    "removeConfirm": "Yozuv olib tashlansinmi — opt-out dan keyin opt-in?"
+    "removeConfirm": "Yozuv olib tashlansinmi — opt-out dan keyin opt-in?",
+    "channelHint": "Taqiq kanali. Bo‘sh bo‘lsa — barcha kanallar uchun taqiq",
+    "addressHint": "Manzil serverda tekshiriladi va xeshlanadi: ro‘yxatda manzilning o‘zi emas, xeshi saqlanadi",
+    "clientIdHint": "Bitta manzilga emas, butun mijozga taqiq. Manzil o‘rniga ko‘rsatiladi, u bilan birga emas",
+    "reasonHint": "Taqiq sababi. U ro‘yxatda ko‘rinadi va manzil nega bu yerga tushganini tushuntiradi",
+    "validUntilHint": "Taqiq qachongacha amal qiladi. Bo‘sh bo‘lsa — muddatsiz",
+    "checkChannelHint": "Manzil qaysi kanal uchun tekshirilayotgani",
+    "checkAddressHint": "Tekshirish uchun manzil. U saqlanmaydi — taqiqni topish uchun faqat xeshlanadi",
+    "checkClientIdHint": "Butun mijozga qo‘yilgan taqiqlarni tekshirish"
   },
   "statistics": {
     "dimension": {
@@ -352,6 +429,11 @@
     "ssoMappingHint": "Modul foydalanuvchilar va parollarni saqlamaydi: shaxsni korporativ SSO beradi, guruh → rol mosligi deployment konfiguratsiyasi (config.json) va bu yerda faqat oʻqish uchun",
     "ssoMappingEmpty": "Moslik berilmagan — rol nomi bilan bir xil guruh oʻz holicha oʻtadi",
     "ssoGroup": "SSO guruhi",
-    "role": "Rol"
+    "role": "Rol",
+    "killSwitchReasonHint": "Majburiy. «Hammasi 03:14 da to‘xtatildi» yozuvi faqat sababi aytilgan bo‘lsa o‘qishga arziydi (FR-7.3)",
+    "includeOtpHint": "Standart holatda bir martalik kodlar ketaverаdi. Belgi ularni ham to‘xtatadi — bu mijozlarning ilovaga kirishini uzadi",
+    "keyHint": "Parametr nomi. U xuddi shu nomdagi deploy standartini bekor qiladi; nomni keyin o‘zgartirib bo‘lmaydi",
+    "valueHint": "Deploy standartidan ustun keladigan qiymat. Parametrni o‘chirish standartni qaytaradi",
+    "descriptionHint": "Parametr nima uchun kiritilgan: uni yarim yildan keyin topgan odamga shu satrdan boshqa tushuntiradigan hech narsa yo‘q"
   }
 }

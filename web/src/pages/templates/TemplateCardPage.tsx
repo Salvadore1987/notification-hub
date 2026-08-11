@@ -407,10 +407,14 @@ export function TemplateCardPage() {
         cancelText={t('common.cancel')}
       >
         <Form form={cardForm} layout="vertical">
-          <Form.Item name="direction" label={t('templates.direction')}>
+          <Form.Item
+            name="direction"
+            label={t('templates.direction')}
+            tooltip={t('templates.directionHint')}
+          >
             <Input />
           </Form.Item>
-          <Form.Item name="owner" label={t('templates.owner')}>
+          <Form.Item name="owner" label={t('templates.owner')} tooltip={t('templates.ownerHint')}>
             <Input />
           </Form.Item>
         </Form>
@@ -432,7 +436,12 @@ export function TemplateCardPage() {
           style={{ marginBottom: 16 }}
         />
         <Form form={versionForm} layout="vertical" initialValues={{ locale: 'RU' }}>
-          <Form.Item name="locale" label={t('templates.locale')} rules={[{ required: true }]}>
+          <Form.Item
+            name="locale"
+            label={t('templates.locale')}
+            rules={[{ required: true }]}
+            tooltip={t('templates.localeFieldHint')}
+          >
             <Select options={enumOptions(CONTENT_LOCALES)} />
           </Form.Item>
           <Form.Item
@@ -443,15 +452,24 @@ export function TemplateCardPage() {
             <Input disabled />
           </Form.Item>
           {isEmail && (
-            <Form.Item name="subject" label={t('providers.subject')}>
+            <Form.Item
+              name="subject"
+              label={t('providers.subject')}
+              tooltip={t('templates.subjectHint')}
+            >
               <Input />
             </Form.Item>
           )}
-          <Form.Item name="text" label={t('templates.text')} rules={[{ required: true }]}>
+          <Form.Item
+            name="text"
+            label={t('templates.text')}
+            rules={[{ required: true }]}
+            tooltip={t('templates.textHint')}
+          >
             <Input.TextArea rows={5} placeholder={t('templates.textPlaceholder')} />
           </Form.Item>
           {isEmail && (
-            <Form.Item name="html" label="HTML">
+            <Form.Item name="html" label="HTML" tooltip={t('templates.htmlHint')}>
               <Input.TextArea rows={5} />
             </Form.Item>
           )}
@@ -471,6 +489,8 @@ export function TemplateCardPage() {
             name="providerCode"
             label={t('dashboard.provider')}
             rules={[{ required: true }]}
+
+            tooltip={t('templates.mappingProviderHint')}
           >
             <Input />
           </Form.Item>
@@ -478,10 +498,17 @@ export function TemplateCardPage() {
             name="providerTemplateId"
             label={t('templates.providerTemplateId')}
             rules={[{ required: true }]}
+
+            tooltip={t('templates.providerTemplateIdHint')}
           >
             <Input />
           </Form.Item>
-          <Form.Item name="approved" label={t('templates.approved')} valuePropName="checked">
+          <Form.Item
+            name="approved"
+            label={t('templates.approved')}
+            valuePropName="checked"
+            tooltip={t('templates.approvedHint')}
+          >
             <Switch />
           </Form.Item>
         </Form>

@@ -171,16 +171,30 @@ export function TemplatesPage() {
         cancelText={t('common.cancel')}
       >
         <Form form={createForm} layout="vertical">
-          <Form.Item name="code" label={t('templates.code')} rules={[{ required: true }]}>
+          <Form.Item
+            name="code"
+            label={t('templates.code')}
+            rules={[{ required: true }]}
+            tooltip={t('templates.newCodeHint')}
+          >
             <Input placeholder="OTP_LOGIN" />
           </Form.Item>
-          <Form.Item name="channel" label={t('dashboard.channel')} rules={[{ required: true }]}>
+          <Form.Item
+            name="channel"
+            label={t('dashboard.channel')}
+            rules={[{ required: true }]}
+            tooltip={t('templates.channelHint')}
+          >
             <Select options={enumOptions(CHANNELS)} />
           </Form.Item>
-          <Form.Item name="direction" label={t('templates.direction')}>
+          <Form.Item
+            name="direction"
+            label={t('templates.direction')}
+            tooltip={t('templates.directionHint')}
+          >
             <Input />
           </Form.Item>
-          <Form.Item name="owner" label={t('templates.owner')}>
+          <Form.Item name="owner" label={t('templates.owner')} tooltip={t('templates.ownerHint')}>
             <Input />
           </Form.Item>
         </Form>

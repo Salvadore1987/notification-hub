@@ -85,10 +85,17 @@ export function ProviderFormModal({
           name="code"
           label={t('providers.code')}
           rules={initial ? [] : [{ required: true }]}
+
+          tooltip={t('providers.codeHint')}
         >
           <Input disabled={initial !== null} />
         </Form.Item>
-        <Form.Item name="channel" label={t('dashboard.channel')} rules={[{ required: true }]}>
+        <Form.Item
+          name="channel"
+          label={t('dashboard.channel')}
+          rules={[{ required: true }]}
+          tooltip={t('providers.channelHint')}
+        >
           <Select options={enumOptions(CHANNELS)} />
         </Form.Item>
         <Form.Item
@@ -99,43 +106,73 @@ export function ProviderFormModal({
         >
           <Input placeholder="PLAYMOBILE / SMS_GATE / SMTP / FCM / APNS" />
         </Form.Item>
-        <Form.Item name="weight" label={t('providers.weight')}>
+        <Form.Item name="weight" label={t('providers.weight')} tooltip={t('providers.weightHint')}>
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name="credentialsRef" label={t('streams.credentialsRef')}>
+        <Form.Item
+          name="credentialsRef"
+          label={t('streams.credentialsRef')}
+          tooltip={t('streams.credentialsRefHint')}
+        >
           <Input placeholder="env:… / file:… / prop:…" />
         </Form.Item>
 
         <Divider plain>{t('providers.tariff')}</Divider>
-        <Form.Item name={['tariff', 'perMessage']} label={t('providers.perMessage')}>
+        <Form.Item
+          name={['tariff', 'perMessage']}
+          label={t('providers.perMessage')}
+          tooltip={t('providers.perMessageHint')}
+        >
           <Input placeholder="12.5000 UZS" />
         </Form.Item>
-        <Form.Item name={['tariff', 'perSegment']} label={t('providers.perSegment')}>
+        <Form.Item
+          name={['tariff', 'perSegment']}
+          label={t('providers.perSegment')}
+          tooltip={t('providers.perSegmentHint')}
+        >
           <Input placeholder="12.5000 UZS" />
         </Form.Item>
 
         <Divider plain>{t('streams.rateLimit')}</Divider>
-        <Form.Item name={['rateLimit', 'tps']} label="TPS">
+        <Form.Item name={['rateLimit', 'tps']} label="TPS" tooltip={t('streams.tpsHint')}>
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name={['rateLimit', 'perMinute']} label={t('streams.perMinute')}>
+        <Form.Item
+          name={['rateLimit', 'perMinute']}
+          label={t('streams.perMinute')}
+          tooltip={t('streams.perMinuteHint')}
+        >
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
           name={['rateLimit', 'perRecipientPerHour']}
           label={t('streams.perRecipientPerHour')}
+
+          tooltip={t('streams.perRecipientPerHourHint')}
         >
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
 
         <Divider plain>{t('streams.quota')}</Divider>
-        <Form.Item name={['quota', 'dailyCount']} label={t('streams.dailyCount')}>
+        <Form.Item
+          name={['quota', 'dailyCount']}
+          label={t('streams.dailyCount')}
+          tooltip={t('streams.dailyCountHint')}
+        >
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name={['quota', 'monthlyCount']} label={t('streams.monthlyCount')}>
+        <Form.Item
+          name={['quota', 'monthlyCount']}
+          label={t('streams.monthlyCount')}
+          tooltip={t('streams.monthlyCountHint')}
+        >
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name={['quota', 'behavior']} label={t('streams.quotaBehavior')}>
+        <Form.Item
+          name={['quota', 'behavior']}
+          label={t('streams.quotaBehavior')}
+          tooltip={t('streams.quotaBehaviorHint')}
+        >
           <Select allowClear options={enumOptions(['BLOCK', 'ALERT_ONLY'])} />
         </Form.Item>
 
