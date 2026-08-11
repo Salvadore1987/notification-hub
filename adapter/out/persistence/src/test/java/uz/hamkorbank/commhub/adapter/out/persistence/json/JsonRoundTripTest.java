@@ -162,14 +162,14 @@ class JsonRoundTripTest {
     @DisplayName("a tariff keeps its exact amounts — money never goes through a double (FR-6.2)")
     void tariffKeepsScale() {
         // Arrange
-        Tariff tariff = new Tariff(Money.of(new BigDecimal("0.1000"), UZS), Money.of(new BigDecimal("123.4567"), UZS));
+        Tariff tariff = new Tariff(Money.of(new BigDecimal("0.10"), UZS), Money.of(new BigDecimal("123.45"), UZS));
 
         // Act
         Tariff restored = TariffJson.toDomain(roundTrip(TariffJson.of(tariff), TariffJson.class));
 
         // Assert
-        assertThat(restored.perMessage().amount()).isEqualByComparingTo("0.1000");
-        assertThat(restored.perSegment().amount()).isEqualByComparingTo("123.4567");
+        assertThat(restored.perMessage().amount()).isEqualByComparingTo("0.10");
+        assertThat(restored.perSegment().amount()).isEqualByComparingTo("123.45");
         assertThat(restored.currency()).isEqualTo(UZS);
     }
 

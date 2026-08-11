@@ -448,7 +448,7 @@ components:
             channel: { type: [string, "null"], enum: [SMS, EMAIL, PUSH, null] }
             provider: { type: [string, "null"] }
             segments: { type: integer }
-            cost: { type: [string, "null"], examples: ["120.0000 UZS"] }
+            cost: { type: [string, "null"], examples: ["120.00 UZS"] }
             acceptedAt: { type: string, format: date-time }
             terminalAt: { type: [string, "null"], format: date-time }
             correlationId: { type: string }

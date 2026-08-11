@@ -131,14 +131,14 @@ export function ProviderFormModal({
           label={t('providers.perMessage')}
           tooltip={t('providers.perMessageHint')}
         >
-          <Input placeholder="12.5000 UZS" />
+          <Input placeholder="12.50 UZS" />
         </Form.Item>
         <Form.Item
           name={['tariff', 'perSegment']}
           label={t('providers.perSegment')}
           tooltip={t('providers.perSegmentHint')}
         >
-          <Input placeholder="12.5000 UZS" />
+          <Input placeholder="12.50 UZS" />
         </Form.Item>
 
         <Divider plain>{t('streams.rateLimit')}</Divider>

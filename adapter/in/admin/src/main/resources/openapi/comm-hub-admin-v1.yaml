@@ -1602,7 +1602,7 @@ components:
 
     Money:
       type: string
-      description: Сумма с кодом валюты, например `12.5000 UZS`
+      description: Сумма с кодом валюты, например `12.50 UZS`
 
     Quota:
       type: object

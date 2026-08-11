@@ -26,7 +26,7 @@ describe('SingleSendTab', () => {
   const estimate = {
     recipients: 1,
     segments: 1,
-    estimatedCost: '241.0000',
+    estimatedCost: '241.00',
     provider: 'PLAYMOBILE',
     template: { version: 3, status: 'PUBLISHED' },
     missingVariables: [],

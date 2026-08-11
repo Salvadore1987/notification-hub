@@ -170,14 +170,14 @@ export function StreamFormModal({
           label={t('streams.dailyCost')}
           tooltip={t('streams.dailyCostHint')}
         >
-          <Input placeholder="1000000.0000 UZS" />
+          <Input placeholder="1000000.00 UZS" />
         </Form.Item>
         <Form.Item
           name={['quota', 'monthlyCost']}
           label={t('streams.monthlyCost')}
           tooltip={t('streams.monthlyCostHint')}
         >
-          <Input placeholder="30000000.0000 UZS" />
+          <Input placeholder="30000000.00 UZS" />
         </Form.Item>
         <Form.Item
           name={['quota', 'behavior']}

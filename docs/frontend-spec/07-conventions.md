@@ -22,11 +22,13 @@ that crosses midnight (`21:00`–`09:00`) is normal and must not be shown as inv
 
 ## Money
 
-`Money` is a **string**: `"12.5000 UZS"` — amount and currency together.
+`Money` is a **string**: `"12.50 UZS"` — amount and currency together, always two decimal places.
 
-Never parse it into a float to re-render it. Four decimal places are meaningful: per-segment SMS
-tariffs multiplied over a fifty-thousand-recipient batch are where the rounding shows up. Display the
-string; if you must align a column, align on the space.
+Never parse it into a float to re-render it, and never re-round it. The server has already rounded
+(HALF_UP, two digits) before the amount was stored, so a per-segment tariff multiplied over a
+fifty-thousand-recipient batch is exact by the time you see it — reformatting the string on the
+client is how the panel and the CSV export start disagreeing. Display the string; if you must align a
+column, align on the space.
 
 Where a form takes a tariff or a cost quota, the request carries **a number** and the currency is
 implied (`UZS`). Do not send a formatted string back.

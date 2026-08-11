@@ -2801,7 +2801,7 @@ export interface components {
         RejectionReason: "VALIDATION_FAILED" | "DUPLICATE_SUBMISSION" | "SUPPRESSED" | "OPT_OUT" | "QUIET_HOURS" | "FREQUENCY_CAPPED" | "QUOTA_EXCEEDED" | "STREAM_SUSPENDED" | "TEMPLATE_NOT_PUBLISHED" | "TEMPLATE_VARIABLE_MISSING" | "NO_ROUTE_AVAILABLE" | "PAN_DETECTED" | "TTL_EXPIRED" | "SEND_STOPPED" | "KILL_SWITCH" | "PROVIDER_REJECTED" | "ATTEMPTS_EXHAUSTED";
         /** @enum {string} */
         SuppressionReason: "OPT_OUT" | "COMPLAINT" | "HARD_BOUNCE" | "DELIVERY_FAILURES" | "PROVIDER_BLACKLIST" | "PUSH_TOKEN_INVALID" | "MANUAL";
-        /** @description Сумма с кодом валюты, например `12.5000 UZS` */
+        /** @description Сумма с кодом валюты, например `12.50 UZS` */
         Money: string;
         Quota: {
             /** Format: int64 */
