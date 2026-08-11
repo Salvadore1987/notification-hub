@@ -450,7 +450,7 @@ paths:
         - name: status
           in: path
           required: true
-          schema: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
+          schema: { $ref: '#/components/schemas/ChannelStatus' }
         - $ref: '#/components/parameters/ReasonHeader'
       responses:
         '200':
@@ -567,7 +567,7 @@ paths:
         - name: state
           in: path
           required: true
-          schema: { type: string, enum: [ENABLED, DISABLED, MAINTENANCE] }
+          schema: { $ref: '#/components/schemas/ProviderState' }
         - $ref: '#/components/parameters/ReasonHeader'
       responses:
         '200':
@@ -717,7 +717,7 @@ paths:
       parameters:
         - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
         - { name: direction, in: query, schema: { type: string } }
-        - { name: catalogStatus, in: query, schema: { type: string, enum: [ACTIVE, ARCHIVED] } }
+        - { name: catalogStatus, in: query, schema: { $ref: '#/components/schemas/TemplateCatalogStatus' } }
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
@@ -1504,6 +1504,75 @@ components:
       description: Стратегия балансировки между провайдерами канала (FR-2.3)
       enum: [ROUND_ROBIN, WEIGHTED, LEAST_COST, PRIMARY_ONLY]
 
+    TrafficClass:
+      type: string
+      description: Класс трафика (TC-01). Из Kafka берётся из топика и перекрывает документ.
+      enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION]
+
+    Priority:
+      type: string
+      enum: [REALTIME, HIGH, NORMAL, LOW]
+
+    IntegrationType:
+      type: string
+      description: |
+        Как система-источник подаёт сообщения (FR-1.1, FR-1.3). Значение описательное: приём
+        по нему не ограничивается, поток, заведённый как `REST`, принимает и из Kafka.
+      enum: [KAFKA, REST]
+
+    StreamStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED, DISABLED]
+
+    ConnectionStatus:
+      type: string
+      description: Наблюдаемая активность источника, а не настройка.
+      enum: [CONNECTED, IDLE, DISCONNECTED, UNKNOWN]
+
+    ChannelStatus:
+      type: string
+      enum: [ACTIVE, MAINTENANCE, DISABLED]
+
+    ProviderHealthStatus:
+      type: string
+      description: Считается по фактическим попыткам доставки (PR-02); `DOWN` невыбираем.
+      enum: [UP, DEGRADED, DOWN, UNKNOWN]
+
+    QuotaExhaustionBehavior:
+      type: string
+      description: Поведение при исчерпании квоты — отклонять или только сигнализировать.
+      enum: [BLOCK_AND_ALERT, ALERT_ONLY]
+
+    QuietHoursBehavior:
+      type: string
+      enum: [DEFER, REJECT]
+
+    PushPlatform:
+      type: string
+      description: |
+        Платформа устройства, а не адаптер: APNs и FCM — это `adapterType` профиля провайдера,
+        и в адресе получателя им не место.
+      enum: [ANDROID, IOS, WEB]
+
+    SmsEncoding:
+      type: string
+      description: Кодировка, выбранная сегментацией (§18.3); один не-GSM символ переводит всё в UCS2.
+      enum: [GSM7, UCS2]
+
+    ProviderState:
+      type: string
+      description: |
+        Состояние, в которое переводят профиль. `MAINTENANCE` — не `DISABLED`: оба делают провайдера
+        невыбираемым, но в аудите это разные записи.
+      enum: [ENABLED, DISABLED, MAINTENANCE]
+
+    TemplateCatalogStatus:
+      type: string
+      description: |
+        Статус карточки шаблона: остаётся ли он в каталоге. Не путать со статусом версии
+        (`TemplateVersionStatus`) — отправляемым шаблон делает публикация версии, а не карточка.
+      enum: [ACTIVE, ARCHIVED]
+
     ContentLocale:
       type: string
       enum: [RU, UZ, EN]
@@ -1540,7 +1609,7 @@ components:
         monthlyCount: { type: integer, format: int64, nullable: true }
         dailyCost: { $ref: '#/components/schemas/Money' }
         monthlyCost: { $ref: '#/components/schemas/Money' }
-        behavior: { type: string, enum: [BLOCK, ALERT_ONLY] }
+        behavior: { $ref: '#/components/schemas/QuotaExhaustionBehavior' }
 
     QuietHours:
       type: object
@@ -1549,7 +1618,7 @@ components:
         start: { type: string, example: "21:00" }
         end: { type: string, example: "09:00" }
         zone: { type: string, default: Asia/Tashkent }
-        behavior: { type: string, enum: [DEFER, REJECT] }
+        behavior: { $ref: '#/components/schemas/QuietHoursBehavior' }
 
     RateLimit:
       type: object
@@ -1572,7 +1641,7 @@ components:
         msisdn: { type: string, example: "998901234567" }
         email: { type: string, format: email }
         pushToken: { type: string }
-        pushPlatform: { type: string, enum: [APNS, FCM] }
+        pushPlatform: { $ref: '#/components/schemas/PushPlatform' }
 
     Dashboard:
       type: object
@@ -1600,7 +1669,7 @@ components:
             properties:
               provider: { type: string }
               channel: { $ref: '#/components/schemas/Channel' }
-              health: { type: string, enum: [UP, DEGRADED, DOWN, UNKNOWN] }
+              health: { $ref: '#/components/schemas/ProviderHealthStatus' }
               selectable: { type: boolean }
         backlog:
           type: object
@@ -1774,9 +1843,9 @@ components:
       properties:
         streamId: { type: string }
         name: { type: string }
-        integrationType: { type: string, enum: [REST, KAFKA, BOTH] }
-        status: { type: string, enum: [ACTIVE, SUSPENDED] }
-        connectionStatus: { type: string, enum: [CONNECTED, IDLE, UNKNOWN] }
+        integrationType: { $ref: '#/components/schemas/IntegrationType' }
+        status: { $ref: '#/components/schemas/StreamStatus' }
+        connectionStatus: { $ref: '#/components/schemas/ConnectionStatus' }
         defaults: { $ref: '#/components/schemas/StreamDefaults' }
         limits:
           type: object
@@ -1792,15 +1861,15 @@ components:
       properties:
         channel: { $ref: '#/components/schemas/Channel' }
         provider: { type: string }
-        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
-        priority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        trafficClass: { $ref: '#/components/schemas/TrafficClass' }
+        priority: { $ref: '#/components/schemas/Priority' }
         balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
 
     StreamRequest:
       type: object
       properties:
         name: { type: string }
-        integrationType: { type: string, enum: [REST, KAFKA, BOTH] }
+        integrationType: { $ref: '#/components/schemas/IntegrationType' }
         defaults: { $ref: '#/components/schemas/StreamDefaults' }
         quota: { $ref: '#/components/schemas/Quota' }
         quietHours: { $ref: '#/components/schemas/QuietHours' }
@@ -1817,7 +1886,7 @@ components:
       type: object
       properties:
         channel: { $ref: '#/components/schemas/Channel' }
-        status: { type: string, enum: [ACTIVE, DISABLED, MAINTENANCE] }
+        status: { $ref: '#/components/schemas/ChannelStatus' }
         balancingStrategy: { $ref: '#/components/schemas/BalancingStrategy' }
         fallbackOrder:
           type: array
@@ -1869,7 +1938,7 @@ components:
           properties:
             enabled: { type: boolean }
             maintenance: { type: boolean }
-            health: { type: string, enum: [UP, DEGRADED, DOWN, UNKNOWN] }
+            health: { $ref: '#/components/schemas/ProviderHealthStatus' }
             selectable: { type: boolean, readOnly: true }
             quota: { $ref: '#/components/schemas/Quota' }
             credentialsRef:
@@ -1913,8 +1982,8 @@ components:
       description: Каким должно быть сообщение, чтобы политика применилась; все поля опциональны
       properties:
         streamId: { type: string }
-        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
-        minPriority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        trafficClass: { $ref: '#/components/schemas/TrafficClass' }
+        minPriority: { $ref: '#/components/schemas/Priority' }
         channel: { $ref: '#/components/schemas/Channel' }
 
     RoutingAction:
@@ -1941,8 +2010,8 @@ components:
         streamId: { type: string }
         recipient: { $ref: '#/components/schemas/Recipient' }
         channel: { $ref: '#/components/schemas/Channel' }
-        trafficClass: { type: string, enum: [CRITICAL_OTP, TRANSACTIONAL, NOTIFICATION] }
-        priority: { type: string, enum: [HIGH, NORMAL, LOW] }
+        trafficClass: { $ref: '#/components/schemas/TrafficClass' }
+        priority: { $ref: '#/components/schemas/Priority' }
         text: { type: string, description: Нужен для расчёта сегментов и стоимости (§18.3) }
 
     RouteEvaluation:
@@ -1972,7 +2041,7 @@ components:
         channel: { $ref: '#/components/schemas/Channel' }
         direction: { type: string }
         owner: { type: string }
-        catalogStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+        catalogStatus: { $ref: '#/components/schemas/TemplateCatalogStatus' }
         versions:
           type: array
           items: { $ref: '#/components/schemas/TemplateVersion' }
@@ -1994,7 +2063,7 @@ components:
         channel: { $ref: '#/components/schemas/Channel' }
         direction: { type: string }
         owner: { type: string }
-        catalogStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+        catalogStatus: { $ref: '#/components/schemas/TemplateCatalogStatus' }
         publishedLocales:
           type: array
           items: { $ref: '#/components/schemas/ContentLocale' }
@@ -2092,7 +2161,7 @@ components:
           type: object
           nullable: true
           properties:
-            encoding: { type: string, enum: [GSM7, UCS2] }
+            encoding: { $ref: '#/components/schemas/SmsEncoding' }
             characterCount: { type: integer }
             segments: { type: integer }
 

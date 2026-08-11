@@ -20,7 +20,7 @@ interface TestSendForm {
   msisdn?: string;
   email?: string;
   pushToken?: string;
-  pushPlatform?: 'APNS' | 'FCM';
+  pushPlatform?: 'ANDROID' | 'IOS' | 'WEB';
   subject?: string;
   text?: string;
 }
@@ -146,7 +146,7 @@ export function TestSendTab() {
               label={t('providers.pushPlatform')}
               tooltip={t('providers.pushPlatformHint')}
             >
-              <Select allowClear options={enumOptions(['APNS', 'FCM'])} />
+              <Select allowClear options={enumOptions(['ANDROID', 'IOS', 'WEB'])} />
             </Form.Item>
             <Form.Item
               name="subject"

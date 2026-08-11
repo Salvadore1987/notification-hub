@@ -18,14 +18,27 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import uz.hamkorbank.commhub.application.port.in.command.ProviderStateCommand;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
+import uz.hamkorbank.commhub.domain.model.type.ChannelStatus;
+import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
+import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
+import uz.hamkorbank.commhub.domain.model.type.Priority;
+import uz.hamkorbank.commhub.domain.model.type.ProviderHealthStatus;
+import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
+import uz.hamkorbank.commhub.domain.model.type.QuietHoursBehavior;
+import uz.hamkorbank.commhub.domain.model.type.QuotaExhaustionBehavior;
 import uz.hamkorbank.commhub.domain.model.type.RejectionReason;
+import uz.hamkorbank.commhub.domain.model.type.SmsEncoding;
+import uz.hamkorbank.commhub.domain.model.type.StreamStatus;
 import uz.hamkorbank.commhub.domain.model.type.SuppressionReason;
+import uz.hamkorbank.commhub.domain.model.type.TemplateCatalogStatus;
 import uz.hamkorbank.commhub.domain.model.type.TemplateStatus;
+import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
@@ -95,15 +108,28 @@ class AdminOpenApiContractTest {
      * {@code AdminValues.requiredEnum}, so a name the document invents is an endpoint the panel
      * cannot call, and a name the document omits is a value the panel cannot render.
      */
-    private static final Map<String, Class<? extends Enum<?>>> ENUM_SCHEMAS = Map.of(
-            "Channel", Channel.class,
-            "BalancingStrategy", BalancingStrategy.class,
-            "ContentLocale", ContentLocale.class,
-            "MessageStatus", MessageStatus.class,
-            "BatchStatus", BatchStatus.class,
-            "RejectionReason", RejectionReason.class,
-            "SuppressionReason", SuppressionReason.class,
-            "TemplateVersionStatus", TemplateStatus.class);
+    private static final Map<String, Class<? extends Enum<?>>> ENUM_SCHEMAS = Map.ofEntries(
+            Map.entry("Channel", Channel.class),
+            Map.entry("BalancingStrategy", BalancingStrategy.class),
+            Map.entry("ContentLocale", ContentLocale.class),
+            Map.entry("MessageStatus", MessageStatus.class),
+            Map.entry("BatchStatus", BatchStatus.class),
+            Map.entry("RejectionReason", RejectionReason.class),
+            Map.entry("SuppressionReason", SuppressionReason.class),
+            Map.entry("TemplateVersionStatus", TemplateStatus.class),
+            Map.entry("TemplateCatalogStatus", TemplateCatalogStatus.class),
+            Map.entry("TrafficClass", TrafficClass.class),
+            Map.entry("Priority", Priority.class),
+            Map.entry("IntegrationType", IntegrationType.class),
+            Map.entry("StreamStatus", StreamStatus.class),
+            Map.entry("ConnectionStatus", ConnectionStatus.class),
+            Map.entry("ChannelStatus", ChannelStatus.class),
+            Map.entry("ProviderHealthStatus", ProviderHealthStatus.class),
+            Map.entry("ProviderState", ProviderStateCommand.ProviderState.class),
+            Map.entry("QuotaExhaustionBehavior", QuotaExhaustionBehavior.class),
+            Map.entry("QuietHoursBehavior", QuietHoursBehavior.class),
+            Map.entry("PushPlatform", PushPlatform.class),
+            Map.entry("SmsEncoding", SmsEncoding.class));
 
     @Test
     @DisplayName("UI-02: every enum of the contract spells the domain vocabulary, name for name")

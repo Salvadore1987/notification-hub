@@ -189,7 +189,7 @@ export function ProviderFormModal({
           label={t('streams.quotaBehavior')}
           tooltip={t('streams.quotaBehaviorHint')}
         >
-          <Select allowClear options={enumOptions(['BLOCK', 'ALERT_ONLY'])} />
+          <Select allowClear options={enumOptions(['BLOCK_AND_ALERT', 'ALERT_ONLY'])} />
         </Form.Item>
 
         <Divider plain>{t('providers.endpointConfig')}</Divider>

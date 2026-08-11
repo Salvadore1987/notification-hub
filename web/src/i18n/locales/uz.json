@@ -264,7 +264,7 @@
     "perSegmentHint": "SMS segmenti narxi. Uzun xabar — bir necha segment, smeta shular bo‘yicha hisoblanadi (§18.3)",
     "balancingStrategyHint": "Ro‘yxatdan provayder qanday tanlanadi: ustuvorlik, aylana, vazn yoki eng arzon narx bo‘yicha",
     "quietHoursChannelHint": "Kanalning sukunat oynasi. Oqimda o‘ziniki bo‘lishi mumkin — o‘sha ustun keladi, chunki u mijoz vaqt mintaqasini biladi",
-    "pushPlatformHint": "APNS yoki FCM. Token bitta platformaga tegishli va adapter shunga qarab tanlanadi",
+    "pushPlatformHint": "Qurilma platformasi, adapter emas. Token bitta platformaga tegishli va adapter shunga qarab tanlanadi",
     "subjectHint": "Xat mavzusi; SMS va push’da u yo‘q",
     "testTextHint": "Sinov xabari matni. Bu yerda u ataylab ixtiyoriy: ifoda emas, transport tekshiriladi",
     "testStreamIdHint": "Tekshiruv qaysi oqim nomidan ketadi: uning kvotalari va filtrlari qo‘llanadi (FR-7.4)",

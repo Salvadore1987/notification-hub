@@ -264,7 +264,7 @@
     "perSegmentHint": "Price of one SMS segment. A long message is several segments, and the estimate counts them (§18.3)",
     "balancingStrategyHint": "How a provider is picked from the list: by priority, round robin, by weight or by lowest cost",
     "quietHoursChannelHint": "The channel's quiet-hours window. A stream may have its own, and that one wins because it knows the customer's timezone",
-    "pushPlatformHint": "APNS or FCM. A token belongs to one platform, and the adapter is chosen by it",
+    "pushPlatformHint": "The device platform, not the adapter. A token belongs to one platform, and the adapter is chosen by it",
     "subjectHint": "The subject line; SMS and push have none",
     "testTextHint": "The text of the test message. Free-form on purpose: what is being checked is the transport, not the wording",
     "testStreamIdHint": "The stream the check is made on behalf of: its quotas and filters apply (FR-7.4)",

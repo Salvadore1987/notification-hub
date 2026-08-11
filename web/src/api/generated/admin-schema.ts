@@ -826,7 +826,7 @@ export interface paths {
                 };
                 path: {
                     channel: components["parameters"]["ChannelPath"];
-                    status: "ACTIVE" | "DISABLED" | "MAINTENANCE";
+                    status: components["schemas"]["ChannelStatus"];
                 };
                 cookie?: never;
             };
@@ -1088,7 +1088,7 @@ export interface paths {
                 };
                 path: {
                     providerId: components["parameters"]["ProviderIdPath"];
-                    state: "ENABLED" | "DISABLED" | "MAINTENANCE";
+                    state: components["schemas"]["ProviderState"];
                 };
                 cookie?: never;
             };
@@ -1405,7 +1405,7 @@ export interface paths {
                 query?: {
                     channel?: components["schemas"]["Channel"];
                     direction?: string;
-                    catalogStatus?: "ACTIVE" | "ARCHIVED";
+                    catalogStatus?: components["schemas"]["TemplateCatalogStatus"];
                     /** @description Размер страницы; потолок зависит от списка */
                     limit?: components["parameters"]["Limit"];
                     offset?: components["parameters"]["Offset"];
@@ -2733,6 +2733,63 @@ export interface components {
          * @enum {string}
          */
         BalancingStrategy: "ROUND_ROBIN" | "WEIGHTED" | "LEAST_COST" | "PRIMARY_ONLY";
+        /**
+         * @description Класс трафика (TC-01). Из Kafka берётся из топика и перекрывает документ.
+         * @enum {string}
+         */
+        TrafficClass: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
+        /** @enum {string} */
+        Priority: "REALTIME" | "HIGH" | "NORMAL" | "LOW";
+        /**
+         * @description Как система-источник подаёт сообщения (FR-1.1, FR-1.3). Значение описательное: приём
+         *     по нему не ограничивается, поток, заведённый как `REST`, принимает и из Kafka.
+         * @enum {string}
+         */
+        IntegrationType: "KAFKA" | "REST";
+        /** @enum {string} */
+        StreamStatus: "ACTIVE" | "SUSPENDED" | "DISABLED";
+        /**
+         * @description Наблюдаемая активность источника, а не настройка.
+         * @enum {string}
+         */
+        ConnectionStatus: "CONNECTED" | "IDLE" | "DISCONNECTED" | "UNKNOWN";
+        /** @enum {string} */
+        ChannelStatus: "ACTIVE" | "MAINTENANCE" | "DISABLED";
+        /**
+         * @description Считается по фактическим попыткам доставки (PR-02); `DOWN` невыбираем.
+         * @enum {string}
+         */
+        ProviderHealthStatus: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN";
+        /**
+         * @description Поведение при исчерпании квоты — отклонять или только сигнализировать.
+         * @enum {string}
+         */
+        QuotaExhaustionBehavior: "BLOCK_AND_ALERT" | "ALERT_ONLY";
+        /** @enum {string} */
+        QuietHoursBehavior: "DEFER" | "REJECT";
+        /**
+         * @description Платформа устройства, а не адаптер: APNs и FCM — это `adapterType` профиля провайдера,
+         *     и в адресе получателя им не место.
+         * @enum {string}
+         */
+        PushPlatform: "ANDROID" | "IOS" | "WEB";
+        /**
+         * @description Кодировка, выбранная сегментацией (§18.3); один не-GSM символ переводит всё в UCS2.
+         * @enum {string}
+         */
+        SmsEncoding: "GSM7" | "UCS2";
+        /**
+         * @description Состояние, в которое переводят профиль. `MAINTENANCE` — не `DISABLED`: оба делают провайдера
+         *     невыбираемым, но в аудите это разные записи.
+         * @enum {string}
+         */
+        ProviderState: "ENABLED" | "DISABLED" | "MAINTENANCE";
+        /**
+         * @description Статус карточки шаблона: остаётся ли он в каталоге. Не путать со статусом версии
+         *     (`TemplateVersionStatus`) — отправляемым шаблон делает публикация версии, а не карточка.
+         * @enum {string}
+         */
+        TemplateCatalogStatus: "ACTIVE" | "ARCHIVED";
         /** @enum {string} */
         ContentLocale: "RU" | "UZ" | "EN";
         /** @enum {string} */
@@ -2752,8 +2809,7 @@ export interface components {
             monthlyCount?: number | null;
             dailyCost?: components["schemas"]["Money"];
             monthlyCost?: components["schemas"]["Money"];
-            /** @enum {string} */
-            behavior?: "BLOCK" | "ALERT_ONLY";
+            behavior?: components["schemas"]["QuotaExhaustionBehavior"];
         };
         /** @description Окно тишины; пересечение полуночи — норма (FR-5.3) */
         QuietHours: {
@@ -2763,8 +2819,7 @@ export interface components {
             end?: string;
             /** @default Asia/Tashkent */
             zone: string;
-            /** @enum {string} */
-            behavior?: "DEFER" | "REJECT";
+            behavior?: components["schemas"]["QuietHoursBehavior"];
         };
         RateLimit: {
             tps?: number;
@@ -2783,8 +2838,7 @@ export interface components {
             /** Format: email */
             email?: string;
             pushToken?: string;
-            /** @enum {string} */
-            pushPlatform?: "APNS" | "FCM";
+            pushPlatform?: components["schemas"]["PushPlatform"];
         };
         Dashboard: {
             /** Format: date-time */
@@ -2812,8 +2866,7 @@ export interface components {
             providers?: {
                 provider?: string;
                 channel?: components["schemas"]["Channel"];
-                /** @enum {string} */
-                health?: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN";
+                health?: components["schemas"]["ProviderHealthStatus"];
                 selectable?: boolean;
             }[];
             backlog?: {
@@ -2986,12 +3039,9 @@ export interface components {
         Stream: {
             streamId?: string;
             name?: string;
-            /** @enum {string} */
-            integrationType?: "REST" | "KAFKA" | "BOTH";
-            /** @enum {string} */
-            status?: "ACTIVE" | "SUSPENDED";
-            /** @enum {string} */
-            connectionStatus?: "CONNECTED" | "IDLE" | "UNKNOWN";
+            integrationType?: components["schemas"]["IntegrationType"];
+            status?: components["schemas"]["StreamStatus"];
+            connectionStatus?: components["schemas"]["ConnectionStatus"];
             defaults?: components["schemas"]["StreamDefaults"];
             limits?: {
                 quota?: components["schemas"]["Quota"];
@@ -3005,16 +3055,13 @@ export interface components {
         StreamDefaults: {
             channel?: components["schemas"]["Channel"];
             provider?: string;
-            /** @enum {string} */
-            trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
-            /** @enum {string} */
-            priority?: "HIGH" | "NORMAL" | "LOW";
+            trafficClass?: components["schemas"]["TrafficClass"];
+            priority?: components["schemas"]["Priority"];
             balancingStrategy?: components["schemas"]["BalancingStrategy"];
         };
         StreamRequest: {
             name?: string;
-            /** @enum {string} */
-            integrationType?: "REST" | "KAFKA" | "BOTH";
+            integrationType?: components["schemas"]["IntegrationType"];
             defaults?: components["schemas"]["StreamDefaults"];
             quota?: components["schemas"]["Quota"];
             quietHours?: components["schemas"]["QuietHours"];
@@ -3029,8 +3076,7 @@ export interface components {
         };
         ChannelConfig: {
             channel?: components["schemas"]["Channel"];
-            /** @enum {string} */
-            status?: "ACTIVE" | "DISABLED" | "MAINTENANCE";
+            status?: components["schemas"]["ChannelStatus"];
             balancingStrategy?: components["schemas"]["BalancingStrategy"];
             fallbackOrder?: string[];
             quietHours?: components["schemas"]["QuietHours"];
@@ -3070,8 +3116,7 @@ export interface components {
             state?: {
                 enabled?: boolean;
                 maintenance?: boolean;
-                /** @enum {string} */
-                health?: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN";
+                health?: components["schemas"]["ProviderHealthStatus"];
                 readonly selectable?: boolean;
                 quota?: components["schemas"]["Quota"];
                 /** @description Ссылка в секрет-хранилище; сам секрет наружу не выходит (SEC-04) */
@@ -3110,10 +3155,8 @@ export interface components {
         /** @description Каким должно быть сообщение, чтобы политика применилась; все поля опциональны */
         RoutingMatch: {
             streamId?: string;
-            /** @enum {string} */
-            trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
-            /** @enum {string} */
-            minPriority?: "HIGH" | "NORMAL" | "LOW";
+            trafficClass?: components["schemas"]["TrafficClass"];
+            minPriority?: components["schemas"]["Priority"];
             channel?: components["schemas"]["Channel"];
         };
         RoutingAction: {
@@ -3130,10 +3173,8 @@ export interface components {
             streamId: string;
             recipient: components["schemas"]["Recipient"];
             channel?: components["schemas"]["Channel"];
-            /** @enum {string} */
-            trafficClass?: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
-            /** @enum {string} */
-            priority?: "HIGH" | "NORMAL" | "LOW";
+            trafficClass?: components["schemas"]["TrafficClass"];
+            priority?: components["schemas"]["Priority"];
             /** @description Нужен для расчёта сегментов и стоимости (§18.3) */
             text?: string;
         };
@@ -3157,8 +3198,7 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             direction?: string;
             owner?: string;
-            /** @enum {string} */
-            catalogStatus?: "ACTIVE" | "ARCHIVED";
+            catalogStatus?: components["schemas"]["TemplateCatalogStatus"];
             versions?: components["schemas"]["TemplateVersion"][];
             providerMappings?: {
                 providerCode?: string;
@@ -3174,8 +3214,7 @@ export interface components {
             channel?: components["schemas"]["Channel"];
             direction?: string;
             owner?: string;
-            /** @enum {string} */
-            catalogStatus?: "ACTIVE" | "ARCHIVED";
+            catalogStatus?: components["schemas"]["TemplateCatalogStatus"];
             publishedLocales?: components["schemas"]["ContentLocale"][];
         };
         /**
@@ -3243,8 +3282,7 @@ export interface components {
                 selectable?: boolean;
             }[];
             segmentation?: {
-                /** @enum {string} */
-                encoding?: "GSM7" | "UCS2";
+                encoding?: components["schemas"]["SmsEncoding"];
                 characterCount?: number;
                 segments?: number;
             } | null;

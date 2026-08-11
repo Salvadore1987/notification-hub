@@ -102,7 +102,7 @@ export function StreamFormModal({
           tooltip={t('streams.integrationTypeHint')}
           rules={[{ required: true }]}
         >
-          <Select options={enumOptions(['REST', 'KAFKA', 'BOTH'])} />
+          <Select options={enumOptions(['REST', 'KAFKA'])} />
         </Form.Item>
         <Form.Item
           name="credentialsRef"
@@ -183,7 +183,7 @@ export function StreamFormModal({
           label={t('streams.quotaBehavior')}
           tooltip={t('streams.quotaBehaviorHint')}
         >
-          <Select allowClear options={enumOptions(['BLOCK', 'ALERT_ONLY'])} />
+          <Select allowClear options={enumOptions(['BLOCK_AND_ALERT', 'ALERT_ONLY'])} />
         </Form.Item>
 
         <Divider plain>{t('streams.rateLimit')}</Divider>
