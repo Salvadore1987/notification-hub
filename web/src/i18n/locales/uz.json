@@ -147,7 +147,10 @@
     "clientIdHint": "Majburiy emas. Butun mijozga qo‘yilgan taqiqlar yuborishni to‘xtatishi uchun kerak, faqat bitta manzilga emas",
     "variablesHint": "Shablon merge-maydonlari qiymatlari: NAME maydoni matndagi {NAME} ni to‘ldiradi. To‘ldirilmaganlari smetada ko‘rsatiladi",
     "fileLabel": "Qabul qiluvchilar ro‘yxati",
-    "fileHint": "Sarlavha nomlari bo‘yicha ustunli CSV: kanalning manzil ustuni (msisdn / email / pushToken) va istalgan o‘zgaruvchi ustunlar. Registr muhim: NAME ustuni {NAME} ni to‘ldiradi, name esa yo‘q"
+    "fileHint": "Sarlavha nomlari bo‘yicha ustunli CSV: kanalning manzil ustuni (msisdn / email / pushToken) va istalgan o‘zgaruvchi ustunlar. Registr muhim: NAME ustuni {NAME} ni to‘ldiradi, name esa yo‘q",
+    "streamPlaceholder": "Oqimni tanlang",
+    "templatePlaceholder": "Shablonni tanlang",
+    "templatesTruncated": "Shablonlar ro‘yxatga sig‘maydigan darajada ko‘p — kanalni toraytiring"
   },
   "dlq": {
     "reason": "Sabab",
@@ -259,7 +262,8 @@
     "subjectHint": "Xat mavzusi; SMS va push’da u yo‘q",
     "testTextHint": "Sinov xabari matni. Bu yerda u ataylab ixtiyoriy: ifoda emas, transport tekshiriladi",
     "testStreamIdHint": "Tekshiruv qaysi oqim nomidan ketadi: uning kvotalari va filtrlari qo‘llanadi (FR-7.4)",
-    "testChannelHint": "Tekshiruv qaysi kanal orqali ketadi. Xabar ko‘rsatilgan manzilga haqiqatan yetib boradi"
+    "testChannelHint": "Tekshiruv qaysi kanal orqali ketadi. Xabar ko‘rsatilgan manzilga haqiqatan yetib boradi",
+    "selectPlaceholder": "Provayderni tanlang"
   },
   "routing": {
     "policies": "Marshrutlash siyosatlari",

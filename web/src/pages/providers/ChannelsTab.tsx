@@ -19,6 +19,7 @@ import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
 import { BALANCING_STRATEGIES, enumOptions } from '../../shared/labels';
+import { ProviderOrderSelect } from './ProviderSelect';
 import { reasonHeader } from '../../shared/reason';
 
 type ChannelConfig = components['schemas']['ChannelConfig'];
@@ -182,7 +183,7 @@ export function ChannelsTab() {
             label={t('providers.fallbackOrder')}
             tooltip={t('providers.fallbackOrderHint')}
           >
-            <Select mode="tags" open={false} suffixIcon={null} tokenSeparators={[',', ' ']} />
+            <ProviderOrderSelect channel={editing?.channel as Channel | undefined} />
           </Form.Item>
           <Form.Item
             name={['quietHours', 'start']}

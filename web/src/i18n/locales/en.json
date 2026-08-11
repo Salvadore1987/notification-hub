@@ -147,7 +147,10 @@
     "clientIdHint": "Optional. It is what lets a ban placed on the whole customer, rather than on one address, stop the send",
     "variablesHint": "Values of the template's merge fields: a NAME column fills {NAME} in the text. Unfilled ones are listed in the estimate",
     "fileLabel": "Recipient list",
-    "fileHint": "A CSV with columns by header name: the channel's address column (msisdn / email / pushToken) plus any variable columns. Case matters: a NAME column fills {NAME}, a name column does not"
+    "fileHint": "A CSV with columns by header name: the channel's address column (msisdn / email / pushToken) plus any variable columns. Case matters: a NAME column fills {NAME}, a name column does not",
+    "streamPlaceholder": "Pick a stream",
+    "templatePlaceholder": "Pick a template",
+    "templatesTruncated": "There are more templates than the list holds — narrow the channel"
   },
   "dlq": {
     "reason": "Reason",
@@ -259,7 +262,8 @@
     "subjectHint": "The subject line; SMS and push have none",
     "testTextHint": "The text of the test message. Free-form on purpose: what is being checked is the transport, not the wording",
     "testStreamIdHint": "The stream the check is made on behalf of: its quotas and filters apply (FR-7.4)",
-    "testChannelHint": "Which channel the check goes out on. The message really does reach the address given"
+    "testChannelHint": "Which channel the check goes out on. The message really does reach the address given",
+    "selectPlaceholder": "Pick a provider"
   },
   "routing": {
     "policies": "Routing policies",

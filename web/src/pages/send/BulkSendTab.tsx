@@ -5,7 +5,6 @@ import {
   Card,
   Descriptions,
   Form,
-  Input,
   Select,
   Space,
   Tooltip,
@@ -22,9 +21,10 @@ import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { readFileText } from '../../shared/download';
 import { describeError } from '../../shared/errors';
-import { CHANNELS, CONTENT_LOCALES, TRAFFIC_CLASSES, enumOptions } from '../../shared/labels';
+import { CHANNELS, TRAFFIC_CLASSES, enumOptions } from '../../shared/labels';
 import { reasonHeader } from '../../shared/reason';
 import { SendEstimateModal } from './SendEstimateModal';
+import { StreamSelect, TemplateLocaleSelect, TemplateSelect } from './ReferenceFields';
 
 type SendEstimate = components['schemas']['SendEstimate'];
 type SendBatchResult = components['schemas']['SendBatchResult'];
@@ -50,6 +50,8 @@ export function BulkSendTab() {
   const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [form] = Form.useForm<BulkSendForm>();
+  const channel = Form.useWatch('channel', form);
+  const templateCode = Form.useWatch('templateCode', form);
   const { reasonModal, askReason } = useReasonPrompt();
 
   const [csv, setCsv] = useState<string | null>(null);
@@ -129,7 +131,7 @@ export function BulkSendTab() {
           tooltip={t('batches.streamIdHint')}
           rules={[{ required: true }]}
         >
-          <Input />
+          <StreamSelect />
         </Form.Item>
         <Form.Item
           name="templateCode"
@@ -137,7 +139,7 @@ export function BulkSendTab() {
           tooltip={t('templates.codeHint')}
           rules={[{ required: true }]}
         >
-          <Input placeholder="PAYROLL" />
+          <TemplateSelect channel={channel} />
         </Form.Item>
         <Form.Item
           name="locale"
@@ -145,7 +147,7 @@ export function BulkSendTab() {
           tooltip={t('templates.localeFieldHint')}
           rules={[{ required: true }]}
         >
-          <Select options={enumOptions(CONTENT_LOCALES)} aria-label={t('templates.localeField')} />
+          <TemplateLocaleSelect templateCode={templateCode} />
         </Form.Item>
         <Form.Item
           name="channel"

@@ -6,16 +6,11 @@ import { api } from '../../api/client';
 import type { components } from '../../api/generated/admin-schema';
 import { useReasonPrompt } from '../../shared/components/ReasonPrompt';
 import { describeError } from '../../shared/errors';
-import {
-  CHANNELS,
-  CONTENT_LOCALES,
-  TRAFFIC_CLASSES,
-  enumOptions,
-  messageStatusColor,
-} from '../../shared/labels';
+import { CHANNELS, TRAFFIC_CLASSES, enumOptions, messageStatusColor } from '../../shared/labels';
 import { maskAddress } from '../../shared/masking';
 import { reasonHeader } from '../../shared/reason';
 import { SendEstimateModal } from './SendEstimateModal';
+import { StreamSelect, TemplateLocaleSelect, TemplateSelect } from './ReferenceFields';
 import { VariablesField, type VariableRow } from './VariablesField';
 import { variablesOf } from './variables';
 
@@ -48,6 +43,7 @@ export function SingleSendTab() {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<SingleSendForm>();
   const channel = Form.useWatch('channel', form);
+  const templateCode = Form.useWatch('templateCode', form);
   const { reasonModal, askReason } = useReasonPrompt();
 
   const [estimate, setEstimate] = useState<SendEstimate | null>(null);
@@ -125,7 +121,7 @@ export function SingleSendTab() {
           tooltip={t('batches.streamIdHint')}
           rules={[{ required: true }]}
         >
-          <Input />
+          <StreamSelect />
         </Form.Item>
         <Form.Item
           name="templateCode"
@@ -133,7 +129,7 @@ export function SingleSendTab() {
           tooltip={t('templates.codeHint')}
           rules={[{ required: true }]}
         >
-          <Input placeholder="OTP_LOGIN" />
+          <TemplateSelect channel={channel} />
         </Form.Item>
         <Form.Item
           name="locale"
@@ -141,7 +137,7 @@ export function SingleSendTab() {
           tooltip={t('templates.localeFieldHint')}
           rules={[{ required: true }]}
         >
-          <Select options={enumOptions(CONTENT_LOCALES)} aria-label={t('templates.localeField')} />
+          <TemplateLocaleSelect templateCode={templateCode} />
         </Form.Item>
         <Form.Item
           name="channel"

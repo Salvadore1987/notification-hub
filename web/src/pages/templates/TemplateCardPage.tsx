@@ -30,6 +30,7 @@ import {
   type VersionStatus,
 } from '../../shared/labels';
 import { formatDateTime } from '../../shared/time';
+import { ProviderSelect } from '../providers/ProviderSelect';
 import { TemplatePreviewModal } from './TemplatePreviewModal';
 
 type Template = components['schemas']['Template'];
@@ -492,7 +493,7 @@ export function TemplateCardPage() {
 
             tooltip={t('templates.mappingProviderHint')}
           >
-            <Input />
+            <ProviderSelect channel={template?.channel as Channel | undefined} />
           </Form.Item>
           <Form.Item
             name="providerTemplateId"

@@ -31,6 +31,8 @@ import {
   enumOptions,
 } from '../../shared/labels';
 import { maskAddress } from '../../shared/masking';
+import { ProviderOrderSelect } from '../providers/ProviderSelect';
+import { StreamSelect } from '../send/ReferenceFields';
 
 type RoutingPolicy = components['schemas']['RoutingPolicy'];
 type RoutingPolicyRequest = components['schemas']['RoutingPolicyRequest'];
@@ -258,7 +260,7 @@ export function RoutingPage() {
         <Form form={evaluateForm} layout="inline" style={{ rowGap: 12 }}>
           <Form.Item name="streamId" rules={[{ required: true }]}>
             <Tooltip title={t('routing.dryRunStreamIdHint')}>
-              <Input placeholder={t('batches.streamId')} style={{ width: 160 }} />
+              <StreamSelect ariaLabel={t('batches.streamId')} style={{ width: 220 }} />
             </Tooltip>
           </Form.Item>
           <Form.Item name="msisdn">
@@ -374,7 +376,7 @@ export function RoutingPage() {
             label={t('batches.streamId')}
             tooltip={t('routing.matchStreamIdHint')}
           >
-            <Input />
+            <StreamSelect allowClear />
           </Form.Item>
           <Form.Item
             name={['match', 'trafficClass']}
@@ -410,7 +412,7 @@ export function RoutingPage() {
             label={t('routing.providerOrder')}
             tooltip={t('providers.fallbackOrderHint')}
           >
-            <Select mode="tags" open={false} suffixIcon={null} tokenSeparators={[',', ' ']} />
+            <ProviderOrderSelect />
           </Form.Item>
           <Form.Item
             name={['action', 'balancingStrategy']}

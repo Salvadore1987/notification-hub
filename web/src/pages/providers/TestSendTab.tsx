@@ -7,6 +7,8 @@ import type { components } from '../../api/generated/admin-schema';
 import { describeError } from '../../shared/errors';
 import { CHANNELS, enumOptions, messageStatusColor, type Channel } from '../../shared/labels';
 import { maskAddress } from '../../shared/masking';
+import { ProviderSelect } from './ProviderSelect';
+import { StreamSelect } from '../send/ReferenceFields';
 
 type MessageAccepted = components['schemas']['MessageAccepted'];
 
@@ -82,7 +84,7 @@ export function TestSendTab() {
           rules={[{ required: true }]}
           tooltip={t('providers.testStreamIdHint')}
         >
-          <Input />
+          <StreamSelect />
         </Form.Item>
         <Form.Item
           name="channel"
@@ -97,7 +99,7 @@ export function TestSendTab() {
           label={t('dashboard.provider')}
           tooltip={t('providers.pinProviderHint')}
         >
-          <Input />
+          <ProviderSelect channel={channel} />
         </Form.Item>
         {channel === 'SMS' && (
           <Form.Item

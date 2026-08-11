@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { components } from '../../api/generated/admin-schema';
+import { ProviderSelect } from '../providers/ProviderSelect';
 import {
   BALANCING_STRATEGIES,
   CHANNELS,
@@ -120,7 +121,7 @@ export function StreamFormModal({
           label={t('dashboard.provider')}
           tooltip={t('streams.defaultProviderHint')}
         >
-          <Input />
+          <ProviderSelect allowClear />
         </Form.Item>
         <Form.Item
           name={['defaults', 'trafficClass']}

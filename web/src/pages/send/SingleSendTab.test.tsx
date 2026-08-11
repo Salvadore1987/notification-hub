@@ -3,12 +3,25 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../test/render';
-import { mockApi, type MockedApi } from '../../test/api';
+import { clearReferenceCache } from '../../shared/useReference';
+import { mockApi, type ApiMock } from '../../test/api';
 import { SingleSendTab } from './SingleSendTab';
 
 /** Отправка из панели: смета обязательна, обоснование обязательно (ADR-0038, FR-7.3). */
 describe('SingleSendTab', () => {
-  let api: MockedApi;
+  let api: ApiMock;
+
+  const STREAMS = [{ streamId: 'payroll', name: 'Зарплатный проект', status: 'ACTIVE' }];
+  const TEMPLATES = [
+    {
+      templateId: '018f-t',
+      code: 'PAYROLL',
+      channel: 'SMS',
+      direction: 'сервисные',
+      catalogStatus: 'ACTIVE',
+      publishedLocales: ['RU'],
+    },
+  ];
 
   const estimate = {
     recipients: 1,
@@ -22,15 +35,21 @@ describe('SingleSendTab', () => {
   };
 
   beforeEach(() => {
+    clearReferenceCache();
     api = mockApi({
+      'GET /streams': { body: STREAMS },
+      'GET /templates': { body: { items: TEMPLATES, total: 1, limit: 500, offset: 0 } },
       'POST /send/estimate': { body: estimate },
       'POST /send/message': { body: { messageId: '018f-0000-0000', status: 'QUEUED' } },
     });
   });
 
+  /** Поток и шаблон теперь выбираются из справочника, а не набираются. */
   async function fillTheForm() {
-    await userEvent.type(screen.getByLabelText('Поток'), 'payroll');
-    await userEvent.type(screen.getByLabelText('Код шаблона'), 'PAYROLL');
+    await userEvent.click(screen.getByLabelText('Поток'));
+    await userEvent.click(await screen.findByTitle('payroll — Зарплатный проект'));
+    await userEvent.click(screen.getByLabelText('Код шаблона'));
+    await userEvent.click(await screen.findByTitle('PAYROLL — сервисные'));
     await userEvent.type(screen.getByLabelText('MSISDN'), '998901234567');
   }
 
@@ -70,9 +89,39 @@ describe('SingleSendTab', () => {
     expect(sent?.body).toMatchObject({ templateCode: 'PAYROLL', streamId: 'payroll' });
   });
 
+  it('деградирует в ручной ввод, если справочник недоступен', async () => {
+    // Arrange — списки отвечают отказом, как это было бы при нехватке прав
+    clearReferenceCache();
+    api = mockApi({
+      'GET /streams': { status: 403, body: { title: 'forbidden', status: 403 } },
+      'GET /templates': { status: 403, body: { title: 'forbidden', status: 403 } },
+      'POST /send/estimate': { body: estimate },
+    });
+    renderWithProviders(<SingleSendTab />, { roles: ['OPERATOR'] });
+
+    // Act — поля остались вводом, и оператор, знающий коды, набирает их руками
+    // У выпадающего списка antd внутренний input имеет role="combobox"; у обычного поля его нет.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Поток')).not.toHaveAttribute('role', 'combobox'),
+    );
+    await userEvent.type(screen.getByLabelText('Поток'), 'payroll');
+    await userEvent.type(screen.getByLabelText('Код шаблона'), 'PAYROLL');
+    await userEvent.type(screen.getByLabelText('MSISDN'), '998901234567');
+    await userEvent.click(screen.getByRole('button', { name: 'Рассчитать смету' }));
+
+    // Assert — недоступный список не должен стоить оператору отправки
+    await waitFor(() => expect(api.lastCall('POST /send/estimate')).toBeDefined());
+    expect(api.lastCall('POST /send/estimate')?.body).toMatchObject({
+      streamId: 'payroll',
+      templateCode: 'PAYROLL',
+    });
+  });
+
   it('не даёт подтвердить отправку, для которой нет маршрута', async () => {
     // Arrange
     api = mockApi({
+      'GET /streams': { body: STREAMS },
+      'GET /templates': { body: { items: TEMPLATES, total: 1, limit: 500, offset: 0 } },
       'POST /send/estimate': {
         body: {
           ...estimate,
@@ -80,6 +129,7 @@ describe('SingleSendTab', () => {
         },
       },
     });
+    clearReferenceCache();
     renderWithProviders(<SingleSendTab />, { roles: ['OPERATOR'] });
     await fillTheForm();
 

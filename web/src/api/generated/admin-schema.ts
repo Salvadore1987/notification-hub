@@ -504,7 +504,7 @@ export interface paths {
         };
         /**
          * Все зарегистрированные потоки
-         * @description ADMIN. Без пагинации — потоков десятки, и пейджер здесь только прячет строки.
+         * @description ADMIN и OPERATOR: список нужен форме отправки, чтобы поток выбирали, а не набирали (ADR-0038). Правка потоков осталась за ADMIN. Без пагинации — потоков десятки.
          */
         get: {
             parameters: {
@@ -843,7 +843,9 @@ export interface paths {
         };
         /**
          * Все провайдеры с их живым состоянием
-         * @description ADMIN. `state.health` и `state.selectable` — только чтение: health выводится пассивно
+         * @description ADMIN и TEMPLATE_MANAGER: последнему список нужен, чтобы регистрацию шаблона у провайдера
+         *     выбирали, а не набирали кодом (FR-4.5). Правка профилей осталась за ADMIN.
+         *     `state.health` и `state.selectable` — только чтение: health выводится пассивно
          *     из реальных попыток отправки (FR-6.3, PR-02), и кнопки «объявить провайдера живым» нет.
          */
         get: {
@@ -1328,7 +1330,7 @@ export interface paths {
         };
         /**
          * Каталог шаблонов без текстов
-         * @description TEMPLATE_MANAGER (FR-4.1).
+         * @description TEMPLATE_MANAGER, ADMIN и OPERATOR (FR-4.1, ADR-0038): каталог не несёт текстов, и он нужен форме отправки для выбора шаблона. Карточка с текстами версий остаётся у TEMPLATE_MANAGER.
          */
         get: {
             parameters: {
