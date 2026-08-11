@@ -1,0 +1,337 @@
+# Значения локального стенда — окружение выбирать не нужно.
+@host = http://localhost:8080
+@streamId = demo-app
+@templateCode = DEMO_OTP
+@locale = RU
+@channel = SMS
+@msisdnDelivered = 998901234500
+@msisdnUndelivered = 998901234501
+@msisdnNoAnswer = 998901234502
+@msisdnBlocking = 998901234503
+@msisdnUnusable = 998901234504
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Отправка: из панели, по REST (§8.2) и отчёты провайдеров.
+###
+### Требует настроенного контура из 10-config.http, а для панели — ещё и
+### опубликованного шаблона из 20-templates.http.
+###
+### Поведение фиктивного провайдера задаётся ПОСЛЕДНИМИ ДВУМЯ ЦИФРАМИ номера:
+###   …00 доставлено   …01 недоставлено   …02 ответа нет (ретрай и failover)
+###   …03 блокирующий отказ (breaker)     …04 адрес непригоден (suppression)
+### Отчёт приходит через 3 секунды, поэтому SENT_TO_PROVIDER в первый момент — норма.
+### ─────────────────────────────────────────────────────────────────────────────
+
+### ══ ОТПРАВКА ИЗ ПАНЕЛИ ══════════════════════════════════════════════════════
+### Содержимое берётся ТОЛЬКО из опубликованного шаблона (ADR-0038) — поля текста
+### в этих запросах нет вовсе, чтобы непроверенная формулировка не ушла клиенту.
+### Порядок жёсткий: сначала смета, потом отправка.
+
+### Смета одного сообщения
+# POST /send/estimate (application/json) — роли ADMIN или OPERATOR.
+# Ничего не отправляет, поэтому X-Commhub-Reason НЕ нужен.
+# Обязательны streamId, templateCode, locale, channel, recipient. В recipient нужен
+# хотя бы один адрес; если задан pushToken, то pushPlatform обязателен.
+# Опциональны trafficClass, variables и externalId (без него генерируется panel-<uuidv7>).
+# В ответе: число получателей, сегменты, стоимость, провайдер, версия шаблона,
+# missingVariables и rejection, если маршрута нет.
+POST {{host}}/api/admin/v1/send/estimate
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "templateCode": "{{templateCode}}",
+  "locale": "{{locale}}",
+  "channel": "{{channel}}",
+  "recipient": { "clientId": "CL-0001", "msisdn": "{{msisdnDelivered}}" },
+  "variables": { "NAME": "Иван", "CODE": "123456" }
+}
+
+### Отправить одно сообщение
+# POST /send/message — роли ADMIN или OPERATOR. Тело то же, что у сметы.
+# X-Commhub-Reason ЗДЕСЬ ОБЯЗАТЕЛЕН: без него ровно 400 (FR-7.3). Значение —
+# percent-encoded UTF-8, потому что значение HTTP-заголовка есть байтовая строка и
+# кириллица иначе не проходит. Ниже закодировано слово «проверка».
+# Отвечает 200 (не 202).
+POST {{host}}/api/admin/v1/send/message
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+X-Commhub-Reason: %D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0
+
+{
+  "streamId": "{{streamId}}",
+  "templateCode": "{{templateCode}}",
+  "locale": "{{locale}}",
+  "channel": "{{channel}}",
+  "recipient": { "clientId": "CL-0001", "msisdn": "{{msisdnDelivered}}" },
+  "variables": { "NAME": "Иван", "CODE": "123456" }
+}
+
+### Отправка без обоснования — ДОЛЖНА упасть с 400
+# Единственный запрос в коллекции, который обязан не пройти. Проверяет, что FR-7.3
+# действительно закрыт контроллером, а не только формой панели.
+POST {{host}}/api/admin/v1/send/message
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "templateCode": "{{templateCode}}",
+  "locale": "{{locale}}",
+  "channel": "{{channel}}",
+  "recipient": { "msisdn": "{{msisdnDelivered}}" }
+}
+
+> {%
+    client.test("без X-Commhub-Reason приходит 400", function () {
+        client.assert(response.status === 400, "ожидали 400, пришло " + response.status);
+    });
+%}
+
+### Смета по файлу
+# POST /send/estimate (text/csv) — тот же путь, разводится Content-Type'ом.
+# «Шапка» отправки переезжает в query: streamId, templateCode, locale, channel
+# обязательны (контракт помечает их необязательными — это расхождение, код требует),
+# trafficClass опционален. Обоснование не нужно.
+POST {{host}}/api/admin/v1/send/estimate?streamId={{streamId}}&templateCode={{templateCode}}&locale={{locale}}&channel={{channel}}
+Authorization: Bearer {{operatorToken}}
+Content-Type: text/csv
+
+< ../docs/samples/recipients-sms-ru.csv
+
+### Массовая отправка из файла
+# POST /send/batch — роли ADMIN или OPERATOR, только text/csv (JSON-варианта нет).
+# X-Commhub-Reason ОБЯЗАТЕЛЕН, как и у /send/message.
+# CSV: колонки по именам заголовка. Адресная своя у каждого канала (msisdn / email /
+# pushToken + pushPlatform), служебные — clientId и externalId, ВСЕ ОСТАЛЬНЫЕ
+# становятся merge-переменными, регистр имени значим: NAME заполняет {NAME}, name — нет.
+# Потолок 50 000 строк. Строка без externalId получает идентификатор из
+# sha256(файла)+номер строки, поэтому тот же файл, залитый дважды в окне
+# дедупликации, уйдёт в DUPLICATE, а не вторым сообщением каждому.
+# Плохие строки не роняют запрос — приходят в failures.
+POST {{host}}/api/admin/v1/send/batch?streamId={{streamId}}&templateCode={{templateCode}}&locale={{locale}}&channel={{channel}}
+Authorization: Bearer {{operatorToken}}
+Content-Type: text/csv
+X-Commhub-Reason: %D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0
+
+< ../docs/samples/recipients-sms-ru.csv
+
+> {% client.global.set("panelBatchId", response.body.batchId); %}
+
+### ══ REST ДЛЯ СИСТЕМ-ИСТОЧНИКОВ (§8.2) ═══════════════════════════════════════
+### Локально токен НЕ нужен: commhub.security.require-source-system-token=false, и
+### в логе старта об этом есть предупреждение. В контуре Банка — true, и тогда
+### раскомментируйте строку Authorization: streamId сверяется с claim'ом токена
+### (SEC-01), чужой поток получит 403.
+
+### Отправить сообщение с инлайновым содержимым
+# POST /api/v1/messages → 202, заголовок Location: /api/v1/messages/{messageId},
+# тело {messageId, status}.
+# Обязательны streamId, externalMessageId (≤64) и recipient, плюс правило «либо
+# content, либо template» (FR-1.2). schemaVersion ОПЦИОНАЛЕН — если задан, мажор
+# должен быть 1. dedupKey ≤128, content.sms.text ≤1071.
+# MSISDN строго ^9989\d{8}$ — без «+», без пробелов.
+# Неизвестные поля игнорируются: тело разбирает кодек, а не Jackson-биндинг.
+# Идемпотентность — по (streamId, externalMessageId) или dedupKey в окне 24 ч;
+# повтор вернёт DUPLICATE, а не вторую SMS.
+POST {{host}}/api/v1/messages
+Content-Type: application/json
+# Authorization: Bearer {{sourceToken}}
+
+{
+  "schemaVersion": "1.0",
+  "streamId": "{{streamId}}",
+  "externalMessageId": "demo-0001",
+  "trafficClass": "CRITICAL_OTP",
+  "recipient": { "clientId": "CL-0001", "msisdn": "{{msisdnDelivered}}" },
+  "channels": { "requested": ["SMS"] },
+  "content": { "sms": { "text": "Ваш код: 123456" } },
+  "timing": { "ttlSeconds": 300 },
+  "dedupKey": "otp-CL-0001-0001"
+}
+
+> {% client.global.set("messageId", response.body.messageId); %}
+
+### Отправить сообщение по шаблону
+# То же самое, но вместо content — template. Шаблон должен быть ОПУБЛИКОВАН в этой
+# локали, иначе TEMPLATE_NOT_PUBLISHED (422); незаполненная переменная —
+# TEMPLATE_VARIABLE_MISSING, на отправке режим строгий.
+POST {{host}}/api/v1/messages
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "externalMessageId": "demo-0002",
+  "recipient": { "clientId": "CL-0001", "msisdn": "{{msisdnDelivered}}" },
+  "template": { "id": "{{templateCode}}", "locale": "{{locale}}",
+                "variables": { "NAME": "Иван", "CODE": "654321" } }
+}
+
+### Ветка «недоставлено»
+# Номер на …01: провайдер принимает, а затем присылает отчёт UNDELIVERED.
+POST {{host}}/api/v1/messages
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "externalMessageId": "demo-undelivered-0001",
+  "recipient": { "msisdn": "{{msisdnUndelivered}}" },
+  "content": { "sms": { "text": "Проверка недоставки" } }
+}
+
+### Ветка «ответа нет» — ретрай и failover
+# Номер на …02: провайдер не отвечает вовсе (бросает), поэтому включается retry, а
+# при исчерпании — переключение на следующего в fallbackOrder. Если провайдер один,
+# сообщение уедет в DLQ.
+POST {{host}}/api/v1/messages
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "externalMessageId": "demo-noanswer-0001",
+  "recipient": { "msisdn": "{{msisdnNoAnswer}}" },
+  "content": { "sms": { "text": "Проверка ретрая" } }
+}
+
+### Ветка «блокирующий отказ» — открытие circuit breaker
+# Номер на …03: провайдер отвечает кодом 102 (Account lock). Это отказ НЕ про
+# сообщение, а про сам доступ, поэтому breaker открывается сразу, не накапливая
+# статистику. Пока он открыт, провайдер отвечает «повторяемым» отказом, чтобы
+# сообщения уходили на резерв, а не в DLQ.
+# ОСТОРОЖНО: следующие отправки через этого провайдера будут отказными, пока breaker
+# не закроется. На стенде с одним провайдером это остановит всю отправку.
+POST {{host}}/api/v1/messages
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "externalMessageId": "demo-blocking-0001",
+  "recipient": { "msisdn": "{{msisdnBlocking}}" },
+  "content": { "sms": { "text": "Проверка breaker" } }
+}
+
+### Ветка «адрес непригоден» — попадание в suppression list
+# Номер на …04: провайдер отвечает кодом 20. Адрес попадает в suppression-лист
+# автоматически, от имени провайдера, и следующая отправка на него уже не уйдёт.
+POST {{host}}/api/v1/messages
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "externalMessageId": "demo-unusable-0001",
+  "recipient": { "msisdn": "{{msisdnUnusable}}" },
+  "content": { "sms": { "text": "Проверка suppression" } }
+}
+
+### Статус сообщения по идентификатору
+# GET /api/v1/messages/{messageId} — messageId обязан быть UUID, иначе 400.
+# В ответе таймлайн history[]: QUEUED → SENT_TO_PROVIDER → DELIVERED.
+# Содержимого в ответе нет и не будет — оно шифруется на хранении (DB-04).
+GET {{host}}/api/v1/messages/{{messageId}}
+
+### Статус по внешнему идентификатору
+# GET /api/v1/messages?streamId=&externalMessageId= — ОБА параметра обязательны.
+# Это способ источника узнать судьбу сообщения, не запоминая messageId Модуля.
+GET {{host}}/api/v1/messages?streamId={{streamId}}&externalMessageId=demo-0001
+
+### Завести рассылку
+# POST /api/v1/batches → 202, Location: /api/v1/batches/{batchId}.
+# Обязательны streamId и channel. expectedTotal опционален (по умолчанию 0, должен
+# быть ≥ 0) и объявляет, сколько элементов приедет; batchId можно прислать свой.
+# ВАЖНО: total рассылки — это max(объявленного, загруженного), а НЕ их сумма.
+POST {{host}}/api/v1/batches
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "channel": "SMS",
+  "trafficClass": "NOTIFICATION",
+  "template": { "id": "{{templateCode}}", "locale": "{{locale}}" },
+  "expectedTotal": 2
+}
+
+> {% client.global.set("batchId", response.body.batchId); %}
+
+### Загрузить элементы рассылки
+# POST /api/v1/batches/{batchId}/items?streamId=… — streamId ОБЯЗАТЕЛЕН как
+# query-параметр: кодек берёт его оттуда, а не из тела.
+# items обязателен и непуст, максимум 10 000 в одном чанке.
+# У элемента обязательны externalMessageId и recipient; правило «content или
+# template» здесь НЕ действует — шаблон задан в заголовке рассылки.
+# Отвечает 202 даже при частичных отказах: они приходят в rejections[].
+POST {{host}}/api/v1/batches/{{batchId}}/items?streamId={{streamId}}
+Content-Type: application/json
+
+{
+  "items": [
+    { "externalMessageId": "demo-b-0001", "recipient": { "msisdn": "{{msisdnDelivered}}" },
+      "template": { "variables": { "NAME": "Иван", "CODE": "111111" } } },
+    { "externalMessageId": "demo-b-0002", "recipient": { "msisdn": "{{msisdnUndelivered}}" },
+      "template": { "variables": { "NAME": "Пётр", "CODE": "222222" } } }
+  ]
+}
+
+### Управление рассылкой
+# POST /api/v1/batches/{batchId}/actions/{action} — action ∈ start|pause|resume|stop
+# (приводится к нижнему регистру, так что START тоже сработает). Тела нет.
+# Оба заголовка НЕОБЯЗАТЕЛЬНЫ: X-Commhub-Actor читается, только если никто не
+# аутентифицирован (токен всегда важнее), X-Commhub-Reason уходит в аудит.
+# Недопустимый переход состояния — 409.
+POST {{host}}/api/v1/batches/{{batchId}}/actions/start
+X-Commhub-Actor: crm
+X-Commhub-Reason: scheduled-campaign
+
+### Состояние рассылки
+# GET /api/v1/batches/{batchId} — статус (ACCEPTED|PROCESSING|PAUSED|STOPPED|
+# COMPLETED), total, progress и оценка стоимости.
+GET {{host}}/api/v1/batches/{{batchId}}
+
+### Контракт §8.2
+# GET /api/v1/openapi.yaml — рукописный OpenAPI 3.1, который тест держит в
+# соответствии с контроллерами. Отдаётся как application/yaml.
+GET {{host}}/api/v1/openapi.yaml
+
+### ══ ОТЧЁТЫ ПРОВАЙДЕРОВ (callbacks) ══════════════════════════════════════════
+### POST /api/callbacks/{providerCode}. Код провайдера сопоставляется без учёта
+### регистра. Настроены только PLAYMOBILE и SMSGATE; у MOCK callback'а НЕТ — он
+### отчитывается внутри процесса.
+### Локально секрет и IP-allowlist пусты, поэтому X-Commhub-Callback-Secret не нужен
+### (оставлен закомментированным). Ответ всегда 200, если отчёт разобрался, — в том
+### числе для неизвестных идентификаторов и дублей: {received, applied, status}.
+
+### Отчёт Playmobile (§18.1)
+# Принимает один объект или массив. Обязательны message-id (можно message_id) и
+# status; channel по умолчанию sms и всё, кроме sms, отбрасывается; status-date
+# читается как ISO-инстант или "yyyy-MM-dd HH:mm:ss" в UTC, нечитаемая — временем
+# приёма. Неизвестное слово статуса отбрасывается, ответ всё равно 200.
+# Словарь: delivered/deliver → DELIVERED; not_delivered/undeliverable/failed/
+# rejected/deleted → UNDELIVERED; expired → EXPIRED; transmitted/accepted/enroute/
+# sent → SENT_TO_PROVIDER.
+POST {{host}}/api/callbacks/PLAYMOBILE
+Content-Type: application/json
+# X-Commhub-Callback-Secret: <секрет из PLAYMOBILE_CALLBACK_SECRET>
+
+[
+  { "message-id": "pm-0001", "channel": "sms", "status": "Delivered",
+    "status-date": "2026-08-11 12:34:56", "description": "ok" }
+]
+
+### Отчёт SMS Gate, JSON (§18.2)
+# Обязательны id и code. login/key в спецификации провайдера есть, но для
+# аутентификации НЕ используются.
+# Коды: 0 Created, 1 Sending, 2 Fail, 3 Sent, 4 Delivered, 5 Rejected,
+#       6 Unknown — команда не создаётся вовсе (received: 0), досверяет реконсилятор,
+#       7 InBlackList — UNDELIVERED плюс запись в suppression-лист.
+POST {{host}}/api/callbacks/SMSGATE
+Content-Type: application/json
+# X-Commhub-Callback-Secret: <секрет из SMSGATE_CALLBACK_SECRET>
+
+{ "id": "sg-0001", "code": "4", "description": "Delivered" }
+
+### Отчёт SMS Gate, form-urlencoded
+# Тот же эндпоинт принимает и форму: параметры собираются из query и из тела.
+POST {{host}}/api/callbacks/SMSGATE
+Content-Type: application/x-www-form-urlencoded
+
+login=commhub&key=secret&id=sg-0002&code=7&description=InBlackList

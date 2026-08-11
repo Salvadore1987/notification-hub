@@ -1,0 +1,216 @@
+# Значения локального стенда — окружение выбирать не нужно.
+@host = http://localhost:8080
+@templateCode = DEMO_OTP
+@locale = RU
+@providerCode = MOCK
+@msisdnDelivered = 998901234500
+@msisdnUnusable = 998901234504
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Шаблоны и suppression-лист.
+###
+### Шаблоны ведутся под {{templateManagerToken}}, а публикация — под {{adminToken}}:
+### автор версии и тот, кто её публикует, ОБЯЗАНЫ различаться (FR-4.2), и оба
+### берутся из учётной записи, а не из полей формы. Это самое частое место, где
+### сценарий встаёт.
+###
+### Требует 00-auth.http. Шаблон нужен только для отправки из панели: у /api/v1 и
+### Kafka есть инлайновый content.
+### ─────────────────────────────────────────────────────────────────────────────
+
+### ══ ШАБЛОНЫ ═════════════════════════════════════════════════════════════════
+
+### Каталог шаблонов
+# GET /templates — роли ADMIN, TEMPLATE_MANAGER или OPERATOR (единственный
+# шаблонный эндпоинт, открытый оператору). Тел версий здесь нет, только карточки.
+# Все параметры опциональны: channel, direction, catalogStatus (ACTIVE|ARCHIVED),
+# limit (по умолчанию 50, максимум 500), offset.
+# ВНИМАНИЕ: total в ответе поддельный — это items.size() + offset, а не число строк
+# в базе. Листайте до короткой страницы, а не считайте по нему количество страниц.
+GET {{host}}/api/admin/v1/templates?channel=SMS&catalogStatus=ACTIVE&limit=50&offset=0
+Authorization: Bearer {{templateManagerToken}}
+
+### Завести карточку шаблона
+# POST /templates/{code} — роль TEMPLATE_MANAGER. Код ЗАГЛАВНЫМИ,
+# ^[A-Z0-9][A-Z0-9._-]{1,63}$, приводится к верхнему регистру.
+# Обязателен только channel; direction (бизнес-направление Банка: МСБ, Чакана, …) и
+# owner опциональны. Новая карточка сразу ACTIVE — переводить её никуда не надо,
+# отправляемым шаблон делает публикация ВЕРСИИ, а не статус карточки.
+POST {{host}}/api/admin/v1/templates/{{templateCode}}
+Authorization: Bearer {{templateManagerToken}}
+Content-Type: application/json
+
+{ "channel": "SMS", "direction": "Чакана", "owner": "retail" }
+
+### Карточка шаблона со всеми версиями
+# GET /templates/{code} — роль TEMPLATE_MANAGER (оператору карточка НЕ доступна,
+# в отличие от каталога выше). Текст версии лежит в body.text, не в корне.
+GET {{host}}/api/admin/v1/templates/{{templateCode}}
+Authorization: Bearer {{templateManagerToken}}
+
+### Изменить карточку
+# PUT /templates/{code} — роль TEMPLATE_MANAGER. Меняются только direction и owner;
+# channel задаётся при заведении и потом игнорируется.
+PUT {{host}}/api/admin/v1/templates/{{templateCode}}
+Authorization: Bearer {{templateManagerToken}}
+Content-Type: application/json
+
+{ "direction": "МСБ", "owner": "sme" }
+
+### Сохранить черновик версии
+# PUT (не POST) /templates/{code}/versions — роль TEMPLATE_MANAGER: черновик
+# перезаписывается, пока он черновик, и только черновик — попытка переписать версию
+# на ревью или опубликованную даёт 409.
+# Обязательны locale (RU|UZ|EN) и text. Опциональны subject и html (только для email
+# и только вместе с текстом) и version — ЭТО ПОЛЕ ТЕЛА, а не путь: без него заводится
+# следующая версия, с числом — переписывается тот черновик.
+# Автор берётся из учётной записи, поля author нет.
+PUT {{host}}/api/admin/v1/templates/{{templateCode}}/versions
+Authorization: Bearer {{templateManagerToken}}
+Content-Type: application/json
+
+{
+  "locale": "{{locale}}",
+  "text": "Здравствуйте, {NAME}! Ваш код: {CODE}"
+}
+
+> {% client.global.set("templateVersion", response.body.version); %}
+
+### Предпросмотр
+# POST /templates/{code}/preview — роль TEMPLATE_MANAGER. НЕ строгий режим и статус
+# не проверяется: он для того и нужен, чтобы смотреть черновик. Незаполненная
+# переменная остаётся видимой как {NAME} и попадает в missingVariables — в отличие
+# от отправки, где это отказ TEMPLATE_VARIABLE_MISSING.
+# Обязателен locale; version опционален (null = последняя версия этой локали).
+POST {{host}}/api/admin/v1/templates/{{templateCode}}/preview
+Authorization: Bearer {{templateManagerToken}}
+Content-Type: application/json
+
+{ "locale": "{{locale}}", "variables": { "NAME": "Иван", "CODE": "123456" } }
+
+### Отправить версию на ревью
+# POST /templates/{code}/versions/{locale}/{version}/state/{status} — роль
+# TEMPLATE_MANAGER, тела нет. Последний сегмент называется status (у провайдера —
+# state, не перепутайте). {status} ∈ DRAFT | ON_REVIEW | PUBLISHED | ARCHIVED.
+# Переходы: DRAFT → ON_REVIEW → PUBLISHED → ARCHIVED; отказ ревьюера — возврат в DRAFT.
+POST {{host}}/api/admin/v1/templates/{{templateCode}}/versions/{{locale}}/{{templateVersion}}/state/ON_REVIEW
+Authorization: Bearer {{templateManagerToken}}
+
+### Опубликовать версию — ПОД ДРУГИМ ПОЛЬЗОВАТЕЛЕМ
+# Тот же эндпоинт, но токен обязан быть чужим: под {{templateManagerToken}} (автором)
+# публикация будет отклонена (FR-4.2). Здесь публикует demo/ADMIN.
+# Публикация v2 автоматически архивирует v1 в той же локали: отправляемая версия в
+# локали всегда ровно одна.
+POST {{host}}/api/admin/v1/templates/{{templateCode}}/versions/{{locale}}/{{templateVersion}}/state/PUBLISHED
+Authorization: Bearer {{adminToken}}
+
+### Сопоставить шаблон провайдеру
+# PUT /templates/{code}/providers/{providerCode} — роль TEMPLATE_MANAGER.
+# Обязателен providerTemplateId; approved опционален (null = false).
+# Возвращает карточку целиком.
+PUT {{host}}/api/admin/v1/templates/{{templateCode}}/providers/{{providerCode}}
+Authorization: Bearer {{templateManagerToken}}
+Content-Type: application/json
+
+{ "providerTemplateId": "mock-otp-ru-01", "approved": true }
+
+### Снять сопоставление
+# DELETE /templates/{code}/providers/{providerCode} — роль TEMPLATE_MANAGER.
+# Отвечает 200 с карточкой, а не 204.
+DELETE {{host}}/api/admin/v1/templates/{{templateCode}}/providers/{{providerCode}}
+Authorization: Bearer {{templateManagerToken}}
+
+### Импорт шаблонов из CSV
+# POST /templates/import — роль TEMPLATE_MANAGER, тело text/csv.
+# Колонки по именам заголовка; обязательны code, channel, locale, text; опциональны
+# subject, html, direction, owner. Разделитель — запятая, жёстко.
+# Отсутствие обязательной колонки роняет весь файл; плохая строка сообщается, и
+# импорт продолжается. Идемпотентен по формулировке.
+# Параметр approver опционален и должен ОТЛИЧАТЬСЯ от автора (то есть от вызывающего),
+# иначе четырёхглазка откажет; без него версии остаются черновиками.
+POST {{host}}/api/admin/v1/templates/import?approver=demo
+Authorization: Bearer {{templateManagerToken}}
+Content-Type: text/csv
+
+code,channel,locale,subject,text,html,direction,owner
+DEMO_WELCOME,SMS,RU,,Добро пожаловать в Банк, {NAME}!,,Чакана,retail
+DEMO_BALANCE,SMS,RU,,Баланс карты {CARD}: {AMOUNT} сум,,Чакана,retail
+
+### Архивировать шаблон
+# DELETE /templates/{code} — роль TEMPLATE_MANAGER. Удаления НЕТ: код шаблона стоит
+# в истории каждого отправленного из него сообщения, поэтому карточка архивируется.
+# Отвечает 200 с карточкой (не 204). Архивная карточка сохраняет версии и перестаёт
+# быть отправляемой.
+DELETE {{host}}/api/admin/v1/templates/{{templateCode}}
+Authorization: Bearer {{templateManagerToken}}
+X-Commhub-Reason: superseded-by-DEMO_OTP_V2
+
+### Вернуть шаблон из архива
+# POST /templates/{code}/restore — роль TEMPLATE_MANAGER, тела нет. Отвечает 200
+# с карточкой в статусе ACTIVE.
+POST {{host}}/api/admin/v1/templates/{{templateCode}}/restore
+Authorization: Bearer {{templateManagerToken}}
+
+### ══ SUPPRESSION-ЛИСТ ════════════════════════════════════════════════════════
+
+### Список записей
+# GET /suppressions — роли ADMIN или OPERATOR. Параметры опциональны: channel,
+# reason (OPT_OUT|COMPLAINT|HARD_BOUNCE|DELIVERY_FAILURES|PROVIDER_BLACKLIST|
+# PUSH_TOKEN_INVALID|MANUAL), clientId, limit (50, максимум 500), offset.
+# Фильтра по адресу НЕТ намеренно: таблица хранит хеши, а не адреса. Чтобы узнать
+# про конкретный адрес, есть /check ниже. total здесь тоже поддельный.
+GET {{host}}/api/admin/v1/suppressions?channel=SMS&limit=50&offset=0
+Authorization: Bearer {{operatorToken}}
+
+### Проверить конкретный адрес
+# GET /suppressions/check — роли ADMIN или OPERATOR.
+# channel ОБЯЗАТЕЛЕН как query-параметр (единственный обязательный параметр во всём
+# разделе). Плюс хотя бы одно из address / clientId — адрес хешируется на сервере.
+GET {{host}}/api/admin/v1/suppressions/check?channel=SMS&address={{msisdnDelivered}}
+Authorization: Bearer {{operatorToken}}
+
+### Добавить запись вручную
+# POST /suppressions — роли ADMIN или OPERATOR.
+# РОВНО ОДНО из address и clientId: и то и другое — 400, ни того ни другого — тоже.
+# channel обязателен для адресной записи; для записи по клиенту null означает
+# «все каналы». reason обязателен всегда. validUntil опционален (ISO-инстант),
+# null = бессрочно. Адрес проверяется value object'ом своего канала до хеширования,
+# так что кривой msisdn отвергается здесь же.
+# Автоматические записи (провайдер назвал адрес непригодным, hard bounce, мёртвый
+# push-токен) сюда не идут — их пишет SuppressionRegistrar от имени провайдера.
+POST {{host}}/api/admin/v1/suppressions
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+
+{
+  "channel": "SMS",
+  "address": "{{msisdnUnusable}}",
+  "reason": "OPT_OUT",
+  "validUntil": "2027-12-31T00:00:00Z"
+}
+
+> {% client.global.set("suppressionEntryId", response.body.entryId); %}
+
+### Импорт suppression-листа из CSV
+# POST /suppressions/import — роли ADMIN или OPERATOR, тело text/csv.
+# Колонки по именам заголовка (поиск в нижнем регистре, так что clientId в заголовке
+# работает): обязательны channel и reason, плюс одно из address / clientId в строке;
+# validUntil опционален. Пустой файл или файл из одного заголовка — 400.
+# Уже существующая запись считается ПРОПУЩЕННОЙ, а не ошибочной, поэтому повторная
+# загрузка того же файла безопасна. Остальные ошибки приходят с номером строки в файле.
+POST {{host}}/api/admin/v1/suppressions/import
+Authorization: Bearer {{operatorToken}}
+Content-Type: text/csv
+
+channel,address,clientId,reason,validUntil
+SMS,998901234511,,OPT_OUT,
+SMS,998901234512,,COMPLAINT,2027-12-31T00:00:00Z
+EMAIL,,CL-0001,HARD_BOUNCE,
+
+### Удалить запись
+# DELETE /suppressions/{entryId} — роли ADMIN или OPERATOR. entryId — UUID.
+# Отвечает 204. X-Commhub-Reason необязателен, но это ровно тот случай, когда его
+# стоит указать: снятие блокировки адреса — то, о чём спросят при разборе.
+DELETE {{host}}/api/admin/v1/suppressions/{{suppressionEntryId}}
+Authorization: Bearer {{operatorToken}}
+X-Commhub-Reason: customer-opted-back-in

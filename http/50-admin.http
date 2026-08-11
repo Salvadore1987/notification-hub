@@ -1,0 +1,119 @@
+# Значения локального стенда — окружение выбирать не нужно.
+@host = http://localhost:8080
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Администрирование и эксплуатация: kill switch, системные параметры, контракт,
+### actuator.
+###
+### Всё в разделе administration — роль ADMIN и только она. Хороший способ проверить,
+### что @PreAuthorize действительно работает: подставьте {{viewerToken}} вместо
+### {{adminToken}} — должно приходить 403 (401 это «кто ты», 403 — «тебе нельзя»).
+###
+### Пользователей и ролей здесь нет и не будет: Модуль не хранит ни пользователей,
+### ни паролей (§10.1). Личность приходит из корпоративного SSO, а соответствие
+### «группа → роль» — конфигурация развёртывания.
+### ─────────────────────────────────────────────────────────────────────────────
+
+### ══ KILL SWITCH ═════════════════════════════════════════════════════════════
+
+### Состояние рубильника
+# GET /administration/kill-switch — роль ADMIN, параметров нет.
+# Читается на КАЖДОЙ подаче и ещё раз на каждой отправке, поэтому кешируется в том же
+# окне, что и снапшот маршрутизации. Единственное место во всей конфигурации, где
+# нечитаемая таблица НЕ означает «ничего не остановлено»: полярность обратная —
+# везде отказ чтения откатывается к «ограничитель не мешает», здесь наоборот.
+GET {{host}}/api/admin/v1/administration/kill-switch
+Authorization: Bearer {{adminToken}}
+
+### Включить рубильник
+# POST /administration/kill-switch — роль ADMIN.
+# ОБОСНОВАНИЕ ЗДЕСЬ В ТЕЛЕ, а не в X-Commhub-Reason, и при activate=true оно
+# обязательно — без него 400.
+# includeCriticalOtp по умолчанию false: OTP продолжает ходить, даже когда всё
+# остальное остановлено. Ставьте true осознанно — это отключение входа клиентам в
+# приложение.
+POST {{host}}/api/admin/v1/administration/kill-switch
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "activate": true,
+  "includeCriticalOtp": false,
+  "reason": "Инцидент INC-4711: провайдер шлёт дубликаты"
+}
+
+### Снять рубильник
+# Пустое тело {} и есть снятие: activate — боксированный Boolean с умолчанием false,
+# поэтому отсутствие поля читается как «выключить», а не как ошибка.
+POST {{host}}/api/admin/v1/administration/kill-switch
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{}
+
+### ══ СИСТЕМНЫЕ ПАРАМЕТРЫ ═════════════════════════════════════════════════════
+
+### Список параметров
+# GET /administration/parameters — роль ADMIN. Голый массив.
+GET {{host}}/api/admin/v1/administration/parameters
+Authorization: Bearer {{adminToken}}
+
+### Задать параметр
+# PUT /administration/parameters/{key} — роль ADMIN. Ключ непустой.
+# value ОБЯЗАТЕЛЕН (null → 400; пустая строка при этом допустима — это осмысленное
+# значение). description опционален. Заголовка обоснования у эндпоинта нет.
+PUT {{host}}/api/admin/v1/administration/parameters/demo.retention.days
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "value": "30", "description": "Срок хранения демонстрационных данных, суток" }
+
+### Удалить параметр
+# DELETE /administration/parameters/{key} — роль ADMIN, отвечает 204.
+DELETE {{host}}/api/admin/v1/administration/parameters/demo.retention.days
+Authorization: Bearer {{adminToken}}
+
+### ══ КОНТРАКТ ════════════════════════════════════════════════════════════════
+
+### OpenAPI админ-панели
+# GET /api/admin/v1/openapi.yaml — доступен любой роли §10.1, отдаёт application/yaml.
+# Рукописный контракт (springdoc под Boot 4 ещё нет); его enum'ы прибиты к доменным
+# тестом, поэтому значение, которого нет в домене, документ объявить не может.
+GET {{host}}/api/admin/v1/openapi.yaml
+Authorization: Bearer {{adminToken}}
+
+### ══ ACTUATOR ════════════════════════════════════════════════════════════════
+### Наружу открыты ровно четыре группы: health, info, metrics, prometheus. Порт тот
+### же (8080), базовый путь /actuator, контекстного пути у приложения нет.
+### health, info и (при anonymous-metrics=true, это локальное умолчание) metrics и
+### prometheus доступны без токена; всё прочее под /actuator/** требует ROLE_ADMIN.
+
+### Здоровье
+# Без токена отвечает только {"status":"UP"} — show-details: when-authorized.
+# Ниже токен указан, поэтому придут компоненты.
+GET {{host}}/actuator/health
+Authorization: Bearer {{adminToken}}
+
+### Liveness
+# Намеренно НЕ знает ни о чём внешнем: перезапускать под из-за упавшего PostgreSQL
+# значит заменить аварию на crash loop во время этой же аварии.
+GET {{host}}/actuator/health/liveness
+
+### Readiness
+# Добавляет к liveness базу: незакоммиченная подача — это непринятая подача.
+# Брокер и провайдеры публикуются как индикаторы, но в обе группы НЕ входят: outbox
+# существует ровно для того, чтобы недоступность брокера не останавливала приём, а
+# провайдер лежит одинаково на всех подах.
+GET {{host}}/actuator/health/readiness
+
+### Информация о сборке
+GET {{host}}/actuator/info
+
+### Список метрик
+GET {{host}}/actuator/metrics
+
+### Метрики для Prometheus
+# То, против чего написаны правила алертов и дашборды в deploy/observability/.
+# Имена метрик и ключи тегов — эксплуатационный контракт (MetricNames), их нельзя
+# переименовывать вместе с рефакторингом.
+GET {{host}}/actuator/prometheus

@@ -1,0 +1,98 @@
+# Значения локального стенда. Объявлены прямо здесь, поэтому окружение выбирать
+# не нужно — работает при «No Environment». Область видимости — этот файл.
+@keycloak = http://localhost:8180
+@realm = commhub
+@adminClient = commhub-admin
+@sourceClient = commhub-source
+@sourceSecret = commhub-source-secret
+@username = demo
+@password = demo
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Токены. Выполнить первым: остальные файлы берут {{adminToken}} и его собратьев
+### из глобальных переменных, которые заполняют обработчики ниже.
+###
+### Клиент commhub-admin — публичный, с включённым password grant, поэтому секрет
+### не нужен. Время жизни токена 15 минут (accessTokenLifespan realm'а): если
+### посыпались 401, вернитесь сюда и перевыпустите.
+### ─────────────────────────────────────────────────────────────────────────────
+
+### Токен администратора (demo / ADMIN)
+# Роль ADMIN открывает всё. Все запросы админ-BFF по умолчанию идут под ним.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{adminClient}}&username={{username}}&password={{password}}
+
+> {%
+    client.global.set("adminToken", response.body.access_token);
+    client.test("токен выдан", function () {
+        client.assert(response.status === 200, "Keycloak ответил " + response.status);
+    });
+%}
+
+### Токен оператора (operator / OPERATOR)
+# Рассылки, DLQ, suppression-лист, отправка из панели. Конфигурацию менять не может.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{adminClient}}&username=operator&password=operator
+
+> {% client.global.set("operatorToken", response.body.access_token); %}
+
+### Токен контент-менеджера (template-manager / TEMPLATE_MANAGER)
+# Шаблоны целиком плюс чтение списка провайдеров. Нужен для FR-4.2: черновик
+# пишет он, а публикует уже demo — автор и публикующий обязаны различаться.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{adminClient}}&username=template-manager&password=template-manager
+
+> {% client.global.set("templateManagerToken", response.body.access_token); %}
+
+### Токен аналитика (analyst / ANALYST)
+# Статистика и её выгрузка.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{adminClient}}&username=analyst&password=analyst
+
+> {% client.global.set("analystToken", response.body.access_token); %}
+
+### Токен наблюдателя (viewer / VIEWER)
+# Только чтение сообщений и рассылок, адреса приходят маскированными.
+# Удобен, чтобы проверить, что @PreAuthorize действительно закрывает эндпоинт: под
+# ним всё из 50-admin.http должно отвечать 403.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{adminClient}}&username=viewer&password=viewer
+
+> {% client.global.set("viewerToken", response.body.access_token); %}
+
+### Токен аудитора (auditor / SECURITY_AUDITOR)
+# Журнал аудита и его выгрузка — намеренно недоступны ни оператору, ни аналитику.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{adminClient}}&username=auditor&password=auditor
+
+> {% client.global.set("auditorToken", response.body.access_token); %}
+
+### Токен системы-источника (client_credentials)
+# Нужен ТОЛЬКО если контур поднят с commhub.security.require-source-system-token=true.
+# Локально по умолчанию false, и /api/v1 принимает без Authorization вовсе.
+# Клиент commhub-source конфиденциальный, password grant у него выключен; в токен
+# зашит claim commhub_streams=["*"], то есть он вправе слать в любой поток.
+POST {{keycloak}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id={{sourceClient}}&client_secret={{sourceSecret}}
+
+> {% client.global.set("sourceToken", response.body.access_token); %}
+
+### Проверка: кто я
+# Быстрый способ убедиться, что токен живой и в нём тот самый claim groups,
+# из которого конвертер делает ROLE_*.
+GET {{keycloak}}/realms/{{realm}}/protocol/openid-connect/userinfo
+Authorization: Bearer {{adminToken}}
