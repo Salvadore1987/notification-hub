@@ -112,9 +112,28 @@ public class SubmitBatchService implements SubmitBatch {
             }
         }
         batch.registerProcessed(duplicates + rejections.size());
+        closeIfNothingIsLeftInFlight(batch);
         batches.save(batch);
         return new BatchItemsResult(
                 batch.id(), accepted, duplicates, rejections, mapper.toProgressDto(batch.progress()));
+    }
+
+    /**
+     * Closes a batch whose items were all consumed on the way in (FR-3.1).
+     *
+     * <p>Normally a batch is closed by {@code BatchProgressRecorder}, when the last of its messages
+     * reaches a terminal status. A batch of nothing but duplicates and rejections has no such message —
+     * re-uploading the same file inside the dedup window is exactly that (FR-1.5) — so without this it
+     * stayed in {@code PROCESSING} for ever, with {@code processed} already equal to {@code total}.
+     *
+     * <p>The batch is closed only once the uploads have caught up with what the header announced
+     * ({@code total == uploaded}); a source system that announced a thousand items and has sent the
+     * first chunk is still owed the rest, however that chunk ended.
+     */
+    private static void closeIfNothingIsLeftInFlight(Batch batch) {
+        if (batch.progress().isComplete() && batch.total() == batch.uploaded()) {
+            batch.complete();
+        }
     }
 
     /**

@@ -143,6 +143,36 @@ class BatchLifecycleTest {
     }
 
     @Test
+    @DisplayName("FR-3.1: a batch consumed entirely on the way in closes itself")
+    void closesABatchThatProducedNoMessages() {
+        // Arrange — повторная загрузка того же файла в окне дедупликации: все строки DUPLICATE
+        Batch batch = fullyAnnouncedBatch(2L);
+        when(submitMessage.submit(any())).thenReturn(SubmitMessageResult.duplicate(MessageId.newId()));
+
+        // Act
+        submitBatch.addItems(itemsCommand(batch.id(), "i-1", "i-2"));
+
+        // Assert — сообщений у рассылки нет, значит закрыть её больше некому: BatchProgressRecorder
+        // считает по терминальным статусам сообщений, а их не появилось ни одного
+        assertThat(batch.progress().processed()).isEqualTo(2L);
+        assertThat(batch.status()).isEqualTo(BatchStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("FR-1.6: a batch still owed chunks is not closed by one that ended in duplicates")
+    void keepsABatchOpenWhileItsAnnouncedItemsAreStillComing() {
+        // Arrange — заголовок объявил 10, приехали первые два, и оба дубли
+        Batch batch = existingBatch();
+        when(submitMessage.submit(any())).thenReturn(SubmitMessageResult.duplicate(MessageId.newId()));
+
+        // Act
+        submitBatch.addItems(itemsCommand(batch.id(), "i-1", "i-2"));
+
+        // Assert — закрыть её здесь значило бы отказать следующему чанку
+        assertThat(batch.status()).isEqualTo(BatchStatus.PROCESSING);
+    }
+
+    @Test
     @DisplayName("FR-3.2: pause, resume and stop change the batch state and are audited")
     void controlsBatchLifecycle() {
         // Arrange
@@ -193,11 +223,20 @@ class BatchLifecycleTest {
     }
 
     private Batch existingBatch() {
+        return acceptedBatch(10L);
+    }
+
+    /** Рассылка, у которой объявленное количество совпадёт с загруженным, — так шлёт панель. */
+    private Batch fullyAnnouncedBatch(long announced) {
+        return acceptedBatch(announced);
+    }
+
+    private Batch acceptedBatch(long announced) {
         Batch batch = Batch.accept(
                 BatchId.newId(),
                 STREAM_ID,
                 Channel.SMS,
-                10L,
+                announced,
                 uz.hamkorbank.commhub.domain.model.Timing.immediate(),
                 NOW);
         when(batches.findById(batch.id())).thenReturn(Optional.of(batch));
