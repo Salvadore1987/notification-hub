@@ -43,7 +43,7 @@
   Все — records с проверкой инвариантов в каноническом конструкторе (`DomainValidationException`), у PII — `masked()` (`99890***4567`).
   Генератор UUIDv7 (RFC 9562, монотонный внутри миллисекунды) — `support/UuidV7`; хелперы инвариантов — `support/Guard`
 - ✅ Enum'ы: `TrafficClass`, `Priority`, `Channel`, `MessageStatus` (§6.3), `TemplateStatus`, `BatchStatus`
-  — пакет `model/type`; дополнительно `ChannelSelectionMode`, `BalancingStrategy`, `ChannelStatus`, `StreamStatus`, `ConnectionStatus`, `IntegrationType`,
+  — пакет `model/type`; дополнительно `ChannelSelectionMode`, `BalancingStrategy`, `ChannelStatus`, `StreamStatus`, `ConnectionStatus`,
   `ProviderHealthStatus`, `SuppressionReason`, `RejectionReason` (коды причин для IR-01), `SmsEncoding`, `PushPlatform`, `ContentLocale`, `ActorType`,
   `ErrorClass` (retryable/non-retryable/blocking, §18.1), `AttemptResult`, `QuietHoursBehavior`, `QuotaExhaustionBehavior`, `QuotaVerdict`
 - ✅ Sealed `MessageContent`: `SmsContent`, `EmailContent`, `PushContent` (§5.2, MP-02)
@@ -872,7 +872,7 @@
 - ✅ Vite + React 18 + TypeScript, структура проекта, ESLint/Prettier (UI-01)
 - ✅ UI-kit (Ant Design или MUI — согласовать с Банком) (UI-01)
 - ✅ i18n RU/UZ/EN (минимум RU), формат дат Asia/Tashkent, хранение UTC (UI-01, UI-04)
-- ✅ OIDC-аутентификация (Authorization Code + PKCE), хранение токена, refresh (UI-02, SEC-02)
+- ✅ OIDC-аутентификация (~~Authorization Code + PKCE~~ → форма входа в панели, Phase 21), хранение токена, refresh (UI-02, SEC-02)
 - ✅ Гейтинг по ролям RBAC на клиенте (дублирует backend) (FR-7.2)
 - ✅ API-клиент к Admin BFF (типы из OpenAPI), обработка ошибок/`Retry-After`
 - ✅ Общие компоненты: серверные таблицы (пагинация/сортировка/фильтр), виртуализация, маскирование PII (UI-03, DB-04)
@@ -883,8 +883,9 @@
 > `commhub.security.roles-claim`, по умолчанию `groups`) и маппинг SSO-группа → роль §10.1. Пустой
 > issuer — не режим работы, а ошибка настройки контура: панель показывает «не настроена» и внутрь не
 > пускает (ADR-0037, 10.08.2026; локально issuer указывает на Keycloak из `docker compose`, вход
-> `demo/demo`). Аутентификация — `oidc-client-ts`/`react-oidc-context`
-> (Code + PKCE, токены в `sessionStorage`, silent renew); роли считаются из claim'а профиля или
+> `demo/demo`). Аутентификация — ~~`oidc-client-ts`/`react-oidc-context` (Code + PKCE)~~ форма входа
+> в самой панели, direct access grant (Phase 21, ADR-0043); токены в `sessionStorage`, тихое
+> продление; роли считаются из
 > payload access-токена и гейтят меню и маршруты (`src/auth/roles.ts` — клиентское зеркало
 > `AdminAuthority`, разделы §11.2 объявлены один раз в `src/layout/navigation.tsx`). Типы API
 > генерируются `openapi-typescript` из `comm-hub-admin-v1.yaml` (`npm run generate:api`,
@@ -998,9 +999,10 @@
 - ✅ Панель без открытого режима: `OpenSession` и `Session.open` удалены, пустой `authority` —
   экран «не настроена»; попутно починен возврат на запрошенный маршрут после входа
   (`src/auth/returnTo.ts`) — раньше вход по ссылке на `/dlq` заканчивался дашбордом
+  (в Phase 21 механизм стал не нужен вместе с редиректом)
 - ✅ Тесты: Keycloak третьим синглтоном в `HubTestContainers` (тот же файл realm'а), `KeycloakTokens`
   через direct access grant, `AdminSecurityIT` (401/403/200 и логин в журнале SEC-08 вместо UUID);
-  E2E логинятся настоящим `demo/demo` (проект `setup` Playwright)
+  E2E логинятся настоящим `demo/demo` (проектом `setup` Playwright; с Phase 21 — формой панели)
 
 > **Что нашли по дороге.** Пока `@PreAuthorize` никогда не отказывал, два дефекта нечем было
 > заметить. Отказ метода — `AccessDeniedException` — выбрасывается внутри диспетчера, а не в
@@ -1013,6 +1015,100 @@
 
 ---
 
+## Phase 21. Форма входа в панели (11.08.2026)
+
+- ✅ Вход — экран самой панели: `LoginPage`, токен через direct access grant к издателю
+  (`src/auth/tokenClient.ts`, `src/auth/tokenStore.ts`)
+  ([ADR-0043](architecture/adr/ADR-0043-panel-login-form.md), UI-02, SEC-02)
+- ✅ Редирект-поток удалён: `/auth/callback`, `src/auth/returnTo.ts`, `oidc-client-ts` и
+  `react-oidc-context`; глубокая ссылка переживает вход сама — адрес никуда не уходит
+- ✅ Продление за 30 с до истечения, восстановление сессии после F5, выход гасит сессию
+  и у издателя (`end_session_endpoint`)
+- ✅ Тесты: `src/auth/session.test.tsx`, `src/auth/tokenClient.test.ts`, `e2e/sign-in.spec.ts`;
+  проект `setup` Playwright и `storageState` удалены — входит каждый тест (`e2e/fixtures/signIn.ts`),
+  форма входа добавлена в axe-проверку
+
+> **Чего это стоило.** Пароль теперь проходит через код панели, `grant_type=password` удалён из
+> OAuth 2.1, а контур обязан разрешать direct grant клиенту панели — MFA и федерация в AD этим
+> путём не работают. Требование заказчика, цена записана в ADR-0043 вместе с альтернативой,
+> к которой следует вернуться, если появится контур с MFA: своя тема оформления Keycloak.
+> Backend не менялся ничем — он остаётся resource server'ом с тем же издателем.
+
+---
+
+## Phase 22. Сквозное интеграционное тестирование (12.08.2026)
+
+Спецификация — [`testing/INTEGRATION-TEST-SPEC.md`](testing/INTEGRATION-TEST-SPEC.md), кейсы —
+[`testing/TEST-CASES.md`](testing/TEST-CASES.md) (157 кейсов, из них 24 закрыты существующими классами).
+Охват — путь сообщения от входа до статусного события; админ-панель, импорты и экспорт в аналитику
+вне охвата намеренно (граница и обоснование — §1 спецификации).
+
+- ✅ Спецификация набора: границы, эталонный контур, транспортная матрица «функция × REST × Kafka»,
+  правила детерминизма и изоляции, соответствие QA-01…QA-08 (QA-03, QA-06, QA-08)
+- ✅ Файл тест-кейсов: 12 областей (`IT-ING`, `IT-DED`, `IT-TPL`, `IT-VAL`, `IT-RTE`, `IT-FLT`,
+  `IT-QTA`, `IT-DSP`, `IT-PRV`, `IT-STS`, `IT-BAT`, `IT-TC`) с трассировкой на требования SRS
+  и честной колонкой покрытия
+
+### Этап 1. Тестовая инфраструктура (блокирующий)
+
+- [ ] Расширить `bootstrap/.../support/HubConfiguration.java` до эталонного контура §2 спецификации:
+  потоки с окнами тишины, квотами и `rate_limit_config`, каналы `EMAIL` и `PUSH`, провайдеры
+  `mock-sms`/`mock-email`/`mock-push` с разными весами и тарифами, пять шаблонов §2.4 — через
+  репозитории, не SQL
+- [ ] `support/Ingress.java` — один интерфейс с реализациями `RestIngress` и `KafkaIngress`, чтобы
+  функциональный кейс писался один раз и гонялся `@ParameterizedTest` по обоим входам (AR-06)
+- [ ] Управляемые часы: переопределение бина `ClockPort` в тестовом контексте со сдвигом на N часов —
+  без него тихие часы, TTL, окно дедупликации, часовые корзины частот и `recovery-after` непроверяемы
+- [ ] `support/HubState.java` — сброс изменчивых таблиц в `@BeforeEach` (`message`,
+  `message_status_history`, `delivery_attempt`, `outbox_event`, `dedup_registry`, `suppression_list`,
+  `frequency_counter`, `quota_counter`, `push_delivery`, `batch`, `dlq_entry`);
+  `audit_log` не трогать — V7 запрещает `DELETE`
+- [ ] Базовый класс с общим `@TestPropertySource`, чтобы Spring переиспользовал контекст, и
+  `commhub.provider.mock.enabled=true` в профиле bootstrap-ITов (ADR-0041)
+
+### Этап 2. Конвейер через оба входа
+
+- [ ] `pipeline/IngressSymmetryIT` — `IT-ING-001…014`, `IT-TC-003`
+- [ ] `pipeline/DeduplicationIT` — `IT-DED-001…006`
+- [ ] `pipeline/TemplateRenderingIT` — `IT-TPL-001…010`
+- [ ] `pipeline/ValidationAndPanIT` — `IT-VAL-001…010`
+
+### Этап 3. Compliance и лимиты
+
+- [ ] `compliance/QuietHoursIT` — `IT-FLT-006…013`
+- [ ] `compliance/SuppressionIT` — `IT-FLT-001…005`, `IT-PRV-005…006`
+- [ ] `compliance/FrequencyCapIT` — `IT-FLT-014…016`
+- [ ] `quota/QuotaDimensionsIT` — `IT-QTA-001…009`
+
+### Этап 4. Маршрутизация и провайдеры
+
+- [ ] `routing/RoutingStrategiesIT` — `IT-RTE-001…006`, `IT-RTE-014`
+- [ ] `routing/NoRouteIT` — `IT-RTE-007…010`
+- [ ] `routing/ProviderHealthIT` — `IT-RTE-011…013`, `IT-PRV-003`, `IT-PRV-007`
+- [ ] `provider/DeliveryReportIT` — `IT-PRV-001…002`, `IT-PRV-103…107` (callback, `CallbackGuard`, SEC-07)
+- [ ] `provider/EmailEndToEndIT` — `IT-PRV-201…205`; GreenMail в `bootstrap` сегодня нет, надо завести
+- [ ] `provider/PushFanOutIT` — `IT-PRV-301…305`
+
+### Этап 5. Жизненный цикл
+
+- [ ] `dispatch/DispatchGuardsIT` — `IT-DSP-004…009`
+- [ ] `dispatch/DispatchBudgetIT` — `IT-DSP-002…003`, `IT-DSP-010…011`
+- [ ] `status/StatusEventsIT` — `IT-STS-001…008`, `IT-STS-011…012`
+- [ ] `status/DlqIT` — `IT-STS-009…010`
+- [ ] `batch/BatchLifecycleIT` — `IT-BAT-001…014`
+- [ ] `traffic/TrafficClassIT` — `IT-TC-004…008`
+
+> **Порядок обязателен только для первого этапа.** Этапы 2–5 независимы и делаются отдельными
+> коммитами; Gradle трогать не нужно — задача `integrationTest` и тег `integration` уже есть, новые
+> классы называются `*IT` и помечаются `@Tag("integration")`.
+
+> ⚠️ **Цена, записанная заранее.** Каждый bootstrap-IT — это `@SpringBootTest` с контейнерами
+> PostgreSQL, Kafka и Keycloak; ~19 новых классов заметно удлинят `./gradlew integrationTest`.
+> Смягчение — общий `@TestPropertySource` в базовом классе: уникальные свойства в каждом классе
+> заставляют Spring поднимать новый контекст, и именно это, а не контейнеры, съедает время.
+
+---
+
 ## Порядок и вехи
 
 1. **Phase 1–3** — каркас + домен + use cases (ядро).
@@ -1022,5 +1118,8 @@
 5. **Phase 13–15** — наблюдаемость/безопасность/тесты (сквозные, ведутся параллельно, финализируются здесь).
 6. **Phase 16–18** — frontend после стабилизации Admin BFF.
 7. **Phase 19** — Keycloak и снятие открытого режима (после того, как панель стала пригодной к работе).
+8. **Phase 21** — форма входа перенесена в панель (требование заказчика, ADR-0043).
+9. **Phase 22** — сквозной интеграционный набор: спецификация и кейсы написаны, тесты пишутся
+   этапами (`testing/`).
 
 > После завершения каждого пункта — отмечать ✅ (не `[x]`).

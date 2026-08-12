@@ -102,7 +102,7 @@ application/  — port/in (use cases), port/out (репозитории, про�
 adapter/      — каждый адаптер — отдельный Gradle-модуль; путь проекта повторяет каталог
                 (:adapter:in:rest = adapter/in/rest), сам :adapter — агрегатор над ними:
                 in/{rest,admin,kafka,callback,importer,scheduler,contract,security}
-                out/{persistence,kafka,metrics,time,secret,compliance,policy,provider/*}
+                out/{persistence,kafka,metrics,time,compliance,policy,provider/*}
                 observability/ — ни driving, ни driven
                 (Flyway-миграции: adapter/out/persistence/src/main/resources/db/migration)
 bootstrap/    — Spring Boot приложение, конфигурация, wiring (в т.ч. WebSecurityConfig),

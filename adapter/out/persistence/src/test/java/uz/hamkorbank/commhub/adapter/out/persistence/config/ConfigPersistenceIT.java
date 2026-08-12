@@ -26,7 +26,6 @@ import uz.hamkorbank.commhub.domain.model.Tariff;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ChannelStatus;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.ProviderHealthStatus;
 import uz.hamkorbank.commhub.domain.model.type.QuotaExhaustionBehavior;
@@ -159,11 +158,9 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
         Stream stream = Stream.register(
                 StreamId.of("mobile-app"),
                 "Mobile application",
-                IntegrationType.KAFKA,
                 new Stream.Defaults(Channel.SMS, provider.ref(), TrafficClass.TRANSACTIONAL, Priority.HIGH, null));
         stream.updateQuota(QuotaConfig.ofCounts(1_000L, 20_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
         stream.updateQuietHours(QuietHours.rejecting(LocalTime.of(22, 0), LocalTime.of(7, 0)));
-        stream.updateCredentialsRef("vault://streams/mobile-app");
         stream.touch(Instant.parse("2026-08-08T10:15:30Z"));
         stream.suspend();
 
@@ -179,7 +176,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
         assertThat(restored.defaults().priority()).isEqualTo(Priority.HIGH);
         assertThat(restored.quota().dailyCountLimit()).contains(1_000L);
         assertThat(restored.quietHours()).isPresent();
-        assertThat(restored.credentialsRef()).contains("vault://streams/mobile-app");
         assertThat(restored.lastActivityAt()).contains(Instant.parse("2026-08-08T10:15:30Z"));
     }
 
@@ -187,8 +183,7 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
     @DisplayName("saving a stream twice updates it instead of failing on the primary key")
     void streamSaveIsIdempotent() {
         // Arrange
-        Stream stream =
-                Stream.register(StreamId.of("core-banking"), "Core", IntegrationType.REST, Stream.Defaults.none());
+        Stream stream = Stream.register(StreamId.of("core-banking"), "Core", Stream.Defaults.none());
         streams.save(stream);
 
         // Act
@@ -217,7 +212,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
         streams.save(Stream.register(
                 StreamId.of("mobile-app"),
                 "Mobile application",
-                IntegrationType.KAFKA,
                 Stream.Defaults.of(Channel.SMS, TrafficClass.NOTIFICATION)));
 
         // Act
@@ -308,7 +302,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
         Stream stream = Stream.register(
                 StreamId.of("ibank-retail"),
                 "iBank retail",
-                IntegrationType.REST,
                 Stream.Defaults.none().withBalancingStrategy(BalancingStrategy.LEAST_COST));
         stream.updateRateLimit(new RateLimit(500, 20_000, 0));
 
@@ -331,7 +324,6 @@ class ConfigPersistenceIT extends AbstractPersistenceIT {
                         30,
                         Tariff.perSegment(Money.of(new BigDecimal("120.5000"), UZS)),
                         new RateLimit(50, 1_000, 5),
-                        "vault://providers/playmobile",
                         true));
     }
 

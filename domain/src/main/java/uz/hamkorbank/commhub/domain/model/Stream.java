@@ -6,7 +6,6 @@ import java.util.Optional;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.StreamStatus;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
@@ -17,9 +16,12 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 /**
  * An inbound stream: one registered source system (§6.1, FR-1.3, §18.4).
  *
- * <p>Holds the integration type, the default channel/provider/traffic class applied when a submission
- * does not name them (FR-2.4, TC-02), the quotas (FR-2.6), the quiet hours (FR-5.3) and the connection
- * liveness derived from the last observed activity (FR-1.3).
+ * <p>Holds the default channel/provider/traffic class applied when a submission does not name them
+ * (FR-2.4, TC-02), the quotas (FR-2.6), the quiet hours (FR-5.3) and the connection liveness derived
+ * from the last observed activity (FR-1.3).
+ *
+ * <p>How a source system submits is deliberately not stored: it constrained nothing and the transport
+ * is a property of the call, not of the registration (ADR-0045).
  */
 public final class Stream extends AggregateRoot<StreamId> {
 
@@ -32,20 +34,17 @@ public final class Stream extends AggregateRoot<StreamId> {
     public static final int MAX_NAME_LENGTH = 128;
 
     private final String name;
-    private final IntegrationType integrationType;
 
     private Defaults defaults;
     private QuotaConfig quota;
     private RateLimit rateLimit;
     private QuietHours quietHours;
     private StreamStatus status;
-    private String credentialsRef;
     private Instant lastActivityAt;
 
-    private Stream(StreamId id, String name, IntegrationType integrationType, Defaults defaults) {
+    private Stream(StreamId id, String name, Defaults defaults) {
         super(id);
         this.name = Guard.maxLength(Guard.notBlank(name, "Stream.name"), MAX_NAME_LENGTH, "Stream.name");
-        this.integrationType = Guard.notNull(integrationType, "Stream.integrationType");
         this.defaults = Guard.notNull(defaults, "Stream.defaults");
         this.quota = QuotaConfig.unlimited();
         this.rateLimit = RateLimit.unlimited();
@@ -53,8 +52,8 @@ public final class Stream extends AggregateRoot<StreamId> {
     }
 
     /** Registers a source system; it starts {@code ACTIVE} with unlimited quotas (FR-1.3). */
-    public static Stream register(StreamId id, String name, IntegrationType integrationType, Defaults defaults) {
-        return new Stream(id, name, integrationType, defaults);
+    public static Stream register(StreamId id, String name, Defaults defaults) {
+        return new Stream(id, name, defaults);
     }
 
     public void activate() {
@@ -90,11 +89,6 @@ public final class Stream extends AggregateRoot<StreamId> {
 
     public void updateQuietHours(QuietHours newQuietHours) {
         this.quietHours = newQuietHours;
-    }
-
-    /** Reference to the credentials of this stream in the secret store (SEC-01, SEC-04). */
-    public void updateCredentialsRef(String newCredentialsRef) {
-        this.credentialsRef = newCredentialsRef;
     }
 
     /** Records activity of the source system; drives the connection status (FR-1.3). */
@@ -160,10 +154,6 @@ public final class Stream extends AggregateRoot<StreamId> {
         return name;
     }
 
-    public IntegrationType integrationType() {
-        return integrationType;
-    }
-
     public Defaults defaults() {
         return defaults;
     }
@@ -182,10 +172,6 @@ public final class Stream extends AggregateRoot<StreamId> {
 
     public StreamStatus status() {
         return status;
-    }
-
-    public Optional<String> credentialsRef() {
-        return Optional.ofNullable(credentialsRef);
     }
 
     public Optional<Instant> lastActivityAt() {

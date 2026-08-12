@@ -28,7 +28,7 @@
 |---|---|---|---|
 | FR-1.1 | Приём единичных сообщений и батчей через Kafka (основной способ) и REST (синхронный, в т. ч. OTP) | ✅ | `:adapter:in:kafka`, `:adapter:in:rest`; use cases `SubmitMessage`, `SubmitBatch` |
 | FR-1.2 | Модуль не формирует получателей, контент и расписание; допускается контент по шаблону (`templateId` + переменные) | ✅ | `MessagePipeline` → `TemplateApplier`; аудитории резолвит источник (см. FR-8.11) |
-| FR-1.3 | Регистрация системы-источника как входящего потока: способ интеграции, канал и провайдер по умолчанию, статус подключения | ✅ | `ManageStreams` / `StreamConfigService`, таблица `stream`, раздел «Входящие потоки» в панели |
+| FR-1.3 | Регистрация системы-источника как входящего потока: канал и провайдер по умолчанию, статус подключения | ✅ | `ManageStreams` / `StreamConfigService`, таблица `stream`, раздел «Входящие потоки» в панели. Способ интеграции не хранится — поле было описательным и удалено ([ADR-0045](adr/ADR-0045-drop-stream-integration-type.md)) |
 | FR-1.4 | Валидация при приёме: обязательные поля, форматы адресов, длина контента, существование потока и шаблона; ошибка синхронно (REST) либо событием (Kafka) | ✅ | Value objects домена + `MessageValidator`; `InboundContractException` с указателем на поле, REST → problem+json, Kafka → `comm.inbound.parse-error.v1` |
 | FR-1.5 | Идемпотентность по `(streamId, externalMessageId)` либо `dedupKey` в окне дедупликации (по умолчанию 24 ч) → `DUPLICATE` без повторной отправки | ✅ | `DeduplicationService`, `DedupRegistryPort`, таблица `dedup_registry`; окно — из `:adapter:out:policy` |
 | FR-1.6 | Приём батча: заголовок + элементы чанками; батч виден с момента приёма с прогрессом обработки | 🟡 | `SubmitBatchService`, `POST /batches`, `POST /batches/{id}/items`; прогресс сверх `processed` — долг ⏳ [Д-2](#12-известные-долги) |
@@ -134,7 +134,7 @@
 | SG-01 | SMS Gate реализует тот же `SmsProviderPort`; отсутствующие у провайдера возможности компенсируются Модулем | ✅ | `:adapter:out:provider:smsgate`; шаблон подставляется до отправки |
 | SG-02 | Маппинг состояний элементов батча на канонические статусы и причины | ✅ | `SmsGateResponseCatalog`, `SmsGateStatusCatalog` (§18.2) |
 | SG-03 | Реконсиляция статусов без DLR через `/api/v2/search` | ✅ | `SmsGateReconciler`; код 6 (Unknown) сознательно применяется как ничто и оставляется реконсиляции |
-| SG-04 | Секрет `key` — в секрет-хранилище, в логах маскируется | ✅ | `:adapter:out:secret` (ссылка `env:SMSGATE_KEY`, [ADR-0036](adr/ADR-0036-secrets-from-environment.md)) + `Masking` |
+| SG-04 | Секрет `key` — в секрет-хранилище, в логах маскируется | ✅ | Значение переменной `SMSGATE_KEY` ([ADR-0044](adr/ADR-0044-secrets-as-plain-values.md)) + `Masking`, в том числе в `toString` записи с кредами |
 | EM-01 | SMTP: TLS, пул соединений, лимит скорости, HTML+plain, вложения, заголовок `X-Comm-Message-Id` | ✅ | `:adapter:out:provider:smtp`; размер пула и есть лимит параллелизма канала; потолки вложений проверяются на валидации, а не в адаптере |
 | EM-02 | Обработка bounce; hard bounce → suppression | ✅ | `EmailBouncePoller` (IMAP) кормит `ProcessProviderStatus`; адрес подавляется только на явном «нет такого ящика» (`5.1.x`, `5.2.1`) |
 | EM-03 | Поддержка DKIM при необходимости | ✅ | `DkimSigner` (RFC 6376, relaxed/relaxed, rsa-sha256), выключен по умолчанию |

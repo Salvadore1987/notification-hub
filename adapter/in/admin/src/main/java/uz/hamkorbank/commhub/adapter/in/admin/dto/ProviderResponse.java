@@ -34,6 +34,5 @@ public record ProviderResponse(
             String health,
             boolean selectable,
             QuotaDto quota,
-            String credentialsRef,
             Map<String, String> endpointConfig) {}
 }

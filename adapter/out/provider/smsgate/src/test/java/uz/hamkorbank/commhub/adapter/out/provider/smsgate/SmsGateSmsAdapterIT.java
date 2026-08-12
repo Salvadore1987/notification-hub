@@ -24,6 +24,7 @@ import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.adapter.out.provider.ProviderStubs;
 import uz.hamkorbank.commhub.adapter.out.provider.smsgate.SmsGateProperties.Credentials;
 import uz.hamkorbank.commhub.adapter.out.provider.smsgate.SmsGateProperties.Sending;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
@@ -76,9 +77,9 @@ class SmsGateSmsAdapterIT {
                         new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
                         throttle,
                         ProviderRuntimeSettings.configurationOnly(),
-                        ProviderStubs.secrets("smsgate/login", "hamkor", "smsgate/key", "k3y"),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
     }
 
     @AfterEach
@@ -199,9 +200,9 @@ class SmsGateSmsAdapterIT {
                         new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
                         throttle,
                         ProviderRuntimeSettings.configurationOnly(),
-                        ProviderStubs.secrets("smsgate/login", "hamkor", "smsgate/key", "k3y"),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
         provider.stubFor(
                 post(urlEqualTo(SmsGateProperties.SEND_PATH)).willReturn(json("{\"status\":{\"code\":0},\"id\":1}")));
 
@@ -220,7 +221,7 @@ class SmsGateSmsAdapterIT {
         return new SmsGateProperties(
                 true,
                 "SMSGATE",
-                new Credentials("smsgate/login", "smsgate/key"),
+                new Credentials("hamkor", "k3y"),
                 new Sending("3700", null),
                 SmsGateProperties.Reconciliation.defaults(),
                 rateLimit,

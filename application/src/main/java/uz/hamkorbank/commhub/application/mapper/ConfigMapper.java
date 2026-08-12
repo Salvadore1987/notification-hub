@@ -45,7 +45,6 @@ public interface ConfigMapper {
                         provider.health(),
                         provider.isSelectable(),
                         provider.quota(),
-                        provider.credentialsRef().orElse(null),
                         endpointConfig));
     }
 
@@ -69,7 +68,6 @@ public interface ConfigMapper {
         return new StreamView(
                 stream.id(),
                 stream.name(),
-                stream.integrationType(),
                 stream.status(),
                 stream.connectionStatus(now),
                 stream.defaults(),

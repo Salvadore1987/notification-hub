@@ -66,11 +66,11 @@ commhub:
       protocol: ${KAFKA_SECURITY_PROTOCOL:}
       mechanism: ${KAFKA_SASL_MECHANISM:}
       username: ${KAFKA_SASL_USERNAME:}
-      password-ref: ${KAFKA_SASL_PASSWORD_REF:}
+      password: ${KAFKA_SASL_PASSWORD:}
       truststore-location: ${KAFKA_TRUSTSTORE_LOCATION:}
-      truststore-password-ref: ${KAFKA_TRUSTSTORE_PASSWORD_REF:}
+      truststore-password: ${KAFKA_TRUSTSTORE_PASSWORD:}
       keystore-location: ${KAFKA_KEYSTORE_LOCATION:}
-      keystore-password-ref: ${KAFKA_KEYSTORE_PASSWORD_REF:}
+      keystore-password: ${KAFKA_KEYSTORE_PASSWORD:}
     outbound:
       status-topic: ${KAFKA_STATUS_TOPIC:comm.outbound.status.v1}
       dlq-topic: ${KAFKA_DLQ_TOPIC:comm.outbound.dlq.v1}
@@ -247,7 +247,7 @@ commhub:
       approver: ${TEMPLATE_IMPORT_APPROVER:}
 
   # Провайдерские callback'и статусов (PM-02, SEC-07). Ключи — коды провайдеров.
-  # Секрет в проме приходит из секрет-хранилища Банка (SG-04) и в логах не появляется.
+  # Секрет приходит значением из переменной окружения (SG-04, ADR-0044) и в логах не появляется.
   callback:
     base: ${CALLBACK_BASE_PATH:/api/callbacks}
     providers:
@@ -256,36 +256,29 @@ commhub:
         # Пусто = проверка адреса делегирована сети; список согласуется с Playmobile (PM-02).
         allowed-ips: ${PLAYMOBILE_CALLBACK_IPS:}
         secret-header: ${PLAYMOBILE_CALLBACK_HEADER:X-Commhub-Callback-Secret}
-        # В контуре Банка — ссылка в секрет-хранилище (SG-04); secret оставлен для локального стенда.
-        secret-ref: ${PLAYMOBILE_CALLBACK_SECRET_REF:}
+        # Пусто = проверка секрета выключена. Это осознанное решение эксплуатации, а не умолчание.
         secret: ${PLAYMOBILE_CALLBACK_SECRET:}
       SMSGATE:
         enabled: ${SMSGATE_CALLBACK_ENABLED:true}
         allowed-ips: ${SMSGATE_CALLBACK_IPS:}
         secret-header: ${SMSGATE_CALLBACK_HEADER:X-Commhub-Callback-Secret}
-        secret-ref: ${SMSGATE_CALLBACK_SECRET_REF:}
         secret: ${SMSGATE_CALLBACK_SECRET:}
-
-  # Секрет-хранилище (SEC-04, SG-04, ADR-0036). Значений здесь нет — только то, откуда их брать.
-  # В контуре Банка платформа кладёт секрет в окружение пода (K8s Secret, инжектор Vault, CSI):
-  # так у Hub'а нет собственного токена Vault и Vault не оказывается на пути отправки сообщения.
-  # Схемы ссылок: env:ИМЯ (основная) и prop:ключ; после схемы допустим модификатор base64: —
-  # им приходят многострочные блобы (ключ сервис-аккаунта FCM, .p8 APNs). Ссылка без схемы —
-  # литерал из values, это только локальный стенд и тесты.
-  secrets:
-    # Кэш ссылки: он держит разрешение подальше от каждого сообщения. Ротацию он больше не применяет —
-    # переменную окружения живого процесса не сменить, ротация секрета это rolling restart.
-    cache-ttl: ${SECRETS_CACHE_TTL:30s}
-    # values здесь не объявляется по той же причине, что и rate-limit.streams выше: пустая карта
-    # в YAML приходит биндеру скаляром. Литералы для локального стенда задаются точечно, например
-    #   commhub.secrets.values.playmobile/password: ...
 
   # Адаптеры провайдеров (§9, PR-01). Значения ниже — умолчания деплоя: лимиты берутся из
   # provider.rate_limit_config, а настройки отправки (originator/sender, приоритеты, веса, TTL) —
   # из provider.endpoint_config, и применяются без рестарта (FR-2.5, AD-07). Не переезжают:
-  # креды (ссылки в секрет-хранилище, SEC-04) и параметры HTTP-клиента (base-url, таймауты,
-  # окна breaker'а) — это топология деплоя, её смена и есть деплой.
+  # креды (значения переменных окружения, SEC-04, ADR-0044) и параметры HTTP-клиента (base-url,
+  # таймауты, окна breaker'а) — это топология деплоя, её смена и есть деплой.
   provider:
+    # Локальная трасса отправляемого содержимого (SEC-06, OBS-03). Пишет одну строку на отправку —
+    # адрес и текст целиком, без маскирования — в логгер uz.hamkorbank.commhub.outbound.content.
+    # Выключено здесь и включено ровно в одном месте: config/application.yml в корне репозитория,
+    # который не попадает ни в jar, ни в образ. В контуре включать нельзя: текст OTP-сообщения —
+    # это сам одноразовый пароль, а маскирование в месте записи (Masking) существует именно для
+    # того, чтобы он не оказался в операционном логе.
+    content-log:
+      enabled: ${COMMHUB_LOG_CONTENT:false}
+
     # FR-6.3/PR-02: пассивный монитор здоровья провайдеров. Считает долю ошибок и таймаутов по
     # delivery_attempt за окно, ставит DOWN (→ автоматический failover) и возвращает обратно.
     health:
@@ -306,9 +299,11 @@ commhub:
     playmobile:
       enabled: ${PLAYMOBILE_ENABLED:true}
       provider-code: ${PLAYMOBILE_PROVIDER_CODE:PLAYMOBILE}
+      # Значения, а не ссылки: платформа кладёт их в окружение пода (SEC-04, ADR-0044). Пусто =
+      # провайдер не настроен, и отправка отклоняется как NO_CREDENTIALS, а не уходит без учётных данных.
       credentials:
-        username-ref: ${PLAYMOBILE_USERNAME_REF:env:PLAYMOBILE_USERNAME}
-        password-ref: ${PLAYMOBILE_PASSWORD_REF:env:PLAYMOBILE_PASSWORD}
+        username: ${PLAYMOBILE_USERNAME:}
+        password: ${PLAYMOBILE_PASSWORD:}
       sending:
         originator: ${PLAYMOBILE_ORIGINATOR:}
         # Префикс message-id, согласован с Playmobile; вместе с номером — не более 20 символов (§9.1).
@@ -333,8 +328,8 @@ commhub:
       enabled: ${SMSGATE_ENABLED:true}
       provider-code: ${SMSGATE_PROVIDER_CODE:SMSGATE}
       credentials:
-        login-ref: ${SMSGATE_LOGIN_REF:env:SMSGATE_LOGIN}
-        key-ref: ${SMSGATE_KEY_REF:env:SMSGATE_KEY}
+        login: ${SMSGATE_LOGIN:}
+        key: ${SMSGATE_KEY:}
       sending:
         sender: ${SMSGATE_SENDER:}
         # weight 0–10, больше — раньше в очереди провайдера (§9.2).
@@ -369,10 +364,11 @@ commhub:
     fcm:
       enabled: ${FCM_ENABLED:false}
       provider-code: ${FCM_PROVIDER_CODE:FCM}
-      # JSON-ключ сервис-аккаунта целиком, ссылкой в секрет-хранилище (SEC-04). В образ и в yaml
-      # не кладётся никогда: это единственный секрет, дающий право писать клиентам Банка в push.
-      # base64: — потому что это многострочный JSON, а не строка (ADR-0036).
-      credentials-ref: ${FCM_CREDENTIALS_REF:env:base64:FCM_SERVICE_ACCOUNT}
+      # JSON-ключ сервис-аккаунта целиком, значением из окружения (SEC-04). В образ и в yaml не
+      # кладётся никогда: это единственный секрет, дающий право писать клиентам Банка в push.
+      # Принимается и как есть, и в base64 — многострочный JSON удобнее одной строкой (ADR-0044).
+      credentials:
+        service-account: ${FCM_SERVICE_ACCOUNT:}
       sending:
         # PU-03: HIGH будит устройство. Массовая рассылка на HIGH — это разряженные батареи и
         # последующий троттлинг со стороны Google для всего трафика, включая OTP.
@@ -410,9 +406,9 @@ commhub:
       credentials:
         team-id: ${APNS_TEAM_ID:}
         key-id: ${APNS_KEY_ID:}
-        # .p8-ключ (PKCS#8) в секрет-хранилище (SEC-04); в отличие от сертификата, не истекает.
-        # base64: — PEM многострочный (ADR-0036).
-        private-key-ref: ${APNS_KEY_REF:env:base64:APNS_PRIVATE_KEY}
+        # .p8-ключ (PKCS#8) значением из окружения (SEC-04); в отличие от сертификата, не истекает.
+        # Принимается и как есть, и в base64 — PEM многострочный (ADR-0044).
+        private-key: ${APNS_PRIVATE_KEY:}
         # PU-06: подпись обновляется не чаще раза в 20 минут и не реже раза в час.
         # Значение вне этого окна не роняет старт, а приводится к границе: цена отказа —
         # выключенный канал push, а правильный диапазон известен из спецификации.
@@ -456,8 +452,8 @@ commhub:
         ehlo-name: ${SMTP_EHLO_NAME:}
         credentials:
           # Пусто = релей без аутентификации; внутри сети Банка это нормальная конфигурация.
-          username-ref: ${SMTP_USERNAME_REF:}
-          password-ref: ${SMTP_PASSWORD_REF:}
+          username: ${SMTP_USERNAME:}
+          password: ${SMTP_PASSWORD:}
         connect-timeout: ${SMTP_CONNECT_TIMEOUT:5s}
         read-timeout: ${SMTP_READ_TIMEOUT:15s}
         # Бюджет на выталкивание письма — тот, который решает при вложениях (EM-01).
@@ -479,12 +475,13 @@ commhub:
         tps: ${SMTP_TPS:20}
         per-minute: ${SMTP_PER_MINUTE:0}
       # EM-03: подпись писем. Выключена — обычно подписывает сам корпоративный релей; включается
-      # там, где он этого не делает. Ключ — PKCS#8 в секрет-хранилище, инлайн его класть нельзя.
+      # там, где он этого не делает. Ключ — PKCS#8 из окружения; инлайн в yaml его класть нельзя.
       dkim:
         enabled: ${SMTP_DKIM_ENABLED:false}
         domain: ${SMTP_DKIM_DOMAIN:}
         selector: ${SMTP_DKIM_SELECTOR:}
-        private-key-ref: ${SMTP_DKIM_KEY_REF:}
+        # PEM или тот же PEM в base64 — многострочный ключ проще везти одной строкой (ADR-0044).
+        private-key: ${SMTP_DKIM_KEY:}
       # EM-02: разбор NDR из выделенного ящика (IMAP). Выключено: ящик заводит почтовая команда
       # Банка, и поллер, каждую минуту падающий на несуществующем ящике, — плохой способ об этом
       # узнать. Отчёт применяется через тот же ProcessProviderStatus, что и DLR провайдеров (AD-06).
@@ -494,8 +491,8 @@ commhub:
         port: ${SMTP_BOUNCE_PORT:}
         ssl: ${SMTP_BOUNCE_SSL:true}
         credentials:
-          username-ref: ${SMTP_BOUNCE_USERNAME_REF:}
-          password-ref: ${SMTP_BOUNCE_PASSWORD_REF:}
+          username: ${SMTP_BOUNCE_USERNAME:}
+          password: ${SMTP_BOUNCE_PASSWORD:}
         folder: ${SMTP_BOUNCE_FOLDER:INBOX}
         batch-size: ${SMTP_BOUNCE_BATCH:200}
         settings:

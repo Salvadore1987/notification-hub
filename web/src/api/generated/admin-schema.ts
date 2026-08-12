@@ -951,7 +951,8 @@ export interface paths {
         put?: never;
         /**
          * Зарегистрировать профиль провайдера
-         * @description ADMIN (FR-2.1). `credentialsRef` — ссылка в секрет-хранилище, не сам секрет (SEC-04).
+         * @description ADMIN (FR-2.1). Кредов провайдера здесь нет и быть не может: они приходят переменными
+         *     окружения контура (SEC-04, ADR-0044).
          */
         post: {
             parameters: {
@@ -2409,6 +2410,8 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -2453,6 +2456,8 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -2506,6 +2511,8 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -2740,12 +2747,6 @@ export interface components {
         TrafficClass: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
         /** @enum {string} */
         Priority: "REALTIME" | "HIGH" | "NORMAL" | "LOW";
-        /**
-         * @description Как система-источник подаёт сообщения (FR-1.1, FR-1.3). Значение описательное: приём
-         *     по нему не ограничивается, поток, заведённый как `REST`, принимает и из Kafka.
-         * @enum {string}
-         */
-        IntegrationType: "KAFKA" | "REST";
         /** @enum {string} */
         StreamStatus: "ACTIVE" | "SUSPENDED" | "DISABLED";
         /**
@@ -2800,7 +2801,7 @@ export interface components {
         RejectionReason: "VALIDATION_FAILED" | "DUPLICATE_SUBMISSION" | "SUPPRESSED" | "OPT_OUT" | "QUIET_HOURS" | "FREQUENCY_CAPPED" | "QUOTA_EXCEEDED" | "STREAM_SUSPENDED" | "TEMPLATE_NOT_PUBLISHED" | "TEMPLATE_VARIABLE_MISSING" | "NO_ROUTE_AVAILABLE" | "PAN_DETECTED" | "TTL_EXPIRED" | "SEND_STOPPED" | "KILL_SWITCH" | "PROVIDER_REJECTED" | "ATTEMPTS_EXHAUSTED";
         /** @enum {string} */
         SuppressionReason: "OPT_OUT" | "COMPLAINT" | "HARD_BOUNCE" | "DELIVERY_FAILURES" | "PROVIDER_BLACKLIST" | "PUSH_TOKEN_INVALID" | "MANUAL";
-        /** @description Сумма с кодом валюты, например `12.5000 UZS` */
+        /** @description Сумма с кодом валюты, например `12.50 UZS` */
         Money: string;
         Quota: {
             /** Format: int64 */
@@ -3039,7 +3040,6 @@ export interface components {
         Stream: {
             streamId?: string;
             name?: string;
-            integrationType?: components["schemas"]["IntegrationType"];
             status?: components["schemas"]["StreamStatus"];
             connectionStatus?: components["schemas"]["ConnectionStatus"];
             defaults?: components["schemas"]["StreamDefaults"];
@@ -3061,7 +3061,6 @@ export interface components {
         };
         StreamRequest: {
             name?: string;
-            integrationType?: components["schemas"]["IntegrationType"];
             defaults?: components["schemas"]["StreamDefaults"];
             quota?: components["schemas"]["Quota"];
             quietHours?: components["schemas"]["QuietHours"];
@@ -3072,7 +3071,6 @@ export interface components {
              */
             clearQuietHours: boolean;
             rateLimit?: components["schemas"]["RateLimit"];
-            credentialsRef?: string;
         };
         ChannelConfig: {
             channel?: components["schemas"]["Channel"];
@@ -3119,8 +3117,6 @@ export interface components {
                 health?: components["schemas"]["ProviderHealthStatus"];
                 readonly selectable?: boolean;
                 quota?: components["schemas"]["Quota"];
-                /** @description Ссылка в секрет-хранилище; сам секрет наружу не выходит (SEC-04) */
-                credentialsRef?: string;
                 endpointConfig?: {
                     [key: string]: string;
                 };
@@ -3138,7 +3134,6 @@ export interface components {
             tariff?: components["schemas"]["Tariff"];
             rateLimit?: components["schemas"]["RateLimit"];
             quota?: components["schemas"]["Quota"];
-            credentialsRef?: string;
             endpointConfig?: {
                 [key: string]: string;
             };

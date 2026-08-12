@@ -12,7 +12,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +27,6 @@ import uz.hamkorbank.commhub.adapter.in.rest.problem.ProblemFactory;
 import uz.hamkorbank.commhub.application.dto.ProcessProviderStatusResult;
 import uz.hamkorbank.commhub.application.port.in.ProcessProviderStatus;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
@@ -44,57 +42,8 @@ class ProviderCallbackControllerTest {
 
     private static final String PATH = CallbackProperties.DEFAULT_BASE + "/" + PROVIDER;
 
-    /** Reference used by the test that proves the secret can live in the secret store (SG-04). */
-    private static final String SECRET_REF = "playmobile/callback-secret";
-
     @Mock
     private ProcessProviderStatus processStatus;
-
-    private final SecretResolverPort secrets = new SecretResolverPort() {
-
-        @Override
-        public Optional<String> resolve(String secretRef) {
-            return SECRET_REF.equals(secretRef) ? Optional.of(SECRET) : Optional.empty();
-        }
-
-        @Override
-        public String require(String secretRef) {
-            return resolve(secretRef).orElseThrow();
-        }
-    };
-
-    @Test
-    @DisplayName("SG-04: the shared secret may be a reference resolved from the secret store")
-    void acceptsASecretHeldInTheSecretStore() throws Exception {
-        // Arrange
-        when(processStatus.process(any()))
-                .thenReturn(ProcessProviderStatusResult.applied(MessageId.newId(), MessageStatus.DELIVERED));
-        MockMvc mockMvc =
-                mockMvc(Map.of(PROVIDER, new Provider(true, List.of(), null, null, SECRET_REF)), new StubTranslator(1));
-
-        // Act + Assert
-        mockMvc.perform(post(PATH)
-                        .header(Provider.DEFAULT_SECRET_HEADER, SECRET)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    @DisplayName("SEC-07: a secret reference that resolves to nothing refuses the callback, it does not skip the check")
-    void refusesWhenTheSecretReferenceIsUnresolvable() throws Exception {
-        // Arrange
-        MockMvc mockMvc = mockMvc(
-                Map.of(PROVIDER, new Provider(true, List.of(), null, null, "playmobile/missing")),
-                new StubTranslator(1));
-
-        // Act + Assert
-        mockMvc.perform(post(PATH)
-                        .header(Provider.DEFAULT_SECRET_HEADER, SECRET)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isForbidden());
-    }
 
     @Test
     @DisplayName("PM-02: an authenticated report reaches the use case and is acknowledged with 200")
@@ -203,16 +152,14 @@ class ProviderCallbackControllerTest {
     private MockMvc mockMvc(Map<String, Provider> providers, ProviderCallbackTranslator... translators) {
         CallbackProperties properties = new CallbackProperties(null, providers);
         ProviderCallbackController controller = new ProviderCallbackController(
-                new CallbackGuard(properties, secrets),
-                new ProviderCallbackRegistry(List.of(translators)),
-                processStatus);
+                new CallbackGuard(properties), new ProviderCallbackRegistry(List.of(translators)), processStatus);
         return MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new CallbackAuthenticationHandler(), new NotFoundHandler(new ProblemFactory()))
                 .build();
     }
 
     private static Map<String, Provider> provider(List<String> allowedIps, String secret) {
-        return Map.of(PROVIDER, new Provider(true, allowedIps, null, secret, null));
+        return Map.of(PROVIDER, new Provider(true, allowedIps, null, secret));
     }
 
     /** Stands in for the Playmobile and SMS Gate translators, which live with their adapters. */

@@ -58,7 +58,6 @@ import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ChannelStatus;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.QuotaExhaustionBehavior;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
@@ -159,8 +158,8 @@ class ConfigurationUseCasesTest {
         when(configuration.findProvider(provider.id())).thenReturn(Optional.of(provider));
 
         // Act
-        ProviderView view = providerService.update(new UpdateProviderCommand(
-                OPERATOR, provider.id(), 30, null, new RateLimit(50, 0, 45), null, null, null));
+        ProviderView view = providerService.update(
+                new UpdateProviderCommand(OPERATOR, provider.id(), 30, null, new RateLimit(50, 0, 45), null, null));
 
         // Assert
         assertThat(view.weight()).isEqualTo(30);
@@ -311,7 +310,6 @@ class ConfigurationUseCasesTest {
                 OPERATOR,
                 STREAM_ID,
                 "Mobile application",
-                IntegrationType.REST,
                 Stream.Defaults.of(Channel.SMS, TrafficClass.CRITICAL_OTP)
                         .withBalancingStrategy(BalancingStrategy.LEAST_COST),
                 QuotaConfig.ofCounts(10_000L, null, QuotaExhaustionBehavior.BLOCK_AND_ALERT),
@@ -335,8 +333,8 @@ class ConfigurationUseCasesTest {
 
         // Act + Assert
         assertThatExceptionOfType(ConfigurationConflictException.class)
-                .isThrownBy(() -> streamService.register(new RegisterStreamCommand(
-                        OPERATOR, STREAM_ID, "Mobile application", IntegrationType.REST, null, null, null, null)));
+                .isThrownBy(() -> streamService.register(
+                        new RegisterStreamCommand(OPERATOR, STREAM_ID, "Mobile application", null, null, null, null)));
     }
 
     @Test
@@ -350,8 +348,8 @@ class ConfigurationUseCasesTest {
         // Act
         StreamView untouched = streamService.update(
                 UpdateStreamCommand.ofDefaults(OPERATOR, STREAM_ID, Stream.Defaults.of(Channel.SMS, null)));
-        StreamView cleared = streamService.update(
-                new UpdateStreamCommand(OPERATOR, STREAM_ID, null, null, null, true, null, "vault:ibank"));
+        StreamView cleared =
+                streamService.update(new UpdateStreamCommand(OPERATOR, STREAM_ID, null, null, null, true, null));
 
         // Assert
         assertThat(untouched.limits().quietHoursOptional()).isPresent();

@@ -2,10 +2,17 @@
 
 | | |
 |---|---|
-| **Статус** | Принято · реализовано · заменяет [ADR-0021](ADR-0021-secrets-by-reference.md) |
+| **Статус** | **Заменено** [ADR-0044](ADR-0044-secrets-as-plain-values.md) (11.08.2026) — окружение осталось источником, косвенность через ссылку и резолвер отменена; заменяет [ADR-0021](ADR-0021-secrets-by-reference.md) |
 | **Дата** | 10.08.2026 |
 | **Требования SRS** | SEC-04, SG-04, NF-06, PU-01, PU-06 |
-| **Связанные решения** | [ADR-0021](ADR-0021-secrets-by-reference.md), [ADR-0007](ADR-0007-configuration-in-postgres.md), [ADR-0020](ADR-0020-provider-ack-contract.md) |
+| **Связанные решения** | [ADR-0044](ADR-0044-secrets-as-plain-values.md), [ADR-0021](ADR-0021-secrets-by-reference.md), [ADR-0007](ADR-0007-configuration-in-postgres.md), [ADR-0020](ADR-0020-provider-ack-contract.md) |
+
+> **Что отменено.** Сами ссылки: схемы `env:` и `prop:`, модификатор `base64:` как часть ссылки,
+> `commhub.secrets.values`, TTL-кэш, модуль `:adapter:out:secret` и порт `SecretResolverPort`.
+> Секрет приходит **значением** обычного свойства (`password: ${PLAYMOBILE_PASSWORD:}`), а base64-блоб
+> распознаёт `Blobs` в `adapter/out/provider/support`. В силе остальное: значение приходит из окружения
+> пода, Модуль не ходит в Vault, ротация — rolling restart. Подробности в
+> [ADR-0044](ADR-0044-secrets-as-plain-values.md).
 
 ## Контекст
 

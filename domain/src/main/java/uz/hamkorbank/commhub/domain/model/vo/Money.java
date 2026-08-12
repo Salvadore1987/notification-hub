@@ -8,12 +8,14 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 /**
  * Monetary amount used for provider tariffs, message cost and budgets (FR-2.1, FR-2.6, FR-6.2).
  *
- * <p>Scaled to four fraction digits so that a per-segment tariff of, say, 24.5 UZS stays exact and
- * value equality behaves predictably.
+ * <p>Scaled to two fraction digits — the precision the Bank's tariffs are quoted and reported in —
+ * so that value equality behaves predictably. Anything finer is rounded HALF_UP on the way in, which
+ * makes a sub-tiyin per-segment tariff unrepresentable; UZS prices an SMS in tens of sums, so that
+ * is a bound rather than a loss.
  */
 public record Money(BigDecimal amount, Currency currency) implements Comparable<Money> {
 
-    public static final int SCALE = 4;
+    public static final int SCALE = 2;
 
     public Money {
         Guard.notNull(amount, "Money.amount");

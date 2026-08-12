@@ -24,7 +24,8 @@ class MoneyTest {
         // Assert
         assertThat(oneWay).isEqualTo(otherWay);
         assertThat(oneWay.amount().scale()).isEqualTo(Money.SCALE);
-        assertThat(oneWay).hasToString("25.0000 UZS");
+        assertThat(oneWay).hasToString("25.00 UZS");
+        assertThat(Money.of("12.345", "UZS")).hasToString("12.35 UZS");
     }
 
     @Test

@@ -1,0 +1,279 @@
+# Значения локального стенда — окружение выбирать не нужно.
+@host = http://localhost:8080
+@streamId = demo-app
+@providerCode = MOCK
+@adapterType = mock-sms
+@channel = SMS
+@msisdnDelivered = 998901234500
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Конфигурация маршрутизации: провайдеры, каналы, потоки, политики.
+###
+### Файл прогоняется сверху вниз на пустой базе и оставляет настроенный контур.
+### Порядок не переставляется: fallbackOrder канала ссылается на код провайдера,
+### поэтому провайдер заводится первым (см. docs/QUICKSTART-SEND.md §1).
+###
+### Требует {{adminToken}} из 00-auth.http. Правки применяются без рестарта, но
+### снапшот кешируется до 30 с (NF-07) — если изменение «не подействовало»,
+### подождите полминуты, прежде чем править ещё раз.
+### ─────────────────────────────────────────────────────────────────────────────
+
+### ══ ПРОВАЙДЕРЫ ══════════════════════════════════════════════════════════════
+
+### Типы адаптеров, развёрнутые на этом поде
+# GET /providers/adapters — роль ADMIN.
+# Отвечает не из базы, а из контейнера: это те (adapterType, channel), под которые
+# в этом поде есть бины (ADR-0042). Регистрация тип НЕ проверяет, поэтому сверяйтесь
+# с этим списком: профиль с чужим типом заведётся, а отправка упадёт на
+# "no adapter deployed for provider MOCK (mock-sms)".
+GET {{host}}/api/admin/v1/providers/adapters
+Authorization: Bearer {{adminToken}}
+
+### Зарегистрировать провайдера
+# POST /providers/{code} — роль ADMIN. Код в пути ЗАГЛАВНЫМИ, ^[A-Z0-9][A-Z0-9_]{1,31}$.
+# Обязательны channel (SMS|EMAIL|PUSH) и adapterType (^[a-z0-9][a-z0-9-]{1,31}$).
+# Опционально: weight (по умолчанию 10), tariff, rateLimit, quota, endpointConfig.
+# Профиль создаётся включённым, здоровье UNKNOWN — это ВЫБИРАЕМОЕ состояние,
+# «прогревать» ничего не нужно.
+# Кредов в теле нет: они приходят переменными окружения контура (SEC-04, ADR-0044).
+POST {{host}}/api/admin/v1/providers/{{providerCode}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "channel": "{{channel}}",
+  "adapterType": "{{adapterType}}",
+  "weight": 10,
+  "tariff": { "perMessage": "80.0000", "perSegment": "40.0000" }
+}
+
+> {%
+    client.global.set("providerId", response.body.providerId);
+    client.test("провайдер заведён", function () {
+        client.assert(response.status === 200 || response.status === 201, "код " + response.status);
+    });
+%}
+
+### Список провайдеров
+# GET /providers — роль ADMIN или TEMPLATE_MANAGER (контент-менеджеру нужны коды
+# провайдеров, чтобы сопоставлять шаблоны). Здесь же берётся providerId для правок.
+GET {{host}}/api/admin/v1/providers
+Authorization: Bearer {{adminToken}}
+
+### Изменить профиль провайдера
+# PUT /providers/{providerId} — роль ADMIN. ВНИМАНИЕ: правка идёт по UUID, а НЕ по
+# коду, в отличие от регистрации. Тот же шаблон URL разводится только методом, так
+# что PUT с кодом вместо UUID даёт 400 "providerId is not a UUID".
+# channel и adapterType здесь игнорируются: провайдер, сменивший канал или адаптер,
+# это другой провайдер. Остальные поля: null = не трогать.
+PUT {{host}}/api/admin/v1/providers/{{providerId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "weight": 20,
+  "rateLimit": { "tps": 50, "perMinute": 2000, "perRecipientPerHour": 5 }
+}
+
+### Перевести провайдера в другое состояние
+# POST /providers/{providerId}/state/{state} — роль ADMIN, тела нет.
+# {state} ∈ ENABLED | DISABLED | MAINTENANCE (регистр не важен).
+# Path-переменная здесь называется state; у канала и у версии шаблона — status.
+# X-Commhub-Reason необязателен, но попадает в аудит; кириллица в значении заголовка
+# передаётся percent-encoded UTF-8 (ниже: «плановые работы»).
+POST {{host}}/api/admin/v1/providers/{{providerId}}/state/MAINTENANCE
+Authorization: Bearer {{adminToken}}
+X-Commhub-Reason: %D0%BF%D0%BB%D0%B0%D0%BD%D0%BE%D0%B2%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B
+
+### Вернуть провайдера в строй
+POST {{host}}/api/admin/v1/providers/{{providerId}}/state/ENABLED
+Authorization: Bearer {{adminToken}}
+
+### ══ КАНАЛЫ ══════════════════════════════════════════════════════════════════
+
+### Настроить профиль канала
+# PUT /channels/{channel} — роль ADMIN. {channel} ∈ SMS | EMAIL | PUSH.
+# Каналы не заводятся и не удаляются (их набор — enum), но ПРОФИЛЬ канала сам собой
+# не появляется: этот PUT работает как upsert и создаёт его.
+# Обязателен только balancingStrategy (ROUND_ROBIN|WEIGHTED|LEAST_COST|PRIMARY_ONLY) —
+# умолчания в базе нет. fallbackOrder схема не требует, но БЕЗ НЕГО КАНАЛ НЕ
+# МАРШРУТИЗИРУЕТ НИЧЕГО: провайдеры берутся только оттуда. Порядок и есть
+# конфигурация, поэтому список всегда присылается целиком, а не правится по одному.
+PUT {{host}}/api/admin/v1/channels/{{channel}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "balancingStrategy": "PRIMARY_ONLY",
+  "fallbackOrder": ["{{providerCode}}"],
+  "quietHours": { "start": "21:00", "end": "09:00", "zone": "Asia/Tashkent", "behavior": "DEFER" },
+  "quota": { "dailyCount": 100000, "behavior": "ALERT_ONLY" }
+}
+
+### Список профилей каналов
+# GET /channels — роль ADMIN. Возвращает только СОЗДАННЫЕ профили: на чистом контуре
+# это пустой массив, а не три строки.
+GET {{host}}/api/admin/v1/channels
+Authorization: Bearer {{adminToken}}
+
+### Перевести канал в другое состояние
+# POST /channels/{channel}/state/{status} — роль ADMIN, тела нет.
+# {status} ∈ ACTIVE | MAINTENANCE | DISABLED. Не ACTIVE = отказ маршрутизации
+# "channel SMS is MAINTENANCE". На несозданном профиле это гарантированный 409.
+POST {{host}}/api/admin/v1/channels/{{channel}}/state/ACTIVE
+Authorization: Bearer {{adminToken}}
+X-Commhub-Reason: back-to-service
+
+### ══ ПОТОКИ ══════════════════════════════════════════════════════════════════
+
+### Зарегистрировать поток
+# POST /streams/{streamId} — роль ADMIN. Идентификатор ^[a-z0-9][a-z0-9._-]{1,63}$,
+# СТРОЧНЫМИ, и после регистрации не меняется: источники указывают его в каждом
+# сообщении. Обязательно name.
+# Способ интеграции у потока не хранится (ADR-0045): один и тот же поток принимается
+# и по REST, и из Kafka — транспорт выбирает источник в момент вызова.
+# defaults.balancingStrategy — не дефолт, а ПЕРЕОПРЕДЕЛЕНИЕ канальной стратегии:
+# пусто = работает канальная. То же и с quietHours: окно потока заменяет канальное
+# целиком, а не сужает его.
+POST {{host}}/api/admin/v1/streams/{{streamId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Демо-приложение",
+  "defaults": { "channel": "SMS", "trafficClass": "TRANSACTIONAL", "priority": "NORMAL" },
+  "quota": { "dailyCount": 100000, "behavior": "ALERT_ONLY" },
+  "rateLimit": { "tps": 50, "perMinute": 2000, "perRecipientPerHour": 5 }
+}
+
+### Список потоков
+# GET /streams — роль ADMIN или OPERATOR. Голый массив, без пагинации.
+GET {{host}}/api/admin/v1/streams
+Authorization: Bearer {{adminToken}}
+
+### Изменить поток
+# PUT /streams/{streamId} — роль ADMIN. ЧАСТИЧНОЕ обновление: null = «не трогать»,
+# name здесь игнорируется.
+# Две ловушки:
+#  • rateLimit в компактном конструкторе превращает пропущенные поля в 0 (= без
+#    потолка), поэтому объект отправляется целиком либо не отправляется вовсе;
+#  • quietHours вместе с clearQuietHours:true отвергаются — «задать» и «снять» это
+#    разные намерения, и одновременно они бессмысленны.
+PUT {{host}}/api/admin/v1/streams/{{streamId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "defaults": { "priority": "HIGH" },
+  "clearQuietHours": true
+}
+
+### Приостановить приём из потока
+# POST /streams/{streamId}/suspend — роль ADMIN, тела нет (не шлите пустой JSON).
+# Пока поток приостановлен, источник получает отказ STREAM_SUSPENDED на приёме и
+# копит у себя — это не решение проблемы, а перенос её к источнику.
+POST {{host}}/api/admin/v1/streams/{{streamId}}/suspend
+Authorization: Bearer {{adminToken}}
+X-Commhub-Reason: incident-INC-4711
+
+### Возобновить приём
+POST {{host}}/api/admin/v1/streams/{{streamId}}/resume
+Authorization: Bearer {{adminToken}}
+
+### ══ МАРШРУТИЗАЦИЯ ═══════════════════════════════════════════════════════════
+
+### Проверка маршрута (dry-run)
+# POST /routing/evaluate — роль ADMIN. НИЧЕГО НЕ ОТПРАВЛЯЕТ и ничего не пишет:
+# сообщение строится в памяти и прогоняется через настоящий Router по настоящей
+# конфигурации. Обязательны streamId и recipient (в recipient — хотя бы один адрес).
+# Опциональны channel, trafficClass, priority, text (text нужен для числа сегментов
+# и оценки стоимости). В ответе — routed, провайдер, fallbackProviders, стратегия,
+# segments, estimatedCost, а при отказе — rejection с причиной.
+POST {{host}}/api/admin/v1/routing/evaluate
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "channel": "{{channel}}",
+  "recipient": { "msisdn": "{{msisdnDelivered}}" },
+  "text": "Ваш код: 123456"
+}
+
+### Список политик маршрутизации
+# GET /routing/policies — роль ADMIN. В порядке применения: меньший priority раньше.
+# Политики НЕ обязательны: с нулём политик канал берётся из плана сообщения или
+# дефолта потока, а провайдеры — из fallbackOrder канала.
+GET {{host}}/api/admin/v1/routing/policies
+Authorization: Bearer {{adminToken}}
+
+### Завести политику маршрутизации
+# POST /routing/policies — роль ADMIN. match и action ОБЯЗАТЕЛЬНЫ как объекты, но
+# все их внутренние поля опциональны; match со всеми null совпадает со всем подряд.
+# priority по умолчанию 100, должен быть >= 0. Это не патч, а замена политики целиком.
+POST {{host}}/api/admin/v1/routing/policies
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "match": { "streamId": "{{streamId}}", "trafficClass": "CRITICAL_OTP", "channel": "SMS" },
+  "action": { "channel": "SMS", "providerOrder": ["{{providerCode}}"], "balancingStrategy": "PRIMARY_ONLY" },
+  "priority": 10
+}
+
+> {% client.global.set("policyId", response.body.policyId); %}
+
+### Изменить политику
+# PUT /routing/policies/{policyId} — роль ADMIN. Тоже замена целиком, не патч.
+PUT {{host}}/api/admin/v1/routing/policies/{{policyId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "match": { "streamId": "{{streamId}}", "trafficClass": "CRITICAL_OTP" },
+  "action": { "channel": "SMS", "providerOrder": ["{{providerCode}}"] },
+  "priority": 20
+}
+
+### Включить или выключить политику
+# POST /routing/policies/{policyId}/state/{enabled} — роль ADMIN, тела нет.
+# {enabled} — литеральные true / false в пути, а не enum.
+POST {{host}}/api/admin/v1/routing/policies/{{policyId}}/state/false
+Authorization: Bearer {{adminToken}}
+
+### Удалить политику
+# DELETE /routing/policies/{policyId} — роль ADMIN. Отвечает 204, тела нет.
+DELETE {{host}}/api/admin/v1/routing/policies/{{policyId}}
+Authorization: Bearer {{adminToken}}
+
+### ══ ПРОВЕРКА И РАЗРУШАЮЩЕЕ ══════════════════════════════════════════════════
+
+### Тестовая отправка
+# POST /providers/test-send — роль ADMIN. Требует уже настроенных канала и потока,
+# поэтому идёт в конце файла.
+# Обязательны streamId, channel, recipient и text (непустой, не длиннее 500 символов —
+# контракт этого не говорит, а код требует). provider опционален и ЗАКРЕПЛЯЕТ отправку
+# за одним провайдером, исключая остальные.
+# ЭТО НЕ СИМУЛЯЦИЯ: сообщение идёт по обычному конвейеру и реально доходит до
+# абонента — применяются квоты потока, фильтры канала и настоящие креды (FR-7.4).
+# В бизнес-статистику не попадает: помечено TEST.
+POST {{host}}/api/admin/v1/providers/test-send
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "streamId": "{{streamId}}",
+  "channel": "{{channel}}",
+  "provider": "{{providerCode}}",
+  "recipient": { "msisdn": "{{msisdnDelivered}}" },
+  "text": "Проверка конфигурации"
+}
+
+### Удалить профиль провайдера
+# DELETE /providers/{providerId} — роль ADMIN, отвечает 204.
+# Отклоняется с 409, пока провайдер назван в fallbackOrder любого канала или в
+# действии любой политики: сначала уберите его оттуда.
+# ВЫПОЛНЯТЬ ПОСЛЕДНИМ — дальше по этому providerId ничего не заработает.
+DELETE {{host}}/api/admin/v1/providers/{{providerId}}
+Authorization: Bearer {{adminToken}}
+X-Commhub-Reason: decommissioned

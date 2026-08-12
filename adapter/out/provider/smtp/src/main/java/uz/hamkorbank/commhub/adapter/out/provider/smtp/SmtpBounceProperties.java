@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Properties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 
 /**
  * The mailbox non-delivery reports arrive in (EM-02, §9.3).
@@ -58,11 +59,17 @@ public record SmtpBounceProperties(
         return new SmtpBounceProperties(null, null, null, null, null, null, null, null);
     }
 
-    /** References of the mailbox credentials in the secret store (SEC-04). */
-    public record Credentials(String usernameRef, String passwordRef) {
+    /** Mailbox credentials, filled from the environment of the pod (SEC-04, ADR-0044). */
+    public record Credentials(String username, String password) {
 
         public boolean isConfigured() {
-            return usernameRef != null && !usernameRef.isBlank() && passwordRef != null && !passwordRef.isBlank();
+            return username != null && !username.isBlank() && password != null && !password.isBlank();
+        }
+
+        @Override
+        public String toString() {
+            return "Credentials[username=%s, password=%s]"
+                    .formatted(Masking.secret(username), Masking.secret(password));
         }
     }
 

@@ -20,7 +20,6 @@ import uz.hamkorbank.commhub.application.port.in.ProcessProviderStatus;
 import uz.hamkorbank.commhub.application.port.in.command.ProviderStatusCommand;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.MessageRepository;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
 import uz.hamkorbank.commhub.domain.model.Message;
 import uz.hamkorbank.commhub.domain.model.type.AttemptResult;
@@ -65,7 +64,6 @@ public class SmsGateReconciler {
     private final SmsGateSendCodec codec;
     private final MessageRepository messages;
     private final ProcessProviderStatus processStatus;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final RestClient client;
 
@@ -74,14 +72,12 @@ public class SmsGateReconciler {
             SmsGateSendCodec codec,
             MessageRepository messages,
             ProcessProviderStatus processStatus,
-            SecretResolverPort secrets,
             ClockPort clock,
             ProviderRestClients clients) {
         this.properties = Guard.notNull(properties, "properties");
         this.codec = Guard.notNull(codec, "codec");
         this.messages = Guard.notNull(messages, "messages");
         this.processStatus = Guard.notNull(processStatus, "processStatus");
-        this.secrets = Guard.notNull(secrets, "secrets");
         this.clock = Guard.notNull(clock, "clock");
         this.client = Guard.notNull(clients, "clients").create(properties.http());
     }
@@ -184,8 +180,8 @@ public class SmsGateReconciler {
         SmsGateProperties.Credentials configured = properties.credentials();
         if (!configured.isConfigured()) {
             throw ProviderCallException.blocking(
-                    "NO_CREDENTIALS", "no credential references are configured for SMS Gate (SG-04)");
+                    "NO_CREDENTIALS", "no credentials are configured for SMS Gate (SG-04)");
         }
-        return new SmsGateCredentials(secrets.require(configured.loginRef()), secrets.require(configured.keyRef()));
+        return new SmsGateCredentials(configured.login(), configured.key());
     }
 }

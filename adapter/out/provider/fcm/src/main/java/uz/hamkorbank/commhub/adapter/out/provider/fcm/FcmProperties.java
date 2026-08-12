@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
@@ -27,7 +28,7 @@ import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 public record FcmProperties(
         Boolean enabled,
         String providerCode,
-        String credentialsRef,
+        Credentials credentials,
         Sending sending,
         OAuth oauth,
         RateLimit rateLimit,
@@ -46,6 +47,7 @@ public record FcmProperties(
         providerCode = providerCode == null || providerCode.isBlank()
                 ? DEFAULT_PROVIDER_CODE
                 : providerCode.trim().toUpperCase(Locale.ROOT);
+        credentials = credentials == null ? new Credentials(null) : credentials;
         sending = sending == null ? Sending.defaults() : sending;
         oauth = oauth == null ? OAuth.defaults() : oauth;
         rateLimit = rateLimit == null ? RateLimit.unlimited() : rateLimit;
@@ -63,7 +65,29 @@ public record FcmProperties(
     }
 
     public boolean hasCredentials() {
-        return credentialsRef != null && !credentialsRef.isBlank();
+        return credentials.hasServiceAccount();
+    }
+
+    /**
+     * The service account key Google hands out, whole (PU-01, SEC-04).
+     *
+     * <p>A record of its own rather than a bare component, for two reasons: the header is already at the
+     * eight components Checkstyle allows, and a bare {@code String} would print through the generated
+     * {@code toString()} of {@link FcmProperties} with no place to intercept it. This one is masked.
+     *
+     * <p>The value arrives from the environment of the pod (ADR-0044), as the JSON itself or as the same
+     * JSON in base64 — a service account key is multi-line, and a variable carries one line well.
+     */
+    public record Credentials(String serviceAccount) {
+
+        public boolean hasServiceAccount() {
+            return serviceAccount != null && !serviceAccount.isBlank();
+        }
+
+        @Override
+        public String toString() {
+            return "Credentials[serviceAccount=%s]".formatted(Masking.secret(serviceAccount));
+        }
     }
 
     /**

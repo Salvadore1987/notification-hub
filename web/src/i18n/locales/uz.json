@@ -20,14 +20,21 @@
     "administration": "Administratsiya"
   },
   "auth": {
+    "title": "Panelga kirish",
+    "username": "Foydalanuvchi",
+    "password": "Parol",
+    "usernameRequired": "Foydalanuvchi nomini kiriting",
+    "passwordRequired": "Parolni kiriting",
     "signIn": "Kirish",
     "signOut": "Chiqish",
     "signingIn": "Kirilmoqda…",
-    "redirecting": "SSO sahifasiga yoʻnaltirilmoqda…",
     "forbidden": "Bu boʻlim uchun rolingiz yoʻq",
     "error": "Kirish amalga oshmadi",
     "notConfigured": "Panel sozlanmagan",
-    "notConfiguredHint": "OIDC-issuer koʻrsatilmagan: public/config.json faylida oidc.authority boʻsh. Panel har qanday konturda SSO ortida — uni oʻrnatgan mutaxassislarga murojaat qiling."
+    "notConfiguredHint": "OIDC-issuer koʻrsatilmagan: public/config.json faylida oidc.authority boʻsh. Panel har qanday konturda SSO ortida — uni oʻrnatgan mutaxassislarga murojaat qiling.",
+    "invalidCredentials": "Foydalanuvchi nomi yoki parol notoʻgʻri",
+    "sessionExpired": "Sessiya tugadi — qaytadan kiring",
+    "issuerUnavailable": "SSO-issuer mavjud emas. Konturni oʻrnatgan mutaxassislarga murojaat qiling."
   },
   "errors": {
     "request": "Soʻrov bajarilmadi",
@@ -171,8 +178,6 @@
     "create": "Oqimni roʻyxatga olish",
     "edit": "Oqimni tahrirlash",
     "name": "Nomi",
-    "integrationType": "Integratsiya",
-    "credentialsRef": "Kredlarga havola (SEC-04)",
     "defaults": "Oqim defoltlari",
     "defaultsOverrideHint": "Defoltlar faqat manba tizim o‘zinikini ko‘rsatmagan bo‘lsa qo‘llanadi. Balanslash — defolt emas, bekor qiluvchi sozlama: bo‘sh bo‘lsa kanal strategiyasi ishlaydi, to‘ldirilsa shu oqim trafigi uchun uni almashtiradi. Provayderlar ro‘yxati va fallback tartibi oqimda belgilanmaydi: ular doimo kanaldan olinadi",
     "defaultBalancingStrategyHint": "Bo‘sh — kanal strategiyasi ishlaydi (kanalda u har doim bor). To‘ldirilgan — shu oqim trafigi uchun uni almashtiradi. Mos kelgan marshrutlash qoidasi ikkalasidan ham ustun (FR-2.3)",
@@ -199,8 +204,6 @@
     "connection": "Ulanish",
     "lastActivity": "Oxirgi faollik",
     "streamIdHint": "Manba tizimlar har bir xabarda ko‘rsatadigan identifikator. Doimiy: ro‘yxatdan o‘tgandan keyin o‘zgartirib bo‘lmaydi. Faqat kichik lotin harflari: PlayMobile rad etiladi, playmobile — yoʻq.",
-    "integrationTypeHint": "Oqim xabarlarni qaysi transport orqali yuboradi: REST, Kafka yoki ikkalasi",
-    "credentialsRefHint": "Sirning o‘zi emas, unga havola: env:NOM yoki prop:kalit. Qiymatni Modul murojaat vaqtida o‘qiydi va o‘zida saqlamaydi (SEC-04)",
     "defaultChannelHint": "Manba o‘zinikini ko‘rsatmasa, shu oqim xabarlari uchun standart kanal",
     "defaultProviderHint": "Oqimning afzal provayderi. U mavjud bo‘lmasa, marshrutlash xabarni baribir zaxiraga o‘tkazadi (FR-6.3)",
     "trafficClassHint": "Standart sinf. Navbatlar izolyatsiyasi unga bog‘liq: ommaviy yuborish OTP uchun ajratilgan navbatlarni egallashi mumkin emas (TC-01)",

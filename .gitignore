@@ -45,6 +45,8 @@ logs/
 *.pem
 !src/test/resources/**/*.pem
 secrets/
+# Приватное окружение HTTP Client: сюда кладут боевые токены и пароли (http/README.md)
+http-client.private.env.json
 
 # --- Node (frontend, Phase 16+) ---
 node_modules/

@@ -2,6 +2,7 @@ package uz.hamkorbank.commhub.adapter.out.provider.mock;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.EmailSubmission;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
@@ -20,9 +21,11 @@ public class MockEmailProvider implements EmailProviderPort {
     public static final AdapterType TYPE = AdapterType.of("mock-email");
 
     private final MockProvider mock;
+    private final OutboundContentLog contentLog;
 
-    public MockEmailProvider(MockProvider mock) {
+    public MockEmailProvider(MockProvider mock, OutboundContentLog contentLog) {
         this.mock = mock;
+        this.contentLog = contentLog;
     }
 
     @Override
@@ -32,6 +35,7 @@ public class MockEmailProvider implements EmailProviderPort {
 
     @Override
     public ProviderAck submit(EmailSubmission submission) {
+        contentLog.record(submission);
         return mock.answer(submission.provider(), submission.messageId(), localPart(submission), null);
     }
 

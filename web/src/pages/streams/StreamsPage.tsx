@@ -108,7 +108,6 @@ export function StreamsPage() {
         columns={[
           { title: t('batches.streamId'), dataIndex: 'streamId' },
           { title: t('streams.name'), dataIndex: 'name' },
-          { title: t('streams.integrationType'), dataIndex: 'integrationType' },
           {
             title: t('batches.status'),
             render: (_, row) => (

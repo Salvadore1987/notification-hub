@@ -42,7 +42,6 @@ import uz.hamkorbank.commhub.domain.model.TemplateRef;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
 import uz.hamkorbank.commhub.domain.model.type.QuietHoursBehavior;
@@ -87,7 +86,6 @@ public interface AdminCommandMapper {
                 actor,
                 AdminValues.parseRequired(streamId, "streamId", StreamId::of),
                 request.name(),
-                AdminValues.requiredEnum(IntegrationType.class, request.integrationType(), "integrationType"),
                 toStreamDefaults(request, provider),
                 toQuota(request.quota()),
                 toQuietHours(request.quietHours()),
@@ -103,8 +101,7 @@ public interface AdminCommandMapper {
                 toQuota(request.quota()),
                 toQuietHours(request.quietHours()),
                 request.clearQuietHours(),
-                toRateLimit(request.rateLimit()),
-                request.credentialsRef());
+                toRateLimit(request.rateLimit()));
     }
 
     // ---------------------------------------------------------------- channels and providers
@@ -129,7 +126,6 @@ public interface AdminCommandMapper {
                         request.weight() == null ? Provider.DEFAULT_WEIGHT : request.weight(),
                         toTariff(request),
                         toRateLimit(request.rateLimit()),
-                        request.credentialsRef(),
                         true),
                 toQuota(request.quota()),
                 request.endpointConfig() == null ? Map.of() : request.endpointConfig());
@@ -143,7 +139,6 @@ public interface AdminCommandMapper {
                 toTariff(request),
                 toRateLimit(request.rateLimit()),
                 toQuota(request.quota()),
-                request.credentialsRef(),
                 request.endpointConfig());
     }
 

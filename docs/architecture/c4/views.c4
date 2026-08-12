@@ -162,7 +162,6 @@ views {
       hub.app.smtpAdapter,
       hub.app.fcmAdapter,
       hub.app.apnsAdapter,
-      hub.app.secretAdapter,
       playmobile,
       smsGate,
       mailRelay,
@@ -278,7 +277,7 @@ views {
     description 'Сценарий приёмки QA-07: решение о доступе принимает backend, панель лишь показывает то, что разрешено (UI-02, SEC-03)'
 
     operator -> hub.adminSpa 'Карточка батча, кнопка «Пауза»'
-    hub.adminSpa -> sso 'Токен OIDC (Code + PKCE)'
+    hub.adminSpa -> sso 'Токен OIDC (direct grant, ADR-0043)'
     hub.adminSpa -> hub.app.adminApi 'POST /api/admin/v1/batches/{id}/actions/pause'
     hub.app.adminApi -> hub.app.securityShared 'Аутентификация на цепочке, авторизация на методе'
     hub.app.adminApi -> hub.app.application 'PauseBatch'

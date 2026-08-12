@@ -3,8 +3,12 @@
 //
 // HTTP-клиента здесь нет намеренно: мок отвечает сам, а транспортный слой проверяют
 // интеграционные тесты настоящих адаптеров с WireMock.
+//
+// Зависимость на каркас провайдеров — ровно ради OutboundContentLog: выключатель «показывать
+// отправляемое сообщение целиком» должен быть один на все адаптеры, иначе он разъедется.
 
 dependencies {
     api(project(":application"))
+    implementation(project(":adapter:out:provider:support"))
     implementation(libs.spring.boot.starter)
 }

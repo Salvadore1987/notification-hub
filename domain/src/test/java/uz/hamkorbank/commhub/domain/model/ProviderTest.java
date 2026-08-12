@@ -34,7 +34,6 @@ class ProviderTest {
         assertThat(provider.ref().adapterType()).isEqualTo(AdapterType.of("playmobile-http"));
         assertThat(provider.rateLimit().isUnlimited()).isTrue();
         assertThat(provider.tariff()).isEmpty();
-        assertThat(provider.credentialsRef()).isEmpty();
         assertThat(provider.weight()).isEqualTo(Provider.DEFAULT_WEIGHT);
     }
 
@@ -100,14 +99,12 @@ class ProviderTest {
         // Act
         provider.updateRateLimit(new RateLimit(100, 3_000, 50));
         provider.updateWeight(30);
-        provider.updateCredentialsRef("vault://providers/playmobile");
 
         // Assert
         assertThat(provider.rateLimit().hasTpsLimit()).isTrue();
         assertThat(provider.rateLimit().hasPerMinuteLimit()).isTrue();
         assertThat(provider.rateLimit().hasPerRecipientLimit()).isTrue();
         assertThat(provider.weight()).isEqualTo(30);
-        assertThat(provider.credentialsRef()).contains("vault://providers/playmobile");
         assertThatExceptionOfType(DomainValidationException.class).isThrownBy(() -> provider.updateWeight(0));
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> provider.updateWeight(Provider.MAX_WEIGHT + 1));
@@ -120,17 +117,14 @@ class ProviderTest {
         Provider.Settings settings = Provider.Settings.defaults();
 
         // Act
-        Provider.Settings updated = settings.withWeight(5)
-                .withTariff(Tariff.perSegment(uzs("25")))
-                .withRateLimit(RateLimit.ofTps(50))
-                .withCredentialsRef("vault://x");
+        Provider.Settings updated =
+                settings.withWeight(5).withTariff(Tariff.perSegment(uzs("25"))).withRateLimit(RateLimit.ofTps(50));
 
         // Assert
         assertThat(settings.weight()).isEqualTo(Provider.DEFAULT_WEIGHT);
         assertThat(updated.weight()).isEqualTo(5);
         assertThat(updated.tariff()).isNotNull();
         assertThat(updated.rateLimit().tps()).isEqualTo(50);
-        assertThat(updated.credentialsRef()).isEqualTo("vault://x");
         assertThatExceptionOfType(DomainValidationException.class).isThrownBy(() -> settings.withWeight(-1));
     }
 

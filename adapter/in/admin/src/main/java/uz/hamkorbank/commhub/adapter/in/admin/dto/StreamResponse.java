@@ -9,7 +9,6 @@ package uz.hamkorbank.commhub.adapter.in.admin.dto;
 public record StreamResponse(
         String streamId,
         String name,
-        String integrationType,
         String status,
         String connectionStatus,
         StreamDefaultsDto defaults,

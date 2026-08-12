@@ -25,6 +25,7 @@ import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.adapter.out.provider.ProviderStubs;
 import uz.hamkorbank.commhub.adapter.out.provider.playmobile.PlaymobileProperties.Credentials;
 import uz.hamkorbank.commhub.adapter.out.provider.playmobile.PlaymobileProperties.Sending;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
@@ -73,7 +74,7 @@ class PlaymobileSmsAdapterIT {
         PlaymobileProperties properties = new PlaymobileProperties(
                 true,
                 "PLAYMOBILE",
-                new Credentials("playmobile/username", "playmobile/password"),
+                new Credentials("hamkor", "s3cr3t"),
                 new Sending("3700", "HB", null, null),
                 RateLimit.unlimited(),
                 new ProviderHttpProperties(
@@ -89,9 +90,9 @@ class PlaymobileSmsAdapterIT {
                         new ProviderCallExecutor(breakers, RetryRegistry.ofDefaults(), FixedClock.standard()),
                         new ProviderThrottle(),
                         ProviderRuntimeSettings.configurationOnly(),
-                        ProviderStubs.secrets("playmobile/username", "hamkor", "playmobile/password", "s3cr3t"),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
     }
 
     @AfterEach

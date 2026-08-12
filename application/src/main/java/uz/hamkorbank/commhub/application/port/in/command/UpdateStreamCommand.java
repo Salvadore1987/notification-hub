@@ -22,8 +22,7 @@ public record UpdateStreamCommand(
         QuotaConfig quota,
         QuietHours quietHours,
         boolean clearQuietHours,
-        RateLimit rateLimit,
-        String credentialsRef) {
+        RateLimit rateLimit) {
 
     public UpdateStreamCommand {
         Guard.notNull(actor, "UpdateStreamCommand.actor");
@@ -33,6 +32,6 @@ public record UpdateStreamCommand(
     }
 
     public static UpdateStreamCommand ofDefaults(Actor actor, StreamId streamId, Stream.Defaults defaults) {
-        return new UpdateStreamCommand(actor, streamId, defaults, null, null, false, null, null);
+        return new UpdateStreamCommand(actor, streamId, defaults, null, null, false, null);
     }
 }

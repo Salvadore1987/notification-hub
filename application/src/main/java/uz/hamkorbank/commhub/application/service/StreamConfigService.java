@@ -47,8 +47,7 @@ public class StreamConfigService implements ManageStreams {
             throw new ConfigurationConflictException("stream %s is already registered"
                     .formatted(command.streamId().value()));
         });
-        Stream stream =
-                Stream.register(command.streamId(), command.name(), command.integrationType(), command.defaults());
+        Stream stream = Stream.register(command.streamId(), command.name(), command.defaults());
         if (command.quota() != null) {
             stream.updateQuota(command.quota());
         }
@@ -80,9 +79,6 @@ public class StreamConfigService implements ManageStreams {
         }
         if (command.quietHours() != null || command.clearQuietHours()) {
             stream.updateQuietHours(command.quietHours());
-        }
-        if (command.credentialsRef() != null) {
-            stream.updateCredentialsRef(command.credentialsRef());
         }
         streams.save(stream);
         auditor.record(command.actor(), "stream.update", ENTITY, stream.id().value(), before, describe(stream));

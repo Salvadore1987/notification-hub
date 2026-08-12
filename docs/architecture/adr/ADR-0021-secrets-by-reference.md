@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Статус** | **Заменено** [ADR-0036](ADR-0036-secrets-from-environment.md) (10.08.2026) — принцип «в БД и yaml только ссылки» в силе, способ доставки значения изменён |
+| **Статус** | **Заменено** [ADR-0036](ADR-0036-secrets-from-environment.md) (10.08.2026) и далее [ADR-0044](ADR-0044-secrets-as-plain-values.md) (11.08.2026) — ссылок больше нет вовсе, секрет приходит значением свойства |
 | **Дата** | 08.08.2026 |
 | **Требования SRS** | SEC-04, SG-04, NF-06, PU-01, PU-06 |
 | **Связанные решения** | [ADR-0036](ADR-0036-secrets-from-environment.md), [ADR-0007](ADR-0007-configuration-in-postgres.md), [ADR-0020](ADR-0020-provider-ack-contract.md) |

@@ -9,6 +9,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import uz.hamkorbank.commhub.adapter.out.provider.support.Blobs;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
@@ -17,7 +19,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSetting
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.PushProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.PushSubmission;
@@ -85,9 +86,9 @@ public class ApnsPushAdapter implements PushProviderPort {
     private final ApnsMessageCodec codec;
     private final ProviderCallExecutor executor;
     private final ProviderThrottle throttle;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
+    private final OutboundContentLog contentLog;
     private final RestClient production;
     private final RestClient sandbox;
     private final ApnsJwtProvider providerTokens;
@@ -98,9 +99,9 @@ public class ApnsPushAdapter implements PushProviderPort {
         Guard.notNull(support, "support");
         this.executor = support.executor();
         this.throttle = support.throttle();
-        this.secrets = support.secrets();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
+        this.contentLog = support.contentLog();
         this.production = support.clients().create(properties.http());
         this.sandbox = support.clients().create(properties.sandbox());
         this.providerTokens = new ApnsJwtProvider(properties.credentials());
@@ -120,6 +121,7 @@ public class ApnsPushAdapter implements PushProviderPort {
     @Override
     public ProviderAck submit(PushSubmission submission) {
         Guard.notNull(submission, "submission");
+        contentLog.record(submission);
         Optional<ProviderAck> held = throttleVerdict(submission);
         if (held.isPresent()) {
             return held.get();
@@ -246,13 +248,13 @@ public class ApnsPushAdapter implements PushProviderPort {
         return properties.sending().overlay(runtimeSettings.endpointConfigOf(properties.providerCode()));
     }
 
-    /** The signed provider token; the key is resolved per call so a rotation needs no restart (SEC-04). */
+    /** The signed provider token, built from the deployment settings (SEC-04, ADR-0044). */
     private String providerToken(Instant now) {
         ApnsProperties.Credentials credentials = properties.credentials();
         if (!credentials.isConfigured()) {
             throw ProviderCallException.blocking(
-                    "NO_CREDENTIALS", "no team id, key id and .p8 reference are configured for APNs (PU-06)");
+                    "NO_CREDENTIALS", "no team id, key id and .p8 key are configured for APNs (PU-06)");
         }
-        return providerTokens.tokenAt(secrets.require(credentials.privateKeyRef()), now);
+        return providerTokens.tokenAt(Blobs.decodeIfBase64(credentials.privateKey()), now);
     }
 }

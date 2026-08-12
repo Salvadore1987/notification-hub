@@ -38,7 +38,6 @@ public class ProviderRowMapper implements RowMapper<Provider> {
                 rs.getInt("weight"),
                 TariffJson.toDomain(jsonCodec.read(rs.getString("tariff"), TariffJson.class)),
                 RateLimitJson.toDomain(jsonCodec.read(rs.getString("rate_limit_config"), RateLimitJson.class)),
-                rs.getString("credentials_ref"),
                 rs.getBoolean("enabled"));
         Provider provider = Provider.register(
                 ProviderId.of(SqlValues.uuid(rs, "id")),

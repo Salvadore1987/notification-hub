@@ -13,7 +13,6 @@ import uz.hamkorbank.commhub.adapter.out.persistence.support.SqlValues;
 import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.StreamStatus;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
@@ -41,11 +40,7 @@ public class StreamRowMapper implements RowMapper<Stream> {
 
     @Override
     public Stream mapRow(ResultSet rs, int rowNum) throws SQLException {
-        Stream stream = Stream.register(
-                StreamId.of(rs.getString("id")),
-                rs.getString("name"),
-                SqlValues.enumValue(rs, "integration_type", IntegrationType.class),
-                defaults(rs));
+        Stream stream = Stream.register(StreamId.of(rs.getString("id")), rs.getString("name"), defaults(rs));
         applyStatus(stream, SqlValues.enumValue(rs, "status", StreamStatus.class));
         stream.updateQuota(
                 QuotaConfigJson.toDomain(jsonCodec.read(rs.getString("quota_config"), QuotaConfigJson.class)));
@@ -53,7 +48,6 @@ public class StreamRowMapper implements RowMapper<Stream> {
                 RateLimitJson.toDomain(jsonCodec.read(rs.getString("rate_limit_config"), RateLimitJson.class)));
         stream.updateQuietHours(
                 QuietHoursJson.toDomain(jsonCodec.read(rs.getString("quiet_hours"), QuietHoursJson.class)));
-        stream.updateCredentialsRef(rs.getString("credentials_ref"));
         if (SqlValues.instant(rs, "last_activity_at") != null) {
             stream.touch(SqlValues.instant(rs, "last_activity_at"));
         }

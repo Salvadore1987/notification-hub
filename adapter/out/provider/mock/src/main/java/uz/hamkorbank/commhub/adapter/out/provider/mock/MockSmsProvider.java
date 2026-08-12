@@ -2,6 +2,7 @@ package uz.hamkorbank.commhub.adapter.out.provider.mock;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
@@ -21,9 +22,11 @@ public class MockSmsProvider implements SmsProviderPort {
     public static final AdapterType TYPE = AdapterType.of("mock-sms");
 
     private final MockProvider mock;
+    private final OutboundContentLog contentLog;
 
-    public MockSmsProvider(MockProvider mock) {
+    public MockSmsProvider(MockProvider mock, OutboundContentLog contentLog) {
         this.mock = mock;
+        this.contentLog = contentLog;
     }
 
     @Override
@@ -33,6 +36,7 @@ public class MockSmsProvider implements SmsProviderPort {
 
     @Override
     public ProviderAck submit(SmsSubmission submission) {
+        contentLog.record(submission);
         return mock.answer(
                 submission.provider(),
                 submission.messageId(),

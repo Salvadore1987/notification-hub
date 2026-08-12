@@ -52,7 +52,6 @@ export function ProviderFormModal({
         tariff: initial.tariff,
         rateLimit: initial.rateLimit,
         quota: initial.state?.quota,
-        credentialsRef: initial.state?.credentialsRef,
         endpointEntries: Object.entries(initial.state?.endpointConfig ?? {}).map(
           ([key, value]) => ({ key, value }),
         ),
@@ -125,13 +124,6 @@ export function ProviderFormModal({
         <Form.Item name="weight" label={t('providers.weight')} tooltip={t('providers.weightHint')}>
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item
-          name="credentialsRef"
-          label={t('streams.credentialsRef')}
-          tooltip={t('streams.credentialsRefHint')}
-        >
-          <Input placeholder="env:… / file:… / prop:…" />
-        </Form.Item>
 
         <Divider plain>{t('providers.tariff')}</Divider>
         <Form.Item
@@ -139,14 +131,14 @@ export function ProviderFormModal({
           label={t('providers.perMessage')}
           tooltip={t('providers.perMessageHint')}
         >
-          <Input placeholder="12.5000 UZS" />
+          <Input placeholder="12.50 UZS" />
         </Form.Item>
         <Form.Item
           name={['tariff', 'perSegment']}
           label={t('providers.perSegment')}
           tooltip={t('providers.perSegmentHint')}
         >
-          <Input placeholder="12.5000 UZS" />
+          <Input placeholder="12.50 UZS" />
         </Form.Item>
 
         <Divider plain>{t('streams.rateLimit')}</Divider>

@@ -7,7 +7,6 @@ import org.springframework.context.annotation.Configuration;
 import uz.hamkorbank.commhub.adapter.out.persistence.config.ConfigurationCacheProperties;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.ProviderConfigRepository;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 
 /**
  * The registries the provider adapters take their breakers and retries from (PR-01).
@@ -48,10 +47,10 @@ public class ProviderResilienceConfig {
             ProviderCallExecutor executor,
             ProviderThrottle throttle,
             ProviderRuntimeSettings runtimeSettings,
-            SecretResolverPort secrets,
             ClockPort clock,
-            ProviderRestClients clients) {
-        return new ProviderSupport(executor, throttle, runtimeSettings, secrets, clock, clients);
+            ProviderRestClients clients,
+            OutboundContentLog contentLog) {
+        return new ProviderSupport(executor, throttle, runtimeSettings, clock, clients, contentLog);
     }
 
     @Bean

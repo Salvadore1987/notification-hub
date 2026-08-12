@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import uz.hamkorbank.commhub.adapter.out.provider.playmobile.PlaymobileSendCodec.PlaymobileError;
 import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
@@ -21,7 +22,6 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSetting
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderThrottle;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.SecretResolverPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.SmsSubmission;
@@ -69,9 +69,9 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
     private final ProviderCallExecutor executor;
     private final ProviderThrottle throttle;
     private final ProviderMessageIdFactory providerMessageIds;
-    private final SecretResolverPort secrets;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
+    private final OutboundContentLog contentLog;
     private final RestClient client;
 
     public PlaymobileSmsAdapter(
@@ -85,9 +85,9 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
         Guard.notNull(support, "support");
         this.executor = support.executor();
         this.throttle = support.throttle();
-        this.secrets = support.secrets();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
+        this.contentLog = support.contentLog();
         this.client = support.clients().create(properties.http());
     }
 
@@ -116,6 +116,7 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
         if (submissions == null || submissions.isEmpty()) {
             return List.of();
         }
+        contentLog.recordAll(submissions);
         List<PlaymobileSend> sends = submissions.stream()
                 .map(submission -> new PlaymobileSend(submission, providerMessageIdOf(submission)))
                 .toList();
@@ -227,18 +228,17 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
     }
 
     /**
-     * Basic auth of §9.1, rebuilt per call from the secret store.
+     * Basic auth of §9.1, built per call from the deployment settings (SEC-04, ADR-0044).
      *
-     * <p>Cheap — the resolver caches — and it is what makes a credential rotation apply without a
-     * restart (SEC-04). The header value is never logged.
+     * <p>The header value is never logged, and neither is what it is built from.
      */
     private String basicAuth() {
         PlaymobileProperties.Credentials credentials = properties.credentials();
         if (!credentials.isConfigured()) {
             throw ProviderCallException.blocking(
-                    "NO_CREDENTIALS", "no credential references are configured for Playmobile (SEC-04)");
+                    "NO_CREDENTIALS", "no credentials are configured for Playmobile (SEC-04)");
         }
-        String pair = secrets.require(credentials.usernameRef()) + ':' + secrets.require(credentials.passwordRef());
+        String pair = credentials.username() + ':' + credentials.password();
         return "Basic " + Base64.getEncoder().encodeToString(pair.getBytes(StandardCharsets.UTF_8));
     }
 

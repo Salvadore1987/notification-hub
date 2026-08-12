@@ -100,7 +100,7 @@ model {
   secretStore = externalSystem 'Секрет-хранилище Банка' {
     #external
     technology 'Vault / K8s secrets'
-    description 'Учётные данные провайдеров. Модуль не ходит в Vault сам: платформа кладёт значение в окружение пода, Модуль читает его по ссылке env: (SEC-04, ADR-0036)'
+    description 'Учётные данные провайдеров. Модуль не ходит в Vault сам: платформа кладёт значение в окружение пода, Модуль читает его обычным свойством (SEC-04, ADR-0044)'
   }
 
   dataMart = externalSystem 'Витрина данных (BigData)' {
@@ -128,7 +128,7 @@ model {
     // ── Уровень 2: контейнеры ────────────────────────────────────────────────
 
     adminSpa = spa 'Админ-панель (SPA)' {
-      technology 'React 18, TypeScript, Vite, Ant Design 5, oidc-client-ts'
+      technology 'React 18, TypeScript, Vite, Ant Design 5'
       description '''
         Двенадцать разделов §11.2. Конфигурация развёртывания читается до первого рендера
         (public/config.json), типы API генерируются из OpenAPI админ-контракта.
@@ -338,12 +338,6 @@ model {
         description 'Единственная реализация MetricsPort плюс то, о чём ядру знать незачем: состояние circuit breaker-ов и возраст самой старой неопубликованной строки outbox (OBS-01)'
       }
 
-      secretAdapter = component 'Резолвер секретов' {
-        #driven
-        technology ':adapter:out:secret'
-        description 'Схемы env: (основная) и prop:, модификатор base64: для блобов; без схемы — литерал для локального стенда. Кэш с TTL, чтобы разрешение ссылки не повторялось на каждое сообщение (SEC-04, ADR-0036)'
-      }
-
       complianceAdapter = component 'Политики compliance' {
         #driven
         technology ':adapter:out:compliance'
@@ -398,7 +392,7 @@ model {
   analyst -[sync]-> hub.adminSpa 'Дашборд, статистика, отчёты'
   securityAuditor -[sync]-> hub.adminSpa 'Журнал аудита'
 
-  hub.adminSpa -[sync]-> sso 'Вход Code + PKCE, тихое продление' {
+  hub.adminSpa -[sync]-> sso 'Вход формой панели (direct grant), тихое продление' {
     technology 'OIDC'
   }
   hub.adminSpa -[sync]-> hub.app.adminApi 'Запросы панели' {
@@ -460,8 +454,7 @@ model {
   hub.app.smtpAdapter -[sync]-> hub.app.providerSupport 'То же'
   hub.app.fcmAdapter -[sync]-> hub.app.providerSupport 'То же'
   hub.app.apnsAdapter -[sync]-> hub.app.providerSupport 'То же'
-  hub.app.providerSupport -[sync]-> hub.app.secretAdapter 'Учётные данные по ссылке (SEC-04)'
-  hub.app.secretAdapter -[sync]-> secretStore 'Читает смонтированные значения'
+  hub.app -[sync]-> secretStore 'Значения приходят переменными окружения пода (SEC-04, ADR-0044)'
 
   hub.app.playmobileAdapter -[sync]-> playmobile 'POST /send' {
     technology 'HTTP/JSON, Basic auth'

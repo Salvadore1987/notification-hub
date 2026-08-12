@@ -14,9 +14,9 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 /**
  * Integration profile of one delivery provider (§6.1, FR-2.1, FR-2.5, FR-2.7).
  *
- * <p>Credentials never live in the domain: {@link #credentialsRef()} is a reference resolved through
- * {@code SecretResolverPort} against Vault/K8s secrets (SEC-04, SG-04). The adapter behind the profile
- * is identified by {@link AdapterType}, so a new provider is a new adapter only (AR-04).
+ * <p>Credentials never live in the domain, and no longer in the profile at all: they reach the adapter
+ * as deployment settings filled from the process environment (SEC-04, SG-04). The adapter behind the
+ * profile is identified by {@link AdapterType}, so a new provider is a new adapter only (AR-04).
  */
 public final class Provider extends AggregateRoot<ProviderId> {
 
@@ -31,7 +31,6 @@ public final class Provider extends AggregateRoot<ProviderId> {
     private Tariff tariff;
     private RateLimit rateLimit;
     private QuotaConfig quota;
-    private String credentialsRef;
     private boolean enabled;
     private boolean maintenance;
     private ProviderHealthStatus health;
@@ -47,7 +46,6 @@ public final class Provider extends AggregateRoot<ProviderId> {
         this.tariff = settings.tariff();
         this.rateLimit = settings.rateLimit() == null ? RateLimit.unlimited() : settings.rateLimit();
         this.quota = QuotaConfig.unlimited();
-        this.credentialsRef = settings.credentialsRef();
         this.enabled = settings.enabled();
         this.health = ProviderHealthStatus.UNKNOWN;
     }
@@ -114,10 +112,6 @@ public final class Provider extends AggregateRoot<ProviderId> {
         this.quota = Guard.notNull(newQuota, "newQuota");
     }
 
-    public void updateCredentialsRef(String newCredentialsRef) {
-        this.credentialsRef = newCredentialsRef;
-    }
-
     /** Whether the router may select this provider (FR-2.2, FR-2.7, FR-6.3). */
     public boolean isSelectable() {
         return enabled && !maintenance && health.selectable();
@@ -156,10 +150,6 @@ public final class Provider extends AggregateRoot<ProviderId> {
         return quota;
     }
 
-    public Optional<String> credentialsRef() {
-        return Optional.ofNullable(credentialsRef);
-    }
-
     public boolean isEnabled() {
         return enabled;
     }
@@ -194,9 +184,8 @@ public final class Provider extends AggregateRoot<ProviderId> {
      * @param weight relative share for weighted balancing (FR-2.3)
      * @param tariff price list; {@code null} when cost is not tracked for the provider
      * @param rateLimit throughput limits; {@code null} means unlimited
-     * @param credentialsRef reference to the credentials in the secret store (SEC-04)
      */
-    public record Settings(int weight, Tariff tariff, RateLimit rateLimit, String credentialsRef, boolean enabled) {
+    public record Settings(int weight, Tariff tariff, RateLimit rateLimit, boolean enabled) {
 
         public Settings {
             weight = validWeight(weight);
@@ -204,23 +193,19 @@ public final class Provider extends AggregateRoot<ProviderId> {
 
         /** Enabled provider with the default weight, no tariff and no rate limit. */
         public static Settings defaults() {
-            return new Settings(DEFAULT_WEIGHT, null, RateLimit.unlimited(), null, true);
+            return new Settings(DEFAULT_WEIGHT, null, RateLimit.unlimited(), true);
         }
 
         public Settings withTariff(Tariff newTariff) {
-            return new Settings(weight, newTariff, rateLimit, credentialsRef, enabled);
+            return new Settings(weight, newTariff, rateLimit, enabled);
         }
 
         public Settings withWeight(int newWeight) {
-            return new Settings(newWeight, tariff, rateLimit, credentialsRef, enabled);
+            return new Settings(newWeight, tariff, rateLimit, enabled);
         }
 
         public Settings withRateLimit(RateLimit newRateLimit) {
-            return new Settings(weight, tariff, newRateLimit, credentialsRef, enabled);
-        }
-
-        public Settings withCredentialsRef(String newCredentialsRef) {
-            return new Settings(weight, tariff, rateLimit, newCredentialsRef, enabled);
+            return new Settings(weight, tariff, newRateLimit, enabled);
         }
     }
 }

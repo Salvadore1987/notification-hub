@@ -30,7 +30,7 @@ include("adapter")
 listOf("admin", "callback", "contract", "importer", "kafka", "rest", "scheduler", "security")
     .forEach { name -> include("adapter:in:$name") }
 
-listOf("compliance", "kafka", "metrics", "persistence", "policy", "secret", "time")
+listOf("compliance", "kafka", "metrics", "persistence", "policy", "time")
     .forEach { name -> include("adapter:out:$name") }
 
 listOf("apns", "fcm", "mock", "playmobile", "smsgate", "smtp", "support")

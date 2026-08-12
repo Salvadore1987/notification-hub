@@ -9,11 +9,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * that makes "a stream sees only its own data" true on the messaging side, and they are granted to the
  * principal named here.
  *
- * <p>The password is a <em>reference</em>, resolved through {@code SecretResolverPort} exactly like the
- * provider credentials of SEC-04 — never a literal in a ConfigMap (NF-06). Unlike the provider
- * credentials it is read once, at startup: a Kafka client builds its JAAS configuration when it is
- * created and has no way to be handed a new one. Rotating the broker credential therefore costs a
- * rolling restart, which is what SEC-04's "without downtime" means for a horizontally scaled consumer.
+ * <p>The passwords arrive as values from the environment of the pod, exactly like the provider
+ * credentials of SEC-04 — never a literal in a ConfigMap (NF-06, ADR-0044). They are read once, at
+ * startup: a Kafka client builds its JAAS configuration when it is created and has no way to be handed
+ * a new one. Rotating the broker credential therefore costs a rolling restart, which is what SEC-04's
+ * "without downtime" means for a horizontally scaled consumer.
+ *
+ * <p>{@code toString} is masked, because a record prints its components and this one holds three.
  *
  * @param protocol {@code PLAINTEXT}, {@code SSL}, {@code SASL_PLAINTEXT} or {@code SASL_SSL}; empty
  *     leaves the client at its default and is the local stack
@@ -26,14 +28,22 @@ public record KafkaSecurityProperties(
         String protocol,
         String mechanism,
         String username,
-        String passwordRef,
+        String password,
         String truststoreLocation,
-        String truststorePasswordRef,
+        String truststorePassword,
         String keystoreLocation,
-        String keystorePasswordRef) {
+        String keystorePassword) {
 
     public static KafkaSecurityProperties none() {
         return new KafkaSecurityProperties(null, null, null, null, null, null, null, null);
+    }
+
+    @Override
+    public String toString() {
+        return "KafkaSecurityProperties[protocol=%s, mechanism=%s, username=%s, password=***, "
+                        .formatted(protocol, mechanism, username)
+                + "truststoreLocation=%s, truststorePassword=***, keystoreLocation=%s, keystorePassword=***]"
+                        .formatted(truststoreLocation, keystoreLocation);
     }
 
     /** Whether anything at all has to be applied to a client configuration. */

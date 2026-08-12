@@ -1,0 +1,162 @@
+# Значения локального стенда — окружение выбирать не нужно.
+@host = http://localhost:8080
+@streamId = demo-app
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Наблюдение: сообщения, рассылки, DLQ, статистика, аудит, дашборд.
+### Всё здесь читающее, кроме действий над рассылкой и DLQ.
+###
+### Период from/to — ISO-инстант С «Z» (2026-08-10T00:00:00Z); голая дата даёт 400.
+### По умолчанию последние 24 часа, максимум 92 дня — потому что message разбита на
+### партиции по accepted_at, и экран, открытый без периода, иначе прочесал бы все
+### партиции, которые хранит retention.
+### ИСКЛЮЧЕНИЕ: /dlq и /audit идут мимо этого механизма — у них нет ни окна по
+### умолчанию, ни потолка в 92 дня, проверяется только to >= from.
+###
+### Потолки limit разные: сообщения 500, рассылки 200, DLQ 500, аудит 1000.
+### ─────────────────────────────────────────────────────────────────────────────
+
+### ══ СООБЩЕНИЯ ═══════════════════════════════════════════════════════════════
+
+### Поиск сообщений
+# GET /messages — роли ADMIN, OPERATOR или VIEWER. Все параметры опциональны:
+# from, to, streamId, status, externalMessageId, recipient (ТОЧНЫЙ адрес, как
+# сохранён), correlationId, batchId (UUID), limit (50, максимум 500), offset.
+# VIEWER получает маскированные адреса — маскирование делается на выходе, а не в
+# запросе, потому что искать надо по полному адресу.
+# Каждый поиск пишет одну запись в аудит (SEC-08), и её сущность — ХЕШ адреса, а не
+# идентификатор сообщения: так вопрос «кто смотрел этого клиента» становится одним
+# индексным запросом.
+# Детализация рассылки — это тот же список с фильтром batchId, отдельного эндпоинта
+# нет намеренно.
+GET {{host}}/api/admin/v1/messages?from=2026-08-10T00:00:00Z&to=2026-08-12T00:00:00Z&streamId={{streamId}}&status=DELIVERED&limit=50&offset=0
+Authorization: Bearer {{adminToken}}
+
+### Карточка сообщения
+# GET /messages/{messageId} — те же роли, messageId обязан быть UUID.
+# Тело — ТОТ ЖЕ документ, что источник получает по своему /api/v1/messages/{id}:
+# оператор во время инцидента и система-источник смотрят на один и тот же ответ.
+GET {{host}}/api/admin/v1/messages/{{messageId}}
+Authorization: Bearer {{adminToken}}
+
+### ══ РАССЫЛКИ ════════════════════════════════════════════════════════════════
+
+### Список рассылок
+# GET /batches — роли ADMIN, OPERATOR или VIEWER. Параметры: from, to, streamId,
+# channel, status (ACCEPTED|PROCESSING|PAUSED|STOPPED|COMPLETED), activeOnly
+# (по умолчанию false), limit (50, максимум 200 — ниже, чем у сообщений), offset.
+GET {{host}}/api/admin/v1/batches?activeOnly=true&limit=50&offset=0
+Authorization: Bearer {{operatorToken}}
+
+### Карточка рассылки
+# GET /batches/{batchId} — batchId обязан быть UUID. Счётчики прогресса:
+# total, processed, sent, delivered, failed, completionPercent.
+GET {{host}}/api/admin/v1/batches/{{batchId}}
+Authorization: Bearer {{operatorToken}}
+
+### Управление рассылкой из панели
+# POST /batches/{batchId}/actions/{action} — роли ADMIN или OPERATOR, тела нет.
+# action ∈ start | pause | resume | stop (регистр не важен); что-то другое — 400
+# с перечнем допустимых.
+# X-Commhub-Reason НЕ обязателен (контроллер не отвергает запрос без него), но
+# останавливать чужую кампанию — ровно тот случай, который должен быть записан с
+# именем человека.
+POST {{host}}/api/admin/v1/batches/{{batchId}}/actions/pause
+Authorization: Bearer {{operatorToken}}
+X-Commhub-Reason: %D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0
+
+### ══ DLQ ═════════════════════════════════════════════════════════════════════
+
+### Очередь неотправленного
+# GET /dlq — роли ADMIN или OPERATOR. from/to здесь БЕЗ окна по умолчанию и без
+# потолка в 92 дня: проверяется только to >= from.
+# reason — любая из RejectionReason (NO_ROUTE_AVAILABLE, PROVIDER_REJECTED,
+# ATTEMPTS_EXHAUSTED, QUOTA_EXCEEDED, SUPPRESSED, …).
+# includeRetried и includeArchived по умолчанию false. limit 50, максимум 500.
+GET {{host}}/api/admin/v1/dlq?reason=ATTEMPTS_EXHAUSTED&includeRetried=false&includeArchived=false&limit=50&offset=0
+Authorization: Bearer {{operatorToken}}
+
+### Повторить отправку
+# POST /dlq/retry — роли ADMIN или OPERATOR. messageIds ОБЯЗАТЕЛЕН и непуст,
+# каждый элемент — UUID. Никакого «повторить всё по фильтру»: список идентификаторов
+# указывается явно.
+# Заголовка обоснования у этого эндпоинта нет вовсе.
+# Отвечает всегда 200: {applied[], skipped[]} — пропущенные это те, что уже не в DLQ.
+POST {{host}}/api/admin/v1/dlq/retry
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+
+{ "messageIds": ["{{messageId}}"] }
+
+### Убрать в архив
+# POST /dlq/archive — те же роли и то же тело. X-Commhub-Reason необязателен, но
+# записывается: архивирование это решение «разбирать не будем».
+POST {{host}}/api/admin/v1/dlq/archive
+Authorization: Bearer {{operatorToken}}
+Content-Type: application/json
+X-Commhub-Reason: known-issue-INC-4711
+
+{ "messageIds": ["{{messageId}}"] }
+
+### ══ СТАТИСТИКА ══════════════════════════════════════════════════════════════
+
+### Сводка
+# GET /statistics — роли ADMIN или ANALYST. Возвращает ГОЛЫЙ МАССИВ строк, а не
+# страницу: ни total, ни limit тут нет.
+# dimension по умолчанию CHANNEL, допустимы CHANNEL|PROVIDER|STREAM|BATCH|DAY|HOUR.
+# Фильтры: channel, streamId, provider, batchId, includeTest (по умолчанию false).
+# Тестовые отправки — это ИЗМЕРЕНИЕ, а не мусор: они помечены и включаются флажком,
+# чтобы оператор, проверявший конфигурацию, видел свою отправку.
+GET {{host}}/api/admin/v1/statistics?dimension=PROVIDER&from=2026-08-10T00:00:00Z&to=2026-08-12T00:00:00Z&includeTest=false
+Authorization: Bearer {{analystToken}}
+
+### Выгрузка статистики в CSV
+# GET /statistics/export — те же роли и те же параметры.
+# Отдаёт text/csv;charset=UTF-8 с BOM (иначе Excel коверкает кириллицу) и
+# Content-Disposition: attachment. Ячейки, начинающиеся с = + - @, экранируются
+# апострофом, чтобы не стать формулой.
+# Колонки: key,accepted,delivered,failed,rejected,inFlight,segments,cost,deliveryRate.
+# XLSX намеренно не производится.
+GET {{host}}/api/admin/v1/statistics/export?dimension=PROVIDER&from=2026-08-10T00:00:00Z&to=2026-08-12T00:00:00Z
+Authorization: Bearer {{analystToken}}
+
+### ══ АУДИТ ═══════════════════════════════════════════════════════════════════
+
+### Журнал аудита
+# GET /audit — роли ADMIN или SECURITY_AUDITOR. Намеренно НЕ открыт ни оператору,
+# ни аналитику.
+# from/to — как у DLQ: без окна по умолчанию и без потолка.
+# Фильтры: username, action, entityType, entityId. limit 50, максимум 1000.
+# Журнал запрещает UPDATE, DELETE и TRUNCATE на уровне базы: журнал, который может
+# очистить тест, может очистить и администратор.
+GET {{host}}/api/admin/v1/audit?from=2026-08-10T00:00:00Z&to=2026-08-12T00:00:00Z&limit=50&offset=0
+Authorization: Bearer {{auditorToken}}
+
+### Выгрузка аудита в CSV
+# GET /audit/export — те же роли и те же ФИЛЬТРЫ, но БЕЗ limit/offset: выгрузка
+# ходит по запросу до конца, а не постранично.
+# Потолок 50 000 строк, и он объявляется заголовком X-Commhub-Truncated: true|false —
+# он есть всегда, потому что необъявленное усечение это файл, который выглядит полным.
+# Колонки: occurredAt,username,action,entityType,entityId,before,after,reason,sourceIp.
+GET {{host}}/api/admin/v1/audit/export?from=2026-08-10T00:00:00Z&to=2026-08-12T00:00:00Z
+Authorization: Bearer {{auditorToken}}
+
+### ══ ДАШБОРД ═════════════════════════════════════════════════════════════════
+
+### Сводка дашборда
+# GET /dashboard — доступен ЛЮБОЙ из ролей §10.1. Параметры from, to, includeTest.
+# Алертов здесь нет намеренно: OBS-04 уже считает Alertmanager, и он знает про поды,
+# переставшие отдавать метрики, чего запрос в базу увидеть не может.
+# otpLatencyP99Millis: null означает «трафика OTP не было», а не ноль.
+GET {{host}}/api/admin/v1/dashboard?includeTest=false
+Authorization: Bearer {{viewerToken}}
+
+### Поток обновлений дашборда (SSE)
+# GET /dashboard/stream — text/event-stream, событие dashboard раз в 15 секунд,
+# таймаут эмиттера 30 минут. Период пересчитывается на каждой отправке, так что без
+# from окно скользящее.
+# ВНИМАНИЕ: запрос НЕ ЗАВЕРШИТСЯ сам — не запускайте его в общем прогоне файла,
+# останавливайте вручную.
+GET {{host}}/api/admin/v1/dashboard/stream
+Authorization: Bearer {{viewerToken}}
+Accept: text/event-stream

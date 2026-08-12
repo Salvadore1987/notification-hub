@@ -15,9 +15,8 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 /**
  * A provider profile as the administration screens see it (FR-2.1, FR-2.5, FR-2.7, PR-02).
  *
- * <p>{@link State#credentialsRef()} is the reference, never the secret behind it: the panel shows
- * operators <em>where</em> the credentials come from so a wrong reference is visible, and the value
- * itself never leaves the secret store (SEC-04, SG-04).
+ * <p>No credential of any kind is part of this view: they are deployment settings filled from the
+ * process environment, and nothing that reaches the panel ever names one (SEC-04, SG-04).
  */
 public record ProviderView(
         ProviderId providerId,
@@ -55,7 +54,6 @@ public record ProviderView(
             ProviderHealthStatus health,
             boolean selectable,
             QuotaConfig quota,
-            String credentialsRef,
             Map<String, String> endpointConfig) {
 
         public State {

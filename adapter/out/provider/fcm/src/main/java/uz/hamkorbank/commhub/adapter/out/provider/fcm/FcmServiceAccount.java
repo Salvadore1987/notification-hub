@@ -13,8 +13,8 @@ import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 /**
  * The Google service account key, parsed (PU-01, SEC-04).
  *
- * <p>The key arrives as the JSON file Google hands out, resolved through {@code SecretResolverPort}
- * like every other credential — never from the yaml, never from the image. Four of its fields matter:
+ * <p>The key arrives as the JSON file Google hands out, in a variable of the pod's environment like
+ * every other credential — never from the yaml, never from the image. Four of its fields matter:
  * the project the notifications are sent for, the account they are sent as, its private key, and the
  * token endpoint to exchange them at.
  *
