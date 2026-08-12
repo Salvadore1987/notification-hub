@@ -68,7 +68,6 @@ public interface ConfigMapper {
         return new StreamView(
                 stream.id(),
                 stream.name(),
-                stream.integrationType(),
                 stream.status(),
                 stream.connectionStatus(now),
                 stream.defaults(),

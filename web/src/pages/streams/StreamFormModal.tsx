@@ -47,7 +47,6 @@ export function StreamFormModal({
       form.setFieldsValue({
         streamId: initial.streamId,
         name: initial.name,
-        integrationType: initial.integrationType,
         defaults: initial.defaults,
         quota: initial.limits?.quota,
         quietHours: initial.limits?.quietHours,
@@ -95,14 +94,6 @@ export function StreamFormModal({
           rules={[{ required: true }]}
         >
           <Input />
-        </Form.Item>
-        <Form.Item
-          name="integrationType"
-          label={t('streams.integrationType')}
-          tooltip={t('streams.integrationTypeHint')}
-          rules={[{ required: true }]}
-        >
-          <Select options={enumOptions(['REST', 'KAFKA'])} />
         </Form.Item>
 
         <Divider plain>{t('streams.defaults')}</Divider>

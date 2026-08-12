@@ -11,7 +11,6 @@ import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.Tariff;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
 import uz.hamkorbank.commhub.domain.model.vo.Money;
@@ -56,13 +55,13 @@ public final class HubConfiguration {
         providers.save(RoutingPolicy.of(
                 RoutingPolicyId.newId(), RoutingPolicy.Match.any(), RoutingPolicy.Action.toChannel(Channel.SMS), 10));
 
-        streams.save(stream(OTP_STREAM, "iBank OTP", IntegrationType.REST, TrafficClass.CRITICAL_OTP));
-        streams.save(stream(TRANSACTIONAL_STREAM, "Core banking", IntegrationType.KAFKA, TrafficClass.TRANSACTIONAL));
-        streams.save(stream(BULK_STREAM, "Marketing", IntegrationType.REST, TrafficClass.NOTIFICATION));
+        streams.save(stream(OTP_STREAM, "iBank OTP", TrafficClass.CRITICAL_OTP));
+        streams.save(stream(TRANSACTIONAL_STREAM, "Core banking", TrafficClass.TRANSACTIONAL));
+        streams.save(stream(BULK_STREAM, "Marketing", TrafficClass.NOTIFICATION));
     }
 
-    private static Stream stream(StreamId id, String name, IntegrationType integration, TrafficClass trafficClass) {
-        return Stream.register(id, name, integration, Stream.Defaults.of(Channel.SMS, trafficClass));
+    private static Stream stream(StreamId id, String name, TrafficClass trafficClass) {
+        return Stream.register(id, name, Stream.Defaults.of(Channel.SMS, trafficClass));
     }
 
     private static Provider provider(ProviderCode code, String adapterType) {

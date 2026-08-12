@@ -129,9 +129,9 @@ X-Commhub-Reason: back-to-service
 ### Зарегистрировать поток
 # POST /streams/{streamId} — роль ADMIN. Идентификатор ^[a-z0-9][a-z0-9._-]{1,63}$,
 # СТРОЧНЫМИ, и после регистрации не меняется: источники указывают его в каждом
-# сообщении. Обязательны name и integrationType (KAFKA|REST).
-# integrationType ничего не ограничивает — значение описательное, его не читает ни
-# один listener: поток, заведённый как REST, принимает и из Kafka.
+# сообщении. Обязательно name.
+# Способ интеграции у потока не хранится (ADR-0045): один и тот же поток принимается
+# и по REST, и из Kafka — транспорт выбирает источник в момент вызова.
 # defaults.balancingStrategy — не дефолт, а ПЕРЕОПРЕДЕЛЕНИЕ канальной стратегии:
 # пусто = работает канальная. То же и с quietHours: окно потока заменяет канальное
 # целиком, а не сужает его.
@@ -141,7 +141,6 @@ Content-Type: application/json
 
 {
   "name": "Демо-приложение",
-  "integrationType": "REST",
   "defaults": { "channel": "SMS", "trafficClass": "TRANSACTIONAL", "priority": "NORMAL" },
   "quota": { "dailyCount": 100000, "behavior": "ALERT_ONLY" },
   "rateLimit": { "tps": 50, "perMinute": 2000, "perRecipientPerHour": 5 }
@@ -154,7 +153,7 @@ Authorization: Bearer {{adminToken}}
 
 ### Изменить поток
 # PUT /streams/{streamId} — роль ADMIN. ЧАСТИЧНОЕ обновление: null = «не трогать»,
-# name и integrationType здесь игнорируются.
+# name здесь игнорируется.
 # Две ловушки:
 #  • rateLimit в компактном конструкторе превращает пропущенные поля в 0 (= без
 #    потолка), поэтому объект отправляется целиком либо не отправляется вовсе;

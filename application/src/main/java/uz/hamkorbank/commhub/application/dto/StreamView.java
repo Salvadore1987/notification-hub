@@ -7,7 +7,6 @@ import uz.hamkorbank.commhub.domain.model.QuotaConfig;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
 import uz.hamkorbank.commhub.domain.model.Stream;
 import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.StreamStatus;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.support.Guard;
@@ -20,7 +19,6 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 public record StreamView(
         StreamId streamId,
         String name,
-        IntegrationType integrationType,
         StreamStatus status,
         ConnectionStatus connectionStatus,
         Stream.Defaults defaults,
@@ -30,7 +28,6 @@ public record StreamView(
     public StreamView {
         Guard.notNull(streamId, "StreamView.streamId");
         Guard.notBlank(name, "StreamView.name");
-        Guard.notNull(integrationType, "StreamView.integrationType");
         Guard.notNull(status, "StreamView.status");
         Guard.notNull(connectionStatus, "StreamView.connectionStatus");
         Guard.notNull(defaults, "StreamView.defaults");

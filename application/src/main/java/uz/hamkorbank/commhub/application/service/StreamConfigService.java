@@ -47,8 +47,7 @@ public class StreamConfigService implements ManageStreams {
             throw new ConfigurationConflictException("stream %s is already registered"
                     .formatted(command.streamId().value()));
         });
-        Stream stream =
-                Stream.register(command.streamId(), command.name(), command.integrationType(), command.defaults());
+        Stream stream = Stream.register(command.streamId(), command.name(), command.defaults());
         if (command.quota() != null) {
             stream.updateQuota(command.quota());
         }

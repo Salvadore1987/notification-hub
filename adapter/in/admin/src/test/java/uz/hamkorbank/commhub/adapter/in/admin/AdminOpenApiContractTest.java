@@ -25,7 +25,6 @@ import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ChannelStatus;
 import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.ProviderHealthStatus;
@@ -120,7 +119,6 @@ class AdminOpenApiContractTest {
             Map.entry("TemplateCatalogStatus", TemplateCatalogStatus.class),
             Map.entry("TrafficClass", TrafficClass.class),
             Map.entry("Priority", Priority.class),
-            Map.entry("IntegrationType", IntegrationType.class),
             Map.entry("StreamStatus", StreamStatus.class),
             Map.entry("ConnectionStatus", ConnectionStatus.class),
             Map.entry("ChannelStatus", ChannelStatus.class),

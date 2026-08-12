@@ -16,7 +16,6 @@ import uz.hamkorbank.commhub.domain.model.content.PushContent;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
 import uz.hamkorbank.commhub.domain.model.type.TrafficClass;
 import uz.hamkorbank.commhub.domain.model.vo.AdapterType;
@@ -52,13 +51,10 @@ public final class ApplicationFixtures {
         return MessageContents.of(SmsContent.of("Kod: 123456", "HAMKORBANK"));
     }
 
-    /** Active REST stream with SMS as its default channel and unlimited quotas. */
+    /** Active stream with SMS as its default channel and unlimited quotas. */
     public static Stream stream() {
         return Stream.register(
-                STREAM_ID,
-                "Mobile application",
-                IntegrationType.REST,
-                Stream.Defaults.of(Channel.SMS, TrafficClass.TRANSACTIONAL));
+                STREAM_ID, "Mobile application", Stream.Defaults.of(Channel.SMS, TrafficClass.TRANSACTIONAL));
     }
 
     public static SubmitMessageCommand submitCommand() {

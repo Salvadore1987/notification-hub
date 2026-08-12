@@ -177,7 +177,6 @@ public interface AdminViewMapper {
         return new StreamResponse(
                 view.streamId().value(),
                 view.name(),
-                view.integrationType().name(),
                 view.status().name(),
                 view.connectionStatus().name(),
                 toStreamDefaults(view.defaults()),

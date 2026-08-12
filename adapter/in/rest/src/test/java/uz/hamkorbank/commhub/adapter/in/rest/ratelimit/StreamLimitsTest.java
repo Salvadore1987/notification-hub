@@ -16,7 +16,6 @@ import uz.hamkorbank.commhub.adapter.in.rest.ratelimit.RateLimitProperties.Strea
 import uz.hamkorbank.commhub.application.port.out.StreamRepository;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
 import uz.hamkorbank.commhub.domain.model.Stream;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 
 /** Per-stream request limits come from the registry, with the deployment defaults behind them (IR-02). */
@@ -113,6 +112,6 @@ class StreamLimitsTest {
     }
 
     private static Stream stream() {
-        return Stream.register(STREAM, "iBank retail", IntegrationType.REST, Stream.Defaults.none());
+        return Stream.register(STREAM, "iBank retail", Stream.Defaults.none());
     }
 }

@@ -13,7 +13,6 @@ import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ConnectionStatus;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.QuotaExhaustionBehavior;
 import uz.hamkorbank.commhub.domain.model.type.StreamStatus;
@@ -30,13 +29,12 @@ class StreamTest {
     @DisplayName("a registered stream is active with unlimited quotas")
     void registrationDefaults() {
         // Act
-        Stream stream = Stream.register(STREAM_ID, "Mobile application", IntegrationType.KAFKA, Stream.Defaults.none());
+        Stream stream = Stream.register(STREAM_ID, "Mobile application", Stream.Defaults.none());
 
         // Assert
         assertThat(stream.status()).isEqualTo(StreamStatus.ACTIVE);
         assertThat(stream.isAcceptingTraffic()).isTrue();
         assertThat(stream.quota().isUnlimited()).isTrue();
-        assertThat(stream.integrationType()).isEqualTo(IntegrationType.KAFKA);
         assertThat(stream.name()).isEqualTo("Mobile application");
         assertThat(stream.quietHours()).isEmpty();
         assertThat(stream.lastActivityAt()).isEmpty();
@@ -46,8 +44,7 @@ class StreamTest {
     @DisplayName("TC-02: an explicit traffic class wins over the stream default")
     void explicitTrafficClassWins() {
         // Arrange
-        Stream stream = Stream.register(
-                STREAM_ID, "CRM", IntegrationType.REST, Stream.Defaults.of(Channel.SMS, TrafficClass.NOTIFICATION));
+        Stream stream = Stream.register(STREAM_ID, "CRM", Stream.Defaults.of(Channel.SMS, TrafficClass.NOTIFICATION));
 
         // Act + Assert
         assertThat(stream.effectiveTrafficClass(TrafficClass.CRITICAL_OTP)).isEqualTo(TrafficClass.CRITICAL_OTP);
@@ -60,7 +57,7 @@ class StreamTest {
     @DisplayName("without any default the traffic class falls back to bulk NOTIFICATION")
     void fallsBackToBulkTraffic() {
         // Arrange
-        Stream stream = Stream.register(STREAM_ID, "Ad hoc", IntegrationType.REST, Stream.Defaults.none());
+        Stream stream = Stream.register(STREAM_ID, "Ad hoc", Stream.Defaults.none());
 
         // Act + Assert
         assertThat(stream.effectiveTrafficClass(null)).isEqualTo(TrafficClass.NOTIFICATION);
@@ -77,7 +74,6 @@ class StreamTest {
         Stream stream = Stream.register(
                 STREAM_ID,
                 "Marketing",
-                IntegrationType.KAFKA,
                 new Stream.Defaults(Channel.SMS, null, TrafficClass.NOTIFICATION, Priority.LOW, null));
 
         // Act + Assert
@@ -88,7 +84,7 @@ class StreamTest {
     @DisplayName("FR-3.2: a suspended stream stops accepting traffic")
     void suspensionStopsTraffic() {
         // Arrange
-        Stream stream = Stream.register(STREAM_ID, "CRM", IntegrationType.REST, Stream.Defaults.none());
+        Stream stream = Stream.register(STREAM_ID, "CRM", Stream.Defaults.none());
 
         // Act
         stream.suspend();
@@ -108,7 +104,7 @@ class StreamTest {
     @DisplayName("FR-1.3: the connection status follows the last observed activity")
     void connectionStatusFollowsActivity() {
         // Arrange
-        Stream stream = Stream.register(STREAM_ID, "CRM", IntegrationType.KAFKA, Stream.Defaults.none());
+        Stream stream = Stream.register(STREAM_ID, "CRM", Stream.Defaults.none());
 
         // Act + Assert
         assertThat(stream.connectionStatus(NOW)).isEqualTo(ConnectionStatus.UNKNOWN);
@@ -127,7 +123,7 @@ class StreamTest {
     @DisplayName("quotas, quiet hours, credentials and defaults are editable at runtime (AD-07)")
     void configurationIsEditable() {
         // Arrange
-        Stream stream = Stream.register(STREAM_ID, "CRM", IntegrationType.KAFKA, Stream.Defaults.none());
+        Stream stream = Stream.register(STREAM_ID, "CRM", Stream.Defaults.none());
 
         // Act
         stream.updateQuota(QuotaConfig.ofCounts(1_000L, 10_000L, QuotaExhaustionBehavior.BLOCK_AND_ALERT));
@@ -160,14 +156,14 @@ class StreamTest {
     void nameIsRequired() {
         // Act + Assert
         assertThatExceptionOfType(DomainValidationException.class)
-                .isThrownBy(() -> Stream.register(STREAM_ID, " ", IntegrationType.KAFKA, Stream.Defaults.none()));
+                .isThrownBy(() -> Stream.register(STREAM_ID, " ", Stream.Defaults.none()));
     }
 
     @Test
     @DisplayName("IR-02, FR-2.3: a stream carries its own request limit and balancing strategy")
     void streamLimitAndStrategyAreConfigurable() {
         // Arrange
-        Stream stream = Stream.register(STREAM_ID, "iBank", IntegrationType.REST, Stream.Defaults.none());
+        Stream stream = Stream.register(STREAM_ID, "iBank", Stream.Defaults.none());
 
         // Act
         stream.updateRateLimit(new RateLimit(500, 20_000, 0));
@@ -177,7 +173,7 @@ class StreamTest {
         assertThat(stream.rateLimit().tps()).isEqualTo(500);
         assertThat(stream.rateLimit().perMinute()).isEqualTo(20_000);
         assertThat(stream.defaults().balancingStrategyOptional()).contains(BalancingStrategy.LEAST_COST);
-        assertThat(Stream.register(STREAM_ID, "CRM", IntegrationType.KAFKA, Stream.Defaults.none())
+        assertThat(Stream.register(STREAM_ID, "CRM", Stream.Defaults.none())
                         .rateLimit()
                         .isUnlimited())
                 .isTrue();

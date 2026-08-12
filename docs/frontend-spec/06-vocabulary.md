@@ -95,13 +95,6 @@ ROUND_ROBIN  WEIGHTED  LEAST_COST  PRIMARY_ONLY
 `PRIMARY_ONLY` — not `PRIORITY`. This value was wrong in the contract for a while precisely because it
 was written inline in five places instead of as one named schema.
 
-### `IntegrationType`
-```
-KAFKA  REST
-```
-Descriptive only — a stream registered as `REST` still accepts from Kafka. There is no `BOTH`; the
-contract once offered one, and registering a stream that way was a guaranteed 400.
-
 ### `StreamStatus`
 ```
 ACTIVE  SUSPENDED  DISABLED

@@ -5,7 +5,6 @@ import uz.hamkorbank.commhub.domain.model.QuietHours;
 import uz.hamkorbank.commhub.domain.model.QuotaConfig;
 import uz.hamkorbank.commhub.domain.model.RateLimit;
 import uz.hamkorbank.commhub.domain.model.Stream;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
@@ -22,7 +21,6 @@ public record RegisterStreamCommand(
         Actor actor,
         StreamId streamId,
         String name,
-        IntegrationType integrationType,
         Stream.Defaults defaults,
         QuotaConfig quota,
         QuietHours quietHours,
@@ -32,7 +30,6 @@ public record RegisterStreamCommand(
         Guard.notNull(actor, "RegisterStreamCommand.actor");
         Guard.notNull(streamId, "RegisterStreamCommand.streamId");
         Guard.notBlank(name, "RegisterStreamCommand.name");
-        Guard.notNull(integrationType, "RegisterStreamCommand.integrationType");
         defaults = defaults == null ? Stream.Defaults.none() : defaults;
     }
 }

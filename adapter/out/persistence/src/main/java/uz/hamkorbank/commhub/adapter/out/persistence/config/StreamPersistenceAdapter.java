@@ -20,7 +20,7 @@ import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 public class StreamPersistenceAdapter implements StreamRepository {
 
     private static final String SELECT = """
-            SELECT s.id, s.name, s.integration_type, s.status, s.default_channel, s.default_provider_id,
+            SELECT s.id, s.name, s.status, s.default_channel, s.default_provider_id,
                    s.default_traffic_class, s.default_priority, s.default_balancing_strategy,
                    s.quota_config, s.rate_limit_config, s.quiet_hours, s.last_activity_at,
                    p.code AS default_provider_code,
@@ -31,15 +31,14 @@ public class StreamPersistenceAdapter implements StreamRepository {
             """;
 
     private static final String UPSERT = """
-            INSERT INTO stream (id, name, integration_type, status, default_channel, default_provider_id,
+            INSERT INTO stream (id, name, status, default_channel, default_provider_id,
                                 default_traffic_class, default_priority, default_balancing_strategy,
                                 quota_config, rate_limit_config, quiet_hours, last_activity_at)
-            VALUES (:id, :name, :integrationType, :status, :defaultChannel, :defaultProviderId,
+            VALUES (:id, :name, :status, :defaultChannel, :defaultProviderId,
                     :defaultTrafficClass, :defaultPriority, :defaultStrategy, CAST(:quotaConfig AS jsonb),
                     CAST(:rateLimit AS jsonb), CAST(:quietHours AS jsonb), :lastActivityAt)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
-                integration_type = EXCLUDED.integration_type,
                 status = EXCLUDED.status,
                 default_channel = EXCLUDED.default_channel,
                 default_provider_id = EXCLUDED.default_provider_id,
@@ -70,7 +69,6 @@ public class StreamPersistenceAdapter implements StreamRepository {
                 .sql(UPSERT)
                 .param("id", stream.id().value())
                 .param("name", stream.name())
-                .param("integrationType", stream.integrationType().name())
                 .param("status", stream.status().name())
                 .param("defaultChannel", SqlValues.nameOf(stream.defaults().channel()))
                 .param(

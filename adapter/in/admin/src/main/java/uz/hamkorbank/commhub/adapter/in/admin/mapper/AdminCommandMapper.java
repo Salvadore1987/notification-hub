@@ -42,7 +42,6 @@ import uz.hamkorbank.commhub.domain.model.TemplateRef;
 import uz.hamkorbank.commhub.domain.model.type.BalancingStrategy;
 import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.type.ContentLocale;
-import uz.hamkorbank.commhub.domain.model.type.IntegrationType;
 import uz.hamkorbank.commhub.domain.model.type.Priority;
 import uz.hamkorbank.commhub.domain.model.type.PushPlatform;
 import uz.hamkorbank.commhub.domain.model.type.QuietHoursBehavior;
@@ -87,7 +86,6 @@ public interface AdminCommandMapper {
                 actor,
                 AdminValues.parseRequired(streamId, "streamId", StreamId::of),
                 request.name(),
-                AdminValues.requiredEnum(IntegrationType.class, request.integrationType(), "integrationType"),
                 toStreamDefaults(request, provider),
                 toQuota(request.quota()),
                 toQuietHours(request.quietHours()),

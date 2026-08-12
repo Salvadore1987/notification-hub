@@ -2747,12 +2747,6 @@ export interface components {
         TrafficClass: "CRITICAL_OTP" | "TRANSACTIONAL" | "NOTIFICATION";
         /** @enum {string} */
         Priority: "REALTIME" | "HIGH" | "NORMAL" | "LOW";
-        /**
-         * @description Как система-источник подаёт сообщения (FR-1.1, FR-1.3). Значение описательное: приём
-         *     по нему не ограничивается, поток, заведённый как `REST`, принимает и из Kafka.
-         * @enum {string}
-         */
-        IntegrationType: "KAFKA" | "REST";
         /** @enum {string} */
         StreamStatus: "ACTIVE" | "SUSPENDED" | "DISABLED";
         /**
@@ -3046,7 +3040,6 @@ export interface components {
         Stream: {
             streamId?: string;
             name?: string;
-            integrationType?: components["schemas"]["IntegrationType"];
             status?: components["schemas"]["StreamStatus"];
             connectionStatus?: components["schemas"]["ConnectionStatus"];
             defaults?: components["schemas"]["StreamDefaults"];
@@ -3068,7 +3061,6 @@ export interface components {
         };
         StreamRequest: {
             name?: string;
-            integrationType?: components["schemas"]["IntegrationType"];
             defaults?: components["schemas"]["StreamDefaults"];
             quota?: components["schemas"]["Quota"];
             quietHours?: components["schemas"]["QuietHours"];

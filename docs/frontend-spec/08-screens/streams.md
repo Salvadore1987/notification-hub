@@ -24,7 +24,6 @@ Refresh button.
 |---|---|
 | Stream | `streamId` |
 | Name | `name` |
-| Integration | `integrationType` |
 | Status | `status` (`StreamStatus`) |
 | Connection | `connectionStatus` — **observed, read-only** |
 | Defaults | `defaults` summarised |
@@ -55,10 +54,13 @@ clears anything.
 |---|---|
 | `streamId` | Pattern `^[a-z0-9][a-z0-9._-]{1,63}$` — **lowercase**. `PlayMobile` is refused. Note this is the opposite case rule from provider and template codes. **Disabled when editing**: source systems name it in every message, so it never changes after registration. |
 | `name` | Free text |
-| `integrationType` | `KAFKA` or `REST`. Descriptive only — a stream registered as `REST` still accepts from Kafka. |
 
 **There is no credentials field on a stream** (ADR-0044). Nothing in the configuration holds or
 resolves a secret — do not add a field for one.
+
+**There is no integration-type field either** (ADR-0045). A stream is not bound to a transport: the same
+stream is accepted over REST and from Kafka, and the source system picks per call. The field used to
+exist, constrained nothing, and was silently dropped by `PUT` — do not reintroduce it as a label.
 
 **Stream defaults** (`defaults`) — applied when the source system does not name them:
 `channel`, `provider`, `trafficClass`, `priority`, `balancingStrategy`.
