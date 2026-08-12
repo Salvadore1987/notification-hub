@@ -1,0 +1,12 @@
+{
+  "action": "CREATE",
+  "batch": {
+    "batchId": "019ff5b0-1000-7000-8000-000000000001",
+    "streamId": "mobile-app",
+    "channel": "SMS",
+    "trafficClass": "NOTIFICATION",
+    "expectedTotal": 2
+  },
+  "actor": "crm",
+  "reason": "демонстрационная рассылка"
+}

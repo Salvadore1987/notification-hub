@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "streamId": "mobile-app",
+  "externalMessageId": "kafka-batch-item-0001",
+  "batchId": "019ff5b0-1000-7000-8000-000000000001",
+  "recipient": {
+    "clientId": "CL-0003",
+    "msisdn": "998901234500"
+  },
+  "channels": {
+    "requested": ["SMS"]
+  },
+  "content": {
+    "sms": {
+      "text": "Уважаемый клиент, тариф изменится с 1 сентября."
+    }
+  },
+  "dedupKey": "kafka-batch-CL-0003-0001"
+}

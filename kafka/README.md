@@ -1,0 +1,127 @@
+# Kafka-коллекция
+
+Готовые документы для публикации во входящие топики Модуля (§8.1 IK-01) — то же самое,
+что делает коллекция [`../http/`](../http/README.md) для REST, только транспорт другой.
+Каждый файл это одна запись Kafka: значение записи есть ровно содержимое файла.
+
+Коллекция ничем не собирается и ни на что не влияет: Gradle её не видит, Spotless и
+Checkstyle `.json` не трогают.
+
+## Как пользоваться
+
+1. Поднять окружение и приложение:
+
+   ```bash
+   docker compose up -d
+   ./gradlew :bootstrap:bootRun
+   ```
+
+2. Настроить контур, если база пустая: `../http/10-config.http` сверху вниз либо
+   [`../docs/QUICKSTART-SEND.md`](../docs/QUICKSTART-SEND.md) §1. Порядок жёсткий —
+   **провайдер → канал → поток**.
+3. Опубликовать нужный файл в его топик (см. таблицу ниже).
+
+**Во всех файлах `"streamId": "mobile-app"`** — это поток локального стенда. Если контур
+поднят через `../http/10-config.http`, поток называется `demo-app`: поменяйте одно поле.
+
+## Топик решает класс трафика
+
+| Топик | Класс трафика | Ключ партиционирования |
+|---|---|---|
+| `comm.inbound.critical.v1` | `CRITICAL_OTP` | получатель |
+| `comm.inbound.transactional.v1` | `TRANSACTIONAL` | получатель |
+| `comm.inbound.notification.v1` | `NOTIFICATION`, элементы рассылок | `batchId` |
+| `comm.inbound.batch-control.v1` | заголовки и команды рассылок | `batchId` |
+
+**Класс трафика берётся из топика и перекрывает документ** (`InboundMessageCodec.read(root,
+trafficClass)`), поэтому поля `trafficClass` в примерах сообщений нет вовсе — оно всё равно
+было бы проигнорировано. Это и есть изоляция TC-01: у каждого класса свой контейнер, свой пул
+потоков и своя consumer-группа, и payload, умеющий себя переклассифицировать, вышел бы из
+пула OTP, в который его положили. Единственное исключение — `trafficClass` **внутри блока
+`batch`** заголовка рассылки: там его читает `InboundBatchCodec`, потому что топик управления
+общий для всех классов.
+
+Ключ нужен только для партиционирования — **listener его не читает** (`onCritical(String
+document)` принимает одно тело), входящих заголовков не требуется. Значение — обычная
+JSON-строка в UTF-8: на входящем пути стоит `StringDeserializer`, Schema Registry не участвует.
+
+## Как опубликовать
+
+**Kafka UI** — http://localhost:8090 → топик → *Produce message* → вставить содержимое файла
+в поле Value, ключ оставить пустым. Перенос строки в текстовом поле значения не имеет, поэтому
+файлы лежат отформатированными.
+
+**Консольный продюсер** — внутри контейнера брокера:
+
+```bash
+jq -c . kafka/10-message-critical.json \
+  | docker compose exec -T kafka /opt/kafka/bin/kafka-console-producer.sh \
+      --bootstrap-server kafka:9092 --topic comm.inbound.critical.v1
+```
+
+`jq -c` здесь обязателен: **для `kafka-console-producer.sh` одна строка есть одна запись**, и
+отформатированный файл уехал бы в топик двадцатью битыми документами. Без `jq` то же делает
+`python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)))' < файл`.
+
+Адрес брокера различается по месту запуска: изнутри compose-сети — `kafka:9092`, с хоста —
+`localhost:9092` (хостовый порт проброшен на другой listener брокера, `29092`, и указывать
+`localhost:29092` бессмысленно). Топики создаются автоматически
+(`KAFKA_AUTO_CREATE_TOPICS_ENABLE`), поэтому `UNKNOWN_TOPIC_OR_PARTITION` в логах до первой
+публикации — норма.
+
+## Файлы
+
+| Файл | Топик | Что делает |
+|---|---|---|
+| `10-message-critical.json` | `comm.inbound.critical.v1` | OTP с инлайновым текстом; TTL 300 с |
+| `11-message-notification.json` | `comm.inbound.notification.v1` | обычное уведомление |
+| `20-batch-create.json` | `comm.inbound.batch-control.v1` | заголовок рассылки, `action: CREATE` |
+| `21-batch-item.json` | `comm.inbound.notification.v1` | элемент рассылки — обычный IK-03 с `batchId` |
+| `22-batch-start.json` | `comm.inbound.batch-control.v1` | `action: START` |
+
+**Рассылка публикуется в три приёма:** сначала `20-batch-create.json`, затем элементы
+(`21-batch-item.json` — второй получается сменой `externalMessageId`, `dedupKey` и номера),
+затем `22-batch-start.json`. `batchId` во всех трёх файлах один и тот же и задан руками именно
+затем, чтобы его не пришлось выуживать из логов; для новой рассылки его надо поменять во всех
+трёх. Элементы идут **не** в топик управления, а в `comm.inbound.notification.v1`, где их
+разбирает массовый пул, не конкурируя с командами. После `CREATE` рассылка находится в
+`ACCEPTED` и уже принимает элементы; `START` переводит её в `PROCESSING`.
+
+Остальные действия над рассылкой — `PAUSE`, `RESUME`, `STOP` — это тот же документ, что и
+`22-batch-start.json`, с другим `action`.
+
+## Что проверить после публикации
+
+- `GET http://localhost:8080/api/v1/messages?streamId=mobile-app&externalMessageId=kafka-otp-0001`
+  — оба параметра обязательны;
+- Kafka UI → `comm.outbound.status.v1`: `QUEUED → SENT_TO_PROVIDER → DELIVERED`;
+- панель, раздел «Сообщения» (и «Рассылки» — карточка ищется по тому же `batchId`).
+
+Отчёт фиктивного провайдера приходит через `report-delay` (3 секунды), поэтому
+`SENT_TO_PROVIDER` в первый момент — это нормально, а не застрявшая отправка.
+
+## Что стоит знать до первого запуска
+
+- **Повторная публикация того же файла ничего не отправит.** Дедупликация по
+  `(streamId, externalMessageId)` или `dedupKey` живёт 24 часа и отвечает `DUPLICATE` —
+  чтобы отправить ещё раз, меняйте оба идентификатора.
+- **Тихие часы стенда — 21:00–09:00 `Asia/Tashkent` с поведением `REJECT`.** Ночью документ
+  из `notification`-топика будет отклонён с `QUIET_HOURS`, и это не поломка примера.
+  `CRITICAL_OTP` и `TRANSACTIONAL` тихими часами не удерживаются никогда, так что ночью
+  проверять надо на `comm.inbound.critical.v1`.
+- **Поведение фиктивного провайдера задаётся последними двумя цифрами номера:**
+  `…00` доставлено, `…01` недоставлено, `…02` ответа нет (ретрай и failover),
+  `…03` блокирующий отказ (breaker), `…04` адрес непригоден (уезжает в suppression-лист).
+  В примерах стоит `998901234500`.
+- **Отказ конвейера и нечитаемый документ — разные вещи.** Нечитаемый уезжает в
+  `comm.inbound.parse-error.v1` с заголовками `commhub-origin-topic` и `commhub-failed-field`.
+  Отказ (`DUPLICATE`, `QUIET_HOURS`, `NO_ROUTE_AVAILABLE`, …) — это нормальный исход: он
+  сохраняется статусом, публикуется в `comm.outbound.status.v1`, listener коммитит offset, и
+  в топике ошибок его не будет.
+- **Ограничения полей:** `msisdn` строго `^9989\d{8}$`, `externalMessageId` ≤ 64,
+  `dedupKey` ≤ 128, `content.sms.text` ≤ 1071 символа, `batchId` — UUID. Обязательны
+  `streamId`, `externalMessageId`, `recipient` и `content` **или** `template` (FR-1.2).
+  Неизвестные поля игнорируются: документ разбирает кодек, а не биндинг Jackson.
+- **Отправка по шаблону** отличается от примеров одним блоком — `template` вместо `content`:
+  `{"id": "КОД", "locale": "RU", "variables": {"NAME": "Иван"}}`. Шаблон должен быть
+  **опубликован**: у версии в статусе `DRAFT` сообщение отклонится с `TEMPLATE_NOT_PUBLISHED`.

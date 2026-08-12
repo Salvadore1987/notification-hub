@@ -302,6 +302,9 @@ GET /api/v1/messages?streamId=demo-app&externalMessageId=demo-0001
 Ключ нужен только для партиционирования — **listener его не читает**, входящих заголовков не требуется.
 Локально удобнее всего опубликовать руками из Kafka UI на `http://localhost:8090`.
 
+Готовые документы под каждый топик — в [`../kafka/`](../kafka/README.md): взять файл, вставить в
+Kafka UI, ничего не сочиняя.
+
 Рассылка: заголовок и команды идут в `comm.inbound.batch-control.v1`.
 
 ```json

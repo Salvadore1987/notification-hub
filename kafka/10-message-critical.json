@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "streamId": "mobile-app",
+  "externalMessageId": "kafka-otp-0001",
+  "recipient": {
+    "clientId": "CL-0001",
+    "msisdn": "998901234500"
+  },
+  "channels": {
+    "requested": ["SMS"]
+  },
+  "content": {
+    "sms": {
+      "text": "Ваш код: 123456"
+    }
+  },
+  "timing": {
+    "ttlSeconds": 300
+  },
+  "dedupKey": "kafka-otp-CL-0001-0001",
+  "correlationId": "kafka-demo-0001"
+}
