@@ -1036,6 +1036,79 @@
 
 ---
 
+## Phase 22. Сквозное интеграционное тестирование (12.08.2026)
+
+Спецификация — [`testing/INTEGRATION-TEST-SPEC.md`](testing/INTEGRATION-TEST-SPEC.md), кейсы —
+[`testing/TEST-CASES.md`](testing/TEST-CASES.md) (157 кейсов, из них 24 закрыты существующими классами).
+Охват — путь сообщения от входа до статусного события; админ-панель, импорты и экспорт в аналитику
+вне охвата намеренно (граница и обоснование — §1 спецификации).
+
+- ✅ Спецификация набора: границы, эталонный контур, транспортная матрица «функция × REST × Kafka»,
+  правила детерминизма и изоляции, соответствие QA-01…QA-08 (QA-03, QA-06, QA-08)
+- ✅ Файл тест-кейсов: 12 областей (`IT-ING`, `IT-DED`, `IT-TPL`, `IT-VAL`, `IT-RTE`, `IT-FLT`,
+  `IT-QTA`, `IT-DSP`, `IT-PRV`, `IT-STS`, `IT-BAT`, `IT-TC`) с трассировкой на требования SRS
+  и честной колонкой покрытия
+
+### Этап 1. Тестовая инфраструктура (блокирующий)
+
+- [ ] Расширить `bootstrap/.../support/HubConfiguration.java` до эталонного контура §2 спецификации:
+  потоки с окнами тишины, квотами и `rate_limit_config`, каналы `EMAIL` и `PUSH`, провайдеры
+  `mock-sms`/`mock-email`/`mock-push` с разными весами и тарифами, пять шаблонов §2.4 — через
+  репозитории, не SQL
+- [ ] `support/Ingress.java` — один интерфейс с реализациями `RestIngress` и `KafkaIngress`, чтобы
+  функциональный кейс писался один раз и гонялся `@ParameterizedTest` по обоим входам (AR-06)
+- [ ] Управляемые часы: переопределение бина `ClockPort` в тестовом контексте со сдвигом на N часов —
+  без него тихие часы, TTL, окно дедупликации, часовые корзины частот и `recovery-after` непроверяемы
+- [ ] `support/HubState.java` — сброс изменчивых таблиц в `@BeforeEach` (`message`,
+  `message_status_history`, `delivery_attempt`, `outbox_event`, `dedup_registry`, `suppression_list`,
+  `frequency_counter`, `quota_counter`, `push_delivery`, `batch`, `dlq_entry`);
+  `audit_log` не трогать — V7 запрещает `DELETE`
+- [ ] Базовый класс с общим `@TestPropertySource`, чтобы Spring переиспользовал контекст, и
+  `commhub.provider.mock.enabled=true` в профиле bootstrap-ITов (ADR-0041)
+
+### Этап 2. Конвейер через оба входа
+
+- [ ] `pipeline/IngressSymmetryIT` — `IT-ING-001…014`, `IT-TC-003`
+- [ ] `pipeline/DeduplicationIT` — `IT-DED-001…006`
+- [ ] `pipeline/TemplateRenderingIT` — `IT-TPL-001…010`
+- [ ] `pipeline/ValidationAndPanIT` — `IT-VAL-001…010`
+
+### Этап 3. Compliance и лимиты
+
+- [ ] `compliance/QuietHoursIT` — `IT-FLT-006…013`
+- [ ] `compliance/SuppressionIT` — `IT-FLT-001…005`, `IT-PRV-005…006`
+- [ ] `compliance/FrequencyCapIT` — `IT-FLT-014…016`
+- [ ] `quota/QuotaDimensionsIT` — `IT-QTA-001…009`
+
+### Этап 4. Маршрутизация и провайдеры
+
+- [ ] `routing/RoutingStrategiesIT` — `IT-RTE-001…006`, `IT-RTE-014`
+- [ ] `routing/NoRouteIT` — `IT-RTE-007…010`
+- [ ] `routing/ProviderHealthIT` — `IT-RTE-011…013`, `IT-PRV-003`, `IT-PRV-007`
+- [ ] `provider/DeliveryReportIT` — `IT-PRV-001…002`, `IT-PRV-103…107` (callback, `CallbackGuard`, SEC-07)
+- [ ] `provider/EmailEndToEndIT` — `IT-PRV-201…205`; GreenMail в `bootstrap` сегодня нет, надо завести
+- [ ] `provider/PushFanOutIT` — `IT-PRV-301…305`
+
+### Этап 5. Жизненный цикл
+
+- [ ] `dispatch/DispatchGuardsIT` — `IT-DSP-004…009`
+- [ ] `dispatch/DispatchBudgetIT` — `IT-DSP-002…003`, `IT-DSP-010…011`
+- [ ] `status/StatusEventsIT` — `IT-STS-001…008`, `IT-STS-011…012`
+- [ ] `status/DlqIT` — `IT-STS-009…010`
+- [ ] `batch/BatchLifecycleIT` — `IT-BAT-001…014`
+- [ ] `traffic/TrafficClassIT` — `IT-TC-004…008`
+
+> **Порядок обязателен только для первого этапа.** Этапы 2–5 независимы и делаются отдельными
+> коммитами; Gradle трогать не нужно — задача `integrationTest` и тег `integration` уже есть, новые
+> классы называются `*IT` и помечаются `@Tag("integration")`.
+
+> ⚠️ **Цена, записанная заранее.** Каждый bootstrap-IT — это `@SpringBootTest` с контейнерами
+> PostgreSQL, Kafka и Keycloak; ~19 новых классов заметно удлинят `./gradlew integrationTest`.
+> Смягчение — общий `@TestPropertySource` в базовом классе: уникальные свойства в каждом классе
+> заставляют Spring поднимать новый контекст, и именно это, а не контейнеры, съедает время.
+
+---
+
 ## Порядок и вехи
 
 1. **Phase 1–3** — каркас + домен + use cases (ядро).
@@ -1046,5 +1119,7 @@
 6. **Phase 16–18** — frontend после стабилизации Admin BFF.
 7. **Phase 19** — Keycloak и снятие открытого режима (после того, как панель стала пригодной к работе).
 8. **Phase 21** — форма входа перенесена в панель (требование заказчика, ADR-0043).
+9. **Phase 22** — сквозной интеграционный набор: спецификация и кейсы написаны, тесты пишутся
+   этапами (`testing/`).
 
 > После завершения каждого пункта — отмечать ✅ (не `[x]`).
