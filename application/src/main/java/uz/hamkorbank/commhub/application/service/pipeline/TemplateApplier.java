@@ -33,7 +33,12 @@ import uz.hamkorbank.commhub.domain.support.Guard;
 @Component
 public class TemplateApplier {
 
-    /** Locale used when neither the submission nor the stream asks for one (FR-4.1). */
+    /**
+     * Locale of a submission that names none (FR-4.1).
+     *
+     * <p>In practice that is every such submission: no caller supplies a {@code streamLocale} today,
+     * so "absent" and "RU" are the same thing on both ingresses — see {@link #apply}.
+     */
     public static final ContentLocale DEFAULT_LOCALE = ContentLocale.RU;
 
     private final TemplateRepository templates;
@@ -47,6 +52,10 @@ public class TemplateApplier {
      *
      * @param contents content submitted by the source system; may be {@code null} with a template
      * @param ref template reference with its merge variables; {@code null} leaves the content as is
+     * @param streamLocale locale to use when the reference names none — a seam rather than a setting:
+     *     the only caller passes {@code null}, because neither a stream nor a client carries a locale
+     *     yet (the one that would is {@code CustomerPreferences.locale}, and FR-8.2 is a stub). Until
+     *     one does, a submission without a locale is rendered in {@link #DEFAULT_LOCALE}
      */
     public TemplateOutcome apply(MessageContents contents, TemplateRef ref, ContentLocale streamLocale) {
         if (ref == null) {

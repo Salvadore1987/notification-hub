@@ -10,7 +10,8 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * Reference from a message to a template plus the merge variables supplied by the source system
  * (SRS §5.2, FR-1.2, FR-4.3).
  *
- * @param locale requested locale; {@code null} means "take the stream default"
+ * @param locale requested locale; {@code null} is resolved by the application layer and today means
+ *     {@code RU} — nothing carries a locale of its own yet (FR-8.2 is a stub)
  * @param variables merge values, e.g. {@code {"NAME": "IVAN"}}
  */
 public record TemplateRef(TemplateCode code, ContentLocale locale, Map<String, String> variables) {

@@ -388,7 +388,12 @@ components:
       type: object
       properties:
         id: { type: string, description: Код шаблона; версию Модуль выбирает сам (FR-4.1) }
-        locale: { type: [string, "null"], enum: [RU, UZ, EN, null] }
+        locale:
+          type: [string, "null"]
+          enum: [RU, UZ, EN, null]
+          description: >-
+            Отсутствует — RU. Если в запрошенной локали опубликованной версии нет, Модуль
+            пробует RU; если нет и её, сообщение отклоняется с TEMPLATE_NOT_PUBLISHED.
         variables:
           type: object
           additionalProperties: { type: string }

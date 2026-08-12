@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "streamId": "mobile-app",
+  "externalMessageId": "kafka-template-0001",
+  "recipient": {
+    "clientId": "CL-0004",
+    "msisdn": "998901234500"
+  },
+  "channels": {
+    "requested": ["SMS"]
+  },
+  "template": {
+    "id": "DEMO_OTP",
+    "locale": "RU",
+    "variables": {
+      "NAME": "Иван",
+      "CODE": "654321"
+    }
+  },
+  "dedupKey": "kafka-template-CL-0004-0001",
+  "correlationId": "kafka-demo-0003"
+}

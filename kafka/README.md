@@ -75,6 +75,7 @@ jq -c . kafka/10-message-critical.json \
 |---|---|---|
 | `10-message-critical.json` | `comm.inbound.critical.v1` | OTP с инлайновым текстом; TTL 300 с |
 | `11-message-notification.json` | `comm.inbound.notification.v1` | обычное уведомление |
+| `12-message-template.json` | `comm.inbound.transactional.v1` | отправка по опубликованному шаблону |
 | `20-batch-create.json` | `comm.inbound.batch-control.v1` | заголовок рассылки, `action: CREATE` |
 | `21-batch-item.json` | `comm.inbound.notification.v1` | элемент рассылки — обычный IK-03 с `batchId` |
 | `22-batch-start.json` | `comm.inbound.batch-control.v1` | `action: START` |
@@ -122,6 +123,17 @@ jq -c . kafka/10-message-critical.json \
   `dedupKey` ≤ 128, `content.sms.text` ≤ 1071 символа, `batchId` — UUID. Обязательны
   `streamId`, `externalMessageId`, `recipient` и `content` **или** `template` (FR-1.2).
   Неизвестные поля игнорируются: документ разбирает кодек, а не биндинг Jackson.
-- **Отправка по шаблону** отличается от примеров одним блоком — `template` вместо `content`:
-  `{"id": "КОД", "locale": "RU", "variables": {"NAME": "Иван"}}`. Шаблон должен быть
-  **опубликован**: у версии в статусе `DRAFT` сообщение отклонится с `TEMPLATE_NOT_PUBLISHED`.
+- **Отправка по шаблону** отличается от инлайновых примеров одним блоком — `template` вместо
+  `content` — и лежит готовым файлом: [`12-message-template.json`](12-message-template.json).
+  Предусловие у него одно: шаблон `DEMO_OTP` заведён и **опубликован** (`../http/20-templates.http`,
+  где черновик пишет `template-manager`, а публикует `demo` — автор и публикующий обязаны
+  различаться, FR-4.2). Правила рендера, которые стоит знать до первого отказа:
+  - **отсутствующая `locale` — это RU**, а не «локаль потока»: локали у потока нет ни в домене, ни
+    в базе. Если в запрошенной локали публикации нет, делается ещё одна попытка в RU;
+  - неизвестный код шаблона → `VALIDATION_FAILED`; архивная карточка и версия в `DRAFT` →
+    `TEMPLATE_NOT_PUBLISHED`; незаполненная переменная → `TEMPLATE_VARIABLE_MISSING`. Отправка
+    рендерит **строго**, в отличие от превью в панели, где `{NAME}` остаётся видимым;
+  - `content` и `template` в одном документе — законная комбинация: отрендеренный текст перекрывает
+    содержимое **только своего канала**, остальные каналы уходят как прислали;
+  - частичный блок содержимого рядом с шаблоном всё равно отклоняется разбором: если блок `sms`
+    есть, то `content.sms.text` обязателен, и документ уедет в `parse-error`, а не отрендерится.
