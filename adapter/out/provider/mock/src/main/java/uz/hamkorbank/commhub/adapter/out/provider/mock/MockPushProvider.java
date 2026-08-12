@@ -2,6 +2,7 @@ package uz.hamkorbank.commhub.adapter.out.provider.mock;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.PushProviderPort;
 import uz.hamkorbank.commhub.application.port.out.provider.PushSubmission;
@@ -22,9 +23,11 @@ public class MockPushProvider implements PushProviderPort {
     public static final AdapterType TYPE = AdapterType.of("mock-push");
 
     private final MockProvider mock;
+    private final OutboundContentLog contentLog;
 
-    public MockPushProvider(MockProvider mock) {
+    public MockPushProvider(MockProvider mock, OutboundContentLog contentLog) {
         this.mock = mock;
+        this.contentLog = contentLog;
     }
 
     @Override
@@ -40,6 +43,7 @@ public class MockPushProvider implements PushProviderPort {
 
     @Override
     public ProviderAck submit(PushSubmission submission) {
+        contentLog.record(submission);
         return mock.answer(
                 submission.provider(),
                 submission.messageId(),

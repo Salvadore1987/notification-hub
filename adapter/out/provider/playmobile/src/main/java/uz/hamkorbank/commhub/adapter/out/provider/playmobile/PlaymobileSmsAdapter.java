@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import uz.hamkorbank.commhub.adapter.out.provider.playmobile.PlaymobileSendCodec.PlaymobileError;
 import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
@@ -70,6 +71,7 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
     private final ProviderMessageIdFactory providerMessageIds;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
+    private final OutboundContentLog contentLog;
     private final RestClient client;
 
     public PlaymobileSmsAdapter(
@@ -85,6 +87,7 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
         this.throttle = support.throttle();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
+        this.contentLog = support.contentLog();
         this.client = support.clients().create(properties.http());
     }
 
@@ -113,6 +116,7 @@ public class PlaymobileSmsAdapter implements SmsProviderPort {
         if (submissions == null || submissions.isEmpty()) {
             return List.of();
         }
+        contentLog.recordAll(submissions);
         List<PlaymobileSend> sends = submissions.stream()
                 .map(submission -> new PlaymobileSend(submission, providerMessageIdOf(submission)))
                 .toList();

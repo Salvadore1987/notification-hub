@@ -48,8 +48,9 @@ public class ProviderResilienceConfig {
             ProviderThrottle throttle,
             ProviderRuntimeSettings runtimeSettings,
             ClockPort clock,
-            ProviderRestClients clients) {
-        return new ProviderSupport(executor, throttle, runtimeSettings, clock, clients);
+            ProviderRestClients clients,
+            OutboundContentLog contentLog) {
+        return new ProviderSupport(executor, throttle, runtimeSettings, clock, clients, contentLog);
     }
 
     @Bean

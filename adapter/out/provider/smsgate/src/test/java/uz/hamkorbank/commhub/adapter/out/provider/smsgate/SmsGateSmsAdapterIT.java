@@ -24,6 +24,7 @@ import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.adapter.out.provider.ProviderStubs;
 import uz.hamkorbank.commhub.adapter.out.provider.smsgate.SmsGateProperties.Credentials;
 import uz.hamkorbank.commhub.adapter.out.provider.smsgate.SmsGateProperties.Sending;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
@@ -77,7 +78,8 @@ class SmsGateSmsAdapterIT {
                         throttle,
                         ProviderRuntimeSettings.configurationOnly(),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
     }
 
     @AfterEach
@@ -199,7 +201,8 @@ class SmsGateSmsAdapterIT {
                         throttle,
                         ProviderRuntimeSettings.configurationOnly(),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
         provider.stubFor(
                 post(urlEqualTo(SmsGateProperties.SEND_PATH)).willReturn(json("{\"status\":{\"code\":0},\"id\":1}")));
 

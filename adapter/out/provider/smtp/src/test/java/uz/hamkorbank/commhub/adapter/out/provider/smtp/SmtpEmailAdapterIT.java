@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
 import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRestClients;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
@@ -179,7 +180,8 @@ class SmtpEmailAdapterIT {
                 throttle,
                 ProviderRuntimeSettings.configurationOnly(),
                 FixedClock.standard(),
-                new ProviderRestClients());
+                new ProviderRestClients(),
+                OutboundContentLog.disabled());
     }
 
     private static SmtpProperties properties(RateLimit rateLimit, SmtpProperties.Dkim dkim, int port) {

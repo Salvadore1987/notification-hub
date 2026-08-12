@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import uz.hamkorbank.commhub.adapter.out.provider.support.Blobs;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
@@ -87,6 +88,7 @@ public class ApnsPushAdapter implements PushProviderPort {
     private final ProviderThrottle throttle;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
+    private final OutboundContentLog contentLog;
     private final RestClient production;
     private final RestClient sandbox;
     private final ApnsJwtProvider providerTokens;
@@ -99,6 +101,7 @@ public class ApnsPushAdapter implements PushProviderPort {
         this.throttle = support.throttle();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
+        this.contentLog = support.contentLog();
         this.production = support.clients().create(properties.http());
         this.sandbox = support.clients().create(properties.sandbox());
         this.providerTokens = new ApnsJwtProvider(properties.credentials());
@@ -118,6 +121,7 @@ public class ApnsPushAdapter implements PushProviderPort {
     @Override
     public ProviderAck submit(PushSubmission submission) {
         Guard.notNull(submission, "submission");
+        contentLog.record(submission);
         Optional<ProviderAck> held = throttleVerdict(submission);
         if (held.isPresent()) {
             return held.get();

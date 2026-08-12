@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderRuntimeSettings;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderSupport;
@@ -68,6 +69,7 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
     private final ProviderThrottle throttle;
     private final ProviderRuntimeSettings runtimeSettings;
     private final ClockPort clock;
+    private final OutboundContentLog contentLog;
     private final Session session;
 
     public SmtpEmailAdapter(SmtpProperties properties, SmtpMessageCodec codec, ProviderSupport support) {
@@ -81,6 +83,7 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
         this.throttle = support.throttle();
         this.runtimeSettings = support.runtimeSettings();
         this.clock = support.clock();
+        this.contentLog = support.contentLog();
         this.pool = new SmtpTransportPool(properties);
         this.dkim = new DkimSigner(properties.dkim(), support.clock());
         this.session = pool.session();
@@ -100,6 +103,7 @@ public class SmtpEmailAdapter implements EmailProviderPort, AutoCloseable {
     @Override
     public ProviderAck submit(EmailSubmission submission) {
         Guard.notNull(submission, "submission");
+        contentLog.record(submission);
         Optional<ProviderAck> held = throttleVerdict(submission);
         if (held.isPresent()) {
             return held.get();

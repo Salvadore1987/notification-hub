@@ -25,6 +25,7 @@ import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.adapter.out.provider.ProviderStubs;
 import uz.hamkorbank.commhub.adapter.out.provider.playmobile.PlaymobileProperties.Credentials;
 import uz.hamkorbank.commhub.adapter.out.provider.playmobile.PlaymobileProperties.Sending;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
@@ -90,7 +91,8 @@ class PlaymobileSmsAdapterIT {
                         new ProviderThrottle(),
                         ProviderRuntimeSettings.configurationOnly(),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
     }
 
     @AfterEach

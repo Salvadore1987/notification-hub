@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import uz.hamkorbank.commhub.adapter.out.provider.FixedClock;
 import uz.hamkorbank.commhub.adapter.out.provider.ProviderStubs;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpProperties;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderResilienceProperties;
@@ -245,7 +246,8 @@ class FcmPushAdapterIT {
                         throttle,
                         ProviderRuntimeSettings.configurationOnly(),
                         FixedClock.standard(),
-                        new ProviderRestClients()));
+                        new ProviderRestClients(),
+                        OutboundContentLog.disabled()));
     }
 
     private FcmProperties properties(RateLimit rateLimit, boolean iosDelivery) {

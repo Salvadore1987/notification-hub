@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClient;
 import uz.hamkorbank.commhub.adapter.out.provider.smsgate.SmsGateSendCodec.SmsGateAnswer;
 import uz.hamkorbank.commhub.adapter.out.provider.smsgate.SmsGateSendCodec.SmsGateItem;
 import uz.hamkorbank.commhub.adapter.out.provider.support.Masking;
+import uz.hamkorbank.commhub.adapter.out.provider.support.OutboundContentLog;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallException;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderCallExecutor;
 import uz.hamkorbank.commhub.adapter.out.provider.support.ProviderHttpResponse;
@@ -71,6 +72,7 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
     private final ProviderThrottle throttle;
     private final ClockPort clock;
     private final ProviderRuntimeSettings runtimeSettings;
+    private final OutboundContentLog contentLog;
     private final RestClient client;
 
     public SmsGateSmsAdapter(SmsGateProperties properties, SmsGateSendCodec codec, ProviderSupport support) {
@@ -81,6 +83,7 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
         this.throttle = support.throttle();
         this.clock = support.clock();
         this.runtimeSettings = support.runtimeSettings();
+        this.contentLog = support.contentLog();
         this.client = support.clients().create(properties.http());
     }
 
@@ -92,6 +95,7 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
     @Override
     public ProviderAck submit(SmsSubmission submission) {
         Guard.notNull(submission, "submission");
+        contentLog.record(submission);
         Optional<ProviderAck> held = throttleVerdict(submission);
         if (held.isPresent()) {
             return held.get();
@@ -113,6 +117,7 @@ public class SmsGateSmsAdapter implements SmsProviderPort {
         if (submissions == null || submissions.isEmpty()) {
             return List.of();
         }
+        contentLog.recordAll(submissions);
         List<SmsSubmission> sendable = new ArrayList<>();
         List<ProviderAck> acks = new ArrayList<>();
         for (SmsSubmission submission : submissions) {

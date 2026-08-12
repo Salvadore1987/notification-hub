@@ -17,13 +17,16 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * @param throttle sustained rate, per-minute ceiling and the per-recipient anti-spam rule (FR-2.5)
  * @param runtimeSettings limits and endpoint settings read from the provider profile (AD-07)
  * @param clients JDK HTTP clients on virtual threads with mandatory timeouts (AR-07)
+ * @param contentLog plaintext trace of what is being sent, off everywhere but the local stand
+ *     (SEC-06)
  */
 public record ProviderSupport(
         ProviderCallExecutor executor,
         ProviderThrottle throttle,
         ProviderRuntimeSettings runtimeSettings,
         ClockPort clock,
-        ProviderRestClients clients) {
+        ProviderRestClients clients,
+        OutboundContentLog contentLog) {
 
     public ProviderSupport {
         Guard.notNull(executor, "ProviderSupport.executor");
@@ -31,5 +34,6 @@ public record ProviderSupport(
         Guard.notNull(runtimeSettings, "ProviderSupport.runtimeSettings");
         Guard.notNull(clock, "ProviderSupport.clock");
         Guard.notNull(clients, "ProviderSupport.clients");
+        Guard.notNull(contentLog, "ProviderSupport.contentLog");
     }
 }
