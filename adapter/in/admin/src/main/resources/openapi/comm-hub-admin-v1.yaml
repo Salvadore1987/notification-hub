@@ -1212,6 +1212,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SendEstimate' }
         '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
 
   /send/message:
     post:
@@ -1231,6 +1233,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MessageAccepted' }
         '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
 
   /send/batch:
     post:
@@ -1259,6 +1263,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SendBatchResult' }
         '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
 
   # ------------------------------------------------------------------ администрирование
 

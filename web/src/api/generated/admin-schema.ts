@@ -2410,6 +2410,8 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -2454,6 +2456,8 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -2507,6 +2511,8 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
