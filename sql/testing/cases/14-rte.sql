@@ -107,13 +107,12 @@ SELECT selected_channel = 'SMS' AS ok, 'победила политика, а н
   FROM message WHERE stream_id = 'email-stream';
 
 
--- >>> IT-RTE-007  NoRoute: нет пригодного адреса
--- @arrange
--- @assert
-SELECT status_reason = 'NO_ROUTE_AVAILABLE' AS ok, 'причина отказа названа' AS check FROM message;
-SELECT count(*) = 0 AS ok, 'маршрут не выбран' AS check
-  FROM message WHERE selected_provider_code IS NOT NULL;
--- Текст отказа: «recipient has no usable address for the planned channels».
+-- IT-RTE-007 снят как дубль IT-VAL-001 (дефект D-9, прогон этапа 5 от 13.08.2026).
+-- Ветка Router «recipient has no usable address for the planned channels» на пути сообщения
+-- недостижима: MessageValidator спрашивает то же самое (deliverableChannels().isEmpty()) стадией
+-- раньше и отвечает VALIDATION_FAILED / 400. Единственный живой вызывающий этой ветки — сухой
+-- прогон POST /api/admin/v1/routing/evaluate, то есть админ-BFF за границей набора.
+-- Нумерация не сдвигается: 008…010 остаются собой.
 
 
 -- >>> IT-RTE-008  NoRoute: канал не настроен

@@ -1039,7 +1039,7 @@
 ## Phase 22. Сквозное интеграционное тестирование (12.08.2026)
 
 Спецификация — [`testing/INTEGRATION-TEST-SPEC.md`](testing/INTEGRATION-TEST-SPEC.md), кейсы —
-[`testing/TEST-CASES.md`](testing/TEST-CASES.md) (157 кейсов, из них 24 закрыты существующими классами).
+[`testing/TEST-CASES.md`](testing/TEST-CASES.md) (156 кейсов, из них 24 закрыты существующими классами).
 Охват — путь сообщения от входа до статусного события; админ-панель, импорты и экспорт в аналитику
 вне охвата намеренно (граница и обоснование — §1 спецификации).
 
@@ -1083,7 +1083,7 @@
 ### Этап 4. Маршрутизация и провайдеры
 
 - [ ] `routing/RoutingStrategiesIT` — `IT-RTE-001…006`, `IT-RTE-014`
-- [ ] `routing/NoRouteIT` — `IT-RTE-007…010`
+- [ ] `routing/NoRouteIT` — `IT-RTE-008…010` (`IT-RTE-007` снят как дубль `IT-VAL-001`, D-9)
 - [ ] `routing/ProviderHealthIT` — `IT-RTE-011…013`, `IT-PRV-003`, `IT-PRV-007`
 - [ ] `provider/DeliveryReportIT` — `IT-PRV-001…002`, `IT-PRV-103…107` (callback, `CallbackGuard`, SEC-07)
 - [ ] `provider/EmailEndToEndIT` — `IT-PRV-201…205`; GreenMail в `bootstrap` сегодня нет, надо завести
