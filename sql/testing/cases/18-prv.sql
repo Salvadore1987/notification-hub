@@ -118,7 +118,7 @@ SELECT count(DISTINCT provider_code) >= 2 AS ok,
 -- @arrange
 -- Требует контура с настоящим адаптером playmobile-http, направленным на WireMock.
 UPDATE provider SET adapter_type = 'playmobile-http', updated_at = now()
- WHERE code = 'MOCK-PRIMARY';
+ WHERE code = 'MOCK_PRIMARY';
 -- @assert
 SELECT provider_adapter_type = 'playmobile-http' AS ok, 'вызван настоящий адаптер' AS check
   FROM delivery_attempt;
@@ -131,14 +131,14 @@ SELECT length(provider_message_id) <= 20 AS ok,
 -- >>> IT-PRV-102  Форма запроса SMS Gate
 -- @arrange
 UPDATE provider SET adapter_type = 'smsgate-http', updated_at = now()
- WHERE code = 'MOCK-PRIMARY';
+ WHERE code = 'MOCK_PRIMARY';
 -- @assert
 SELECT provider_adapter_type = 'smsgate-http' AS ok, 'вызван настоящий адаптер' AS check
   FROM delivery_attempt;
 SELECT count(*) = 1 AS ok,
        'повтора внутри попытки нет: /api/v2/send не принимает клиентский id, '
        'и повтор был бы второй SMS' AS check
-  FROM delivery_attempt WHERE provider_code = 'MOCK-PRIMARY';
+  FROM delivery_attempt WHERE provider_code = 'MOCK_PRIMARY';
 
 
 -- >>> IT-PRV-103  Callback провайдера меняет статус

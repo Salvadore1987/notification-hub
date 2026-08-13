@@ -20,14 +20,14 @@ SET search_path TO comm_hub, public;
 -- @assert
 SELECT count(*) = 5 AS ok, 'приняты все пять сообщений' AS check FROM message;
 SELECT count(*) = 5 AS ok, 'все ушли к основному провайдеру' AS check
-  FROM message WHERE selected_provider_code = 'MOCK-PRIMARY';
+  FROM message WHERE selected_provider_code = 'MOCK_PRIMARY';
 SELECT selected_provider_code, count(*) FROM message GROUP BY 1 ORDER BY 1;
 
 
 -- >>> IT-RTE-002  ROUND_ROBIN чередует провайдеров
 -- @arrange
 UPDATE channel SET balancing_strategy = 'ROUND_ROBIN',
-                   fallback_order = '["MOCK-PRIMARY", "MOCK-RESERVE"]'::jsonb,
+                   fallback_order = '["MOCK_PRIMARY", "MOCK_RESERVE"]'::jsonb,
                    updated_at = now()
  WHERE code = 'SMS';
 -- @assert
@@ -41,30 +41,30 @@ SELECT selected_provider_code, count(*) FROM message GROUP BY 1 ORDER BY 1;
 
 -- >>> IT-RTE-003  WEIGHTED соблюдает веса
 -- @arrange
-UPDATE provider SET weight = 3, updated_at = now() WHERE code = 'MOCK-PRIMARY';
-UPDATE provider SET weight = 1, updated_at = now() WHERE code = 'MOCK-RESERVE';
+UPDATE provider SET weight = 3, updated_at = now() WHERE code = 'MOCK_PRIMARY';
+UPDATE provider SET weight = 1, updated_at = now() WHERE code = 'MOCK_RESERVE';
 UPDATE channel SET balancing_strategy = 'WEIGHTED',
-                   fallback_order = '["MOCK-PRIMARY", "MOCK-RESERVE"]'::jsonb,
+                   fallback_order = '["MOCK_PRIMARY", "MOCK_RESERVE"]'::jsonb,
                    updated_at = now()
  WHERE code = 'SMS';
 -- @assert
 SELECT count(*) = 40 AS ok, 'приняты все сорок' AS check FROM message;
 -- Веса 3:1 на сорока сообщениях дают 30/10; допуск — один полный цикл (4 сообщения).
 SELECT count(*) BETWEEN 26 AND 34 AS ok, 'основной получил примерно три четверти' AS check
-  FROM message WHERE selected_provider_code = 'MOCK-PRIMARY';
+  FROM message WHERE selected_provider_code = 'MOCK_PRIMARY';
 SELECT count(*) BETWEEN 6 AND 14 AS ok, 'резерв получил примерно четверть' AS check
-  FROM message WHERE selected_provider_code = 'MOCK-RESERVE';
+  FROM message WHERE selected_provider_code = 'MOCK_RESERVE';
 SELECT selected_provider_code, count(*) FROM message GROUP BY 1 ORDER BY 1;
 
 
 -- >>> IT-RTE-004  LEAST_COST выбирает дешёвого
 -- @arrange
 UPDATE channel SET balancing_strategy = 'LEAST_COST',
-                   fallback_order = '["MOCK-PRIMARY", "MOCK-CHEAP"]'::jsonb,
+                   fallback_order = '["MOCK_PRIMARY", "MOCK_CHEAP"]'::jsonb,
                    updated_at = now()
  WHERE code = 'SMS';
 -- @assert
-SELECT selected_provider_code = 'MOCK-CHEAP' AS ok,
+SELECT selected_provider_code = 'MOCK_CHEAP' AS ok,
        'выбран провайдер с тарифом 90.0000 против 120.5000' AS check
   FROM message;
 SELECT cost IS NOT NULL AND cost_currency = 'UZS' AS ok, 'стоимость посчитана' AS check
@@ -77,9 +77,9 @@ SELECT selected_provider_code, segments, cost, cost_currency FROM message;
 UPDATE provider
    SET tariff = '{"perMessage": null, "perSegment": {"amount": "0.0100", "currency": "USD"}}'::jsonb,
        updated_at = now()
- WHERE code = 'MOCK-CHEAP';
+ WHERE code = 'MOCK_CHEAP';
 UPDATE channel SET balancing_strategy = 'LEAST_COST',
-                   fallback_order = '["MOCK-PRIMARY", "MOCK-CHEAP"]'::jsonb,
+                   fallback_order = '["MOCK_PRIMARY", "MOCK_CHEAP"]'::jsonb,
                    updated_at = now()
  WHERE code = 'SMS';
 -- @assert
@@ -87,7 +87,7 @@ UPDATE channel SET balancing_strategy = 'LEAST_COST',
 -- не имеет права, а отказывать в отправке из-за валюты — тем более.
 SELECT status_reason IS DISTINCT FROM 'NO_ROUTE_AVAILABLE' AS ok, 'отказа нет' AS check
   FROM message;
-SELECT selected_provider_code = 'MOCK-PRIMARY' AS ok,
+SELECT selected_provider_code = 'MOCK_PRIMARY' AS ok,
        'выбран провайдер в валюте текущего дешёвого' AS check
   FROM message;
 
@@ -140,11 +140,11 @@ SELECT status_reason = 'NO_ROUTE_AVAILABLE' AS ok, 'отказ маршрути�
 -- >>> IT-RTE-010  NoRoute: нет выбираемого провайдера
 -- @arrange
 UPDATE provider SET enabled = false, updated_at = now()
- WHERE code IN ('MOCK-PRIMARY', 'MOCK-RESERVE');
+ WHERE code IN ('MOCK_PRIMARY', 'MOCK_RESERVE');
 -- @assert
 SELECT count(*) = 0 AS ok, 'выбираемых SMS-провайдеров в цепочке не осталось' AS check
   FROM provider WHERE channel = 'SMS' AND enabled AND NOT maintenance
-   AND code IN ('MOCK-PRIMARY', 'MOCK-RESERVE');
+   AND code IN ('MOCK_PRIMARY', 'MOCK_RESERVE');
 SELECT status_reason = 'NO_ROUTE_AVAILABLE' AS ok, 'отказ маршрутизации' AS check FROM message;
 -- Текст отказа: «no selectable provider for channel SMS».
 
@@ -156,9 +156,9 @@ SELECT status_reason = 'NO_ROUTE_AVAILABLE' AS ok, 'отказ маршрути�
 SELECT count(*) >= 2 AS ok, 'попыток больше одной' AS check FROM delivery_attempt;
 SELECT count(DISTINCT provider_code) = 2 AS ok, 'задействованы оба провайдера' AS check
   FROM delivery_attempt;
-SELECT provider_code = 'MOCK-PRIMARY' AS ok, 'первая попытка — к основному' AS check
+SELECT provider_code = 'MOCK_PRIMARY' AS ok, 'первая попытка — к основному' AS check
   FROM delivery_attempt ORDER BY attempt_no LIMIT 1;
-SELECT provider_code = 'MOCK-RESERVE' AS ok, 'последняя — к резервному' AS check
+SELECT provider_code = 'MOCK_RESERVE' AS ok, 'последняя — к резервному' AS check
   FROM delivery_attempt ORDER BY attempt_no DESC LIMIT 1;
 SELECT attempt_no, provider_code, result, error_class, response_code
   FROM delivery_attempt ORDER BY attempt_no;
@@ -170,13 +170,13 @@ UPDATE provider SET health_status = 'DOWN',
                     health_detail = 'выставлено предусловием кейса',
                     health_checked_at = now(),
                     updated_at = now()
- WHERE code = 'MOCK-PRIMARY';
+ WHERE code = 'MOCK_PRIMARY';
 -- @assert
-SELECT selected_provider_code = 'MOCK-RESERVE' AS ok,
+SELECT selected_provider_code = 'MOCK_RESERVE' AS ok,
        'маршрут сразу на резерв: DOWN делает провайдера невыбираемым' AS check
   FROM message;
 SELECT count(*) = 0 AS ok, 'к DOWN-провайдеру не было ни одной попытки' AS check
-  FROM delivery_attempt WHERE provider_code = 'MOCK-PRIMARY';
+  FROM delivery_attempt WHERE provider_code = 'MOCK_PRIMARY';
 
 
 -- >>> IT-RTE-013  Испытательный срок после тишины
@@ -188,30 +188,30 @@ UPDATE provider SET health_status = 'DOWN',
                     health_detail = 'выставлено предусловием кейса',
                     health_checked_at = now() - interval '1 hour',
                     updated_at = now()
- WHERE code = 'MOCK-PRIMARY';
+ WHERE code = 'MOCK_PRIMARY';
 -- @assert
 SELECT health_status = 'UNKNOWN' AS ok,
        'после окна тишины провайдер вернулся в испытательный срок' AS check
-  FROM provider WHERE code = 'MOCK-PRIMARY';
-SELECT selected_provider_code = 'MOCK-PRIMARY' AS ok, 'и снова выбирается' AS check
+  FROM provider WHERE code = 'MOCK_PRIMARY';
+SELECT selected_provider_code = 'MOCK_PRIMARY' AS ok, 'и снова выбирается' AS check
   FROM message;
 -- После окна с трафиком и без отказов ожидается переход в UP:
 SELECT health_status, health_detail, health_checked_at
-  FROM provider WHERE code LIKE 'MOCK-%' ORDER BY code;
+  FROM provider WHERE code LIKE 'MOCK\_%' ORDER BY code;
 
 
 -- >>> IT-RTE-014  Изменение конфигурации применяется без перезапуска
 -- @arrange
 -- Меняем порядок отката, не перезапуская Модуль. Снимок обновится в течение
 -- commhub.config.cache.refresh-interval (10 с; потолок 30 с проверяется при старте).
-UPDATE channel SET fallback_order = '["MOCK-RESERVE", "MOCK-PRIMARY"]'::jsonb,
+UPDATE channel SET fallback_order = '["MOCK_RESERVE", "MOCK_PRIMARY"]'::jsonb,
                    updated_at = now()
  WHERE code = 'SMS';
 -- @assert
-SELECT fallback_order = '["MOCK-RESERVE", "MOCK-PRIMARY"]'::jsonb AS ok,
+SELECT fallback_order = '["MOCK_RESERVE", "MOCK_PRIMARY"]'::jsonb AS ok,
        'новый порядок записан' AS check
   FROM channel WHERE code = 'SMS';
 -- Сообщение, отправленное позднее чем через refresh-interval после правки:
-SELECT selected_provider_code = 'MOCK-RESERVE' AS ok,
+SELECT selected_provider_code = 'MOCK_RESERVE' AS ok,
        'маршрутизатор увидел правку без рестарта (NF-07)' AS check
   FROM message ORDER BY accepted_at DESC LIMIT 1;

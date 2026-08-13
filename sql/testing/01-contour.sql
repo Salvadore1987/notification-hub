@@ -30,15 +30,15 @@ BEGIN;
 
 INSERT INTO provider (id, code, channel, adapter_type, weight, tariff, enabled, maintenance, health_status)
 VALUES
-    ('01900000-0000-7000-8000-000000000001', 'MOCK-PRIMARY', 'SMS',   'mock-sms',   10,
+    ('01900000-0000-7000-8000-000000000001', 'MOCK_PRIMARY', 'SMS',   'mock-sms',   10,
      '{"perMessage": null, "perSegment": {"amount": "120.5000", "currency": "UZS"}}'::jsonb, true, false, 'UNKNOWN'),
-    ('01900000-0000-7000-8000-000000000002', 'MOCK-RESERVE', 'SMS',   'mock-sms',   10,
+    ('01900000-0000-7000-8000-000000000002', 'MOCK_RESERVE', 'SMS',   'mock-sms',   10,
      '{"perMessage": null, "perSegment": {"amount": "150.0000", "currency": "UZS"}}'::jsonb, true, false, 'UNKNOWN'),
-    ('01900000-0000-7000-8000-000000000003', 'MOCK-CHEAP',   'SMS',   'mock-sms',   30,
+    ('01900000-0000-7000-8000-000000000003', 'MOCK_CHEAP',   'SMS',   'mock-sms',   30,
      '{"perMessage": null, "perSegment": {"amount": "90.0000",  "currency": "UZS"}}'::jsonb, true, false, 'UNKNOWN'),
-    ('01900000-0000-7000-8000-000000000004', 'MOCK-EMAIL',   'EMAIL', 'mock-email', 10,
+    ('01900000-0000-7000-8000-000000000004', 'MOCK_EMAIL',   'EMAIL', 'mock-email', 10,
      '{"perMessage": {"amount": "10.0000", "currency": "UZS"}, "perSegment": null}'::jsonb, true, false, 'UNKNOWN'),
-    ('01900000-0000-7000-8000-000000000005', 'MOCK-PUSH',    'PUSH',  'mock-push',  10,
+    ('01900000-0000-7000-8000-000000000005', 'MOCK_PUSH',    'PUSH',  'mock-push',  10,
      '{"perMessage": {"amount": "1.0000", "currency": "UZS"}, "perSegment": null}'::jsonb, true, false, 'UNKNOWN')
 ON CONFLICT (code) DO UPDATE SET
     channel = EXCLUDED.channel,
@@ -62,9 +62,9 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO channel (code, status, balancing_strategy, fallback_order, quiet_hours, quota_config)
 VALUES
-    ('SMS',   'ACTIVE', 'PRIMARY_ONLY', '["MOCK-PRIMARY", "MOCK-RESERVE"]'::jsonb, NULL, NULL),
-    ('EMAIL', 'ACTIVE', 'PRIMARY_ONLY', '["MOCK-EMAIL"]'::jsonb,                   NULL, NULL),
-    ('PUSH',  'ACTIVE', 'PRIMARY_ONLY', '["MOCK-PUSH"]'::jsonb,                    NULL, NULL)
+    ('SMS',   'ACTIVE', 'PRIMARY_ONLY', '["MOCK_PRIMARY", "MOCK_RESERVE"]'::jsonb, NULL, NULL),
+    ('EMAIL', 'ACTIVE', 'PRIMARY_ONLY', '["MOCK_EMAIL"]'::jsonb,                   NULL, NULL),
+    ('PUSH',  'ACTIVE', 'PRIMARY_ONLY', '["MOCK_PUSH"]'::jsonb,                    NULL, NULL)
 ON CONFLICT (code) DO UPDATE SET
     status = EXCLUDED.status,
     balancing_strategy = EXCLUDED.balancing_strategy,
@@ -193,11 +193,20 @@ VALUES
 
 COMMIT;
 
--- Контрольная сводка контура.
-SELECT 'provider' AS entity, count(*) AS rows FROM provider WHERE code LIKE 'MOCK-%'
+-- Контрольная сводка контура. Считается только СВОЁ — теми же списками, по которым
+-- убирает 99-teardown.sql: на базе, где кроме набора живёт чужая конфигурация (демо-поток
+-- из http/10-config.http, боевой профиль), общий count() дал бы 12 потоков вместо 11 и
+-- сводка перестала бы отвечать на вопрос «встал ли контур».
+SELECT 'provider' AS entity, count(*) AS rows FROM provider WHERE code LIKE 'MOCK\_%'
 UNION ALL SELECT 'channel',          count(*) FROM channel
 UNION ALL SELECT 'stream',           count(*) FROM stream
+ WHERE id IN ('ibank-otp', 'core-banking', 'marketing-bulk', 'marketing-defer',
+              'quota-day', 'quota-alert', 'stream-suspended', 'stream-disabled',
+              'email-stream', 'push-stream', 'rate-limited')
 UNION ALL SELECT 'routing_policy',   count(*) FROM routing_policy
 UNION ALL SELECT 'template',         count(*) FROM template
+ WHERE code IN ('OTP_RU_UZ', 'ONLY_RU', 'DRAFT_ONLY', 'ARCHIVED_CARD', 'MANY_VARS')
 UNION ALL SELECT 'template_version', count(*) FROM template_version
+ WHERE template_id IN (SELECT id FROM template WHERE code IN
+       ('OTP_RU_UZ', 'ONLY_RU', 'DRAFT_ONLY', 'ARCHIVED_CARD', 'MANY_VARS'))
 ORDER BY entity;

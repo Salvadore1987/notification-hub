@@ -80,7 +80,7 @@ UPDATE provider
    SET quota_config = '{"dailyCount": 2, "monthlyCount": null, "dailyCost": null,
                         "monthlyCost": null, "behavior": "BLOCK_AND_ALERT"}'::jsonb,
        updated_at = now()
- WHERE code = 'MOCK-PRIMARY';
+ WHERE code = 'MOCK_PRIMARY';
 -- @assert
 SELECT count(*) = 1 AS ok, 'третье отклонено' AS check
   FROM message WHERE status_reason = 'QUOTA_EXCEEDED';
