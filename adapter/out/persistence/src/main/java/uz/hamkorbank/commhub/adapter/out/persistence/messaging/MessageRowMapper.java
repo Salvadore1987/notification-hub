@@ -35,6 +35,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
 
 /**
  * Rebuilds a {@link Message} from a {@code message} row plus its history and attempts.
@@ -79,7 +80,12 @@ public class MessageRowMapper {
                 templateRef(rs),
                 TimingJson.toDomain(jsonCodec.read(rs.getString("timing"), TimingJson.class)),
                 SqlValues.instant(rs, "accepted_at"));
+        // Read together with the write of the same column, never one without the other: the aggregate is
+        // reloaded and saved again on every dispatcher tick, and a version this mapper did not read would
+        // be written back as NULL by the first settlement after the send.
+        UUID templateVersionId = SqlValues.uuid(rs, "template_version_id");
         rehydration
+                .templateVersion(templateVersionId == null ? null : TemplateVersionId.of(templateVersionId))
                 .status(
                         SqlValues.enumValue(rs, "status", MessageStatus.class),
                         SqlValues.enumValue(rs, "status_reason", RejectionReason.class),

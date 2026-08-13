@@ -33,6 +33,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.PushToken;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
 
 /** Message aggregate: lifecycle, status history and delivery attempts (§5.2, §6.3, ST-01…ST-03). */
 class MessageTest {
@@ -281,6 +282,33 @@ class MessageTest {
         assertThatExceptionOfType(DomainValidationException.class)
                 .isThrownBy(() -> message.applyRenderedContent(PushContent.of("T", "B")))
                 .withMessageContaining("no content for channel PUSH");
+    }
+
+    @Test
+    @DisplayName("§10.1: the version the content was rendered from is recorded next to the template reference")
+    void templateVersionIsRecorded() {
+        // Arrange
+        Message message = smsMessage();
+        TemplateVersionId version = TemplateVersionId.newId();
+
+        // Act
+        message.applyTemplateVersion(version);
+
+        // Assert
+        assertThat(message.templateVersionId()).contains(version);
+        assertThat(smsMessage().templateVersionId()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the template version can no longer be recorded once the message is routed")
+    void templateVersionIsClosedAfterRouting() {
+        // Arrange
+        Message message = routedMessage();
+
+        // Act + Assert
+        assertThatExceptionOfType(DomainValidationException.class)
+                .isThrownBy(() -> message.applyTemplateVersion(TemplateVersionId.newId()))
+                .withMessageContaining("can no longer be recorded");
     }
 
     @Test

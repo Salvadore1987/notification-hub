@@ -9,6 +9,7 @@ import java.util.Currency;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
 import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
 
 /**
  * A message read back from PostgreSQL must be the same aggregate that was written — status, history,
@@ -105,6 +107,54 @@ class MessagePersistenceIT extends AbstractPersistenceIT {
         assertThat(restored.contents().requireForChannel(Channel.SMS))
                 .isEqualTo(message.contents().requireForChannel(Channel.SMS));
         assertThat(restored.template()).contains(templateRef());
+    }
+
+    @Test
+    @DisplayName("§10.1: the rendered template version survives the saves the dispatcher makes after it")
+    void templateVersionSurvivesLaterSaves() {
+        // Arrange
+        TemplateVersionId renderedFrom = TemplateVersionId.newId();
+        Message message = accepted("abc0000010");
+        message.applyTemplateVersion(renderedFrom);
+        messages.save(message);
+
+        // Act — the dispatcher reloads the aggregate and saves it again; a version this path forgets to
+        // read would come back as NULL, which is exactly how the column stayed empty until now (D-4).
+        Message claimed = messages.findById(message.id()).orElseThrow();
+        claimed.markValidated(Actor.system(), ACCEPTED_AT.plusSeconds(1));
+        claimed.markRouted(Channel.SMS, PLAYMOBILE, Actor.system(), ACCEPTED_AT.plusSeconds(2));
+        messages.save(claimed);
+
+        // Assert
+        assertThat(messages.findById(message.id()).orElseThrow().templateVersionId())
+                .contains(renderedFrom);
+        assertThat(jdbc().sql("SELECT template_version_id FROM message WHERE id = :id")
+                        .param("id", message.id().value())
+                        .query(UUID.class)
+                        .single())
+                .isEqualTo(renderedFrom.value());
+    }
+
+    @Test
+    @DisplayName("a message without a template records no version")
+    void messageWithoutTemplateHasNoVersion() {
+        // Arrange
+        Message message = Message.accept(
+                MessageEnvelope.single(
+                        StreamId.of("mobile-app"), ExternalMessageId.of("abc0000011"), TrafficClass.TRANSACTIONAL),
+                Recipient.ofMsisdn(Msisdn.of("998901234567")),
+                ChannelPlan.explicitChannel(Channel.SMS),
+                MessageContents.of(SmsContent.of("Код 1234", "HAMKORBANK")),
+                null,
+                Timing.immediate(),
+                ACCEPTED_AT);
+
+        // Act
+        messages.save(message);
+
+        // Assert
+        assertThat(messages.findById(message.id()).orElseThrow().templateVersionId())
+                .isEmpty();
     }
 
     @Test

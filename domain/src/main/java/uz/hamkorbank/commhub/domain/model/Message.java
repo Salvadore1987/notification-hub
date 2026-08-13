@@ -20,6 +20,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -49,6 +50,7 @@ public final class Message extends AggregateRoot<MessageId> {
     private final List<DeliveryAttempt> attempts = new ArrayList<>();
 
     private MessageContents contents;
+    private TemplateVersionId templateVersionId;
     private MessageStatus status;
     private RejectionReason statusReason;
     private Channel selectedChannel;
@@ -120,6 +122,7 @@ public final class Message extends AggregateRoot<MessageId> {
         this.channelPlan = Guard.notNull(source.channelPlan, "Message.channelPlan");
         this.contents = Guard.notNull(source.contents, "Message.contents");
         this.template = source.template;
+        this.templateVersionId = source.templateVersionId;
         this.timing = Guard.notNull(source.timing, "Message.timing");
         this.acceptedAt = Guard.notNull(source.acceptedAt, "Message.acceptedAt");
         requirePlanIsServedByContents(source.channelPlan, source.contents);
@@ -297,6 +300,24 @@ public final class Message extends AggregateRoot<MessageId> {
         this.contents = contents.with(rendered);
     }
 
+    /**
+     * Records the template version the content was rendered from (§10.1 {@code message}, FR-4.1).
+     *
+     * <p>Separate from {@link TemplateRef}, which is what the submission asked for — a code and a
+     * locale — while this is what the rendering stage resolved. The two are not interchangeable
+     * retrospectively: publishing v2 archives v1 ({@link Template#publishVersion}), so a code and a
+     * locale name the version that is published <em>now</em>, not the wording a customer received
+     * last month. Guarded by the statuses that may still be rendered, for the same reason
+     * {@link #applyRenderedContent} is: after routing there is nothing left to render.
+     */
+    public void applyTemplateVersion(TemplateVersionId versionId) {
+        Guard.notNull(versionId, "versionId");
+        Guard.isTrue(
+                CONTENT_MUTABLE_STATUSES.contains(status),
+                "template version can no longer be recorded in status " + status);
+        this.templateVersionId = versionId;
+    }
+
     /** Stores the SMS segment count computed by {@code SegmentCalculator} (MP-06, §18.3). */
     public void applySegments(int segmentCount) {
         this.segments = Guard.positive(segmentCount, "segmentCount");
@@ -401,6 +422,11 @@ public final class Message extends AggregateRoot<MessageId> {
         return Optional.ofNullable(template);
     }
 
+    /** Version the content was rendered from; empty for a submission that carried its own content. */
+    public Optional<TemplateVersionId> templateVersionId() {
+        return Optional.ofNullable(templateVersionId);
+    }
+
     public Timing timing() {
         return timing;
     }
@@ -485,6 +511,7 @@ public final class Message extends AggregateRoot<MessageId> {
         private final List<StatusChange> statusHistory = new ArrayList<>();
         private final List<DeliveryAttempt> attempts = new ArrayList<>();
 
+        private TemplateVersionId templateVersionId;
         private MessageStatus status = MessageStatus.ACCEPTED;
         private RejectionReason statusReason;
         private Channel selectedChannel;
@@ -524,6 +551,12 @@ public final class Message extends AggregateRoot<MessageId> {
         public Rehydration route(Channel channel, ProviderRef provider) {
             this.selectedChannel = channel;
             this.selectedProvider = provider;
+            return this;
+        }
+
+        /** Version the content was rendered from; {@code null} for a message without a template. */
+        public Rehydration templateVersion(TemplateVersionId versionId) {
+            this.templateVersionId = versionId;
             return this;
         }
 

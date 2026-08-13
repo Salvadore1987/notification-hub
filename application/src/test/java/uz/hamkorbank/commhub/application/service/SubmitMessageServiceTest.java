@@ -281,6 +281,35 @@ class SubmitMessageServiceTest {
     }
 
     @Test
+    @DisplayName("§10.1: the message records the version it was rendered from, not only the template code")
+    void recordsTheRenderedTemplateVersion() {
+        // Arrange
+        Template template = publishedTemplate("Kod: {CODE}");
+        when(templates.findByCode(TEMPLATE_CODE)).thenReturn(Optional.of(template));
+
+        // Act
+        SubmitMessageResult result = service.submit(commandWithTemplate(Map.of("CODE", "123456")));
+
+        // Assert
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(savedMessage().templateVersionId())
+                .contains(template.publishedVersion(ContentLocale.RU)
+                        .orElseThrow()
+                        .id());
+    }
+
+    @Test
+    @DisplayName("a submission that carries its own content records no template version")
+    void recordsNoVersionWithoutATemplate() {
+        // Act
+        SubmitMessageResult result = service.submit(commandWith(TrafficClass.TRANSACTIONAL, smsContents()));
+
+        // Assert
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(savedMessage().templateVersionId()).isEmpty();
+    }
+
+    @Test
     @DisplayName("FR-4.3: a missing merge variable rejects the message in strict mode")
     void rejectsMissingMergeVariable() {
         // Arrange
