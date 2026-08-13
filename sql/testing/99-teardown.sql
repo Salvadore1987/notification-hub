@@ -5,7 +5,7 @@
 -- кейсом). Этот файл убирает и её — чтобы после набора база выглядела так же, как после
 -- миграций на пустой контур, и следующий, кто её возьмёт, не унаследовал чужих потоков.
 --
--- Удаляется только то, что завёл набор: провайдеры MOCK-*, потоки из §2.1 спецификации,
+-- Удаляется только то, что завёл набор: провайдеры MOCK_*, потоки из §2.1 спецификации,
 -- шаблоны из §2.4. Настоящая конфигурация контура (Playmobile, SMS Gate, боевые потоки)
 -- не трогается — по имени, а не по «удалить всё».
 --
@@ -65,7 +65,7 @@ DELETE FROM stream
               'quota-day', 'quota-alert', 'stream-suspended', 'stream-disabled',
               'email-stream', 'push-stream', 'rate-limited');
 
-DELETE FROM provider WHERE code LIKE 'MOCK-%';
+DELETE FROM provider WHERE code LIKE 'MOCK\_%';
 
 -- Каналы не удаляются, а возвращаются в исходное: профиль канала — это строка, которую
 -- кто-то создал, и её отсутствие на контуре означает NO_ROUTE_AVAILABLE при первой же
@@ -81,7 +81,7 @@ WITH cleaned AS (
       FROM channel c
       LEFT JOIN LATERAL jsonb_array_elements_text(c.fallback_order)
            WITH ORDINALITY AS e(value, ord)
-        ON e.value NOT LIKE 'MOCK-%'
+        ON e.value NOT LIKE 'MOCK\_%'
      GROUP BY c.code
 )
 UPDATE channel
@@ -102,7 +102,7 @@ SELECT 'streams набора'   AS entity,
  WHERE id IN ('ibank-otp', 'core-banking', 'marketing-bulk', 'marketing-defer',
               'quota-day', 'quota-alert', 'stream-suspended', 'stream-disabled',
               'email-stream', 'push-stream', 'rate-limited')
-UNION ALL SELECT 'провайдеры MOCK-*', count(*) FROM provider WHERE code LIKE 'MOCK-%'
+UNION ALL SELECT 'провайдеры MOCK_*', count(*) FROM provider WHERE code LIKE 'MOCK\_%'
 UNION ALL SELECT 'шаблоны набора',    count(*) FROM template WHERE code IN
        ('OTP_RU_UZ', 'ONLY_RU', 'DRAFT_ONLY', 'ARCHIVED_CARD', 'MANY_VARS')
 UNION ALL SELECT 'сообщения',         count(*) FROM message
