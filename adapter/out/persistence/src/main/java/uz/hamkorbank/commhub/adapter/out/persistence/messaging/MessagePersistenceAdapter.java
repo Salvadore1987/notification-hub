@@ -32,6 +32,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderCode;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.StreamId;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
 import uz.hamkorbank.commhub.domain.support.Guard;
 
 /**
@@ -120,22 +121,23 @@ public class MessagePersistenceAdapter implements MessageRepository {
     private static final String SELECT_MESSAGE = """
             SELECT id, accepted_at, external_id, stream_id, batch_id, traffic_class, priority, dedup_key,
                    correlation_id, recipient, channel_plan, contents, template_code, template_locale,
-                   template_variables, timing, status, status_reason, selected_channel, selected_provider_id,
-                   selected_provider_code, selected_provider_adapter_type, segments, cost, cost_currency,
-                   duplicate_of, test, terminal_at
+                   template_version_id, template_variables, timing, status, status_reason, selected_channel,
+                   selected_provider_id, selected_provider_code, selected_provider_adapter_type, segments,
+                   cost, cost_currency, duplicate_of, test, terminal_at
             FROM message
             """;
 
     private static final String UPSERT_MESSAGE = """
             INSERT INTO message (id, accepted_at, external_id, stream_id, batch_id, traffic_class, priority,
                                  dedup_key, correlation_id, recipient, channel_plan, contents, template_code,
-                                 template_locale, template_variables, timing, status, status_reason,
-                                 selected_channel, selected_provider_id, selected_provider_code,
+                                 template_locale, template_version_id, template_variables, timing, status,
+                                 status_reason, selected_channel, selected_provider_id, selected_provider_code,
                                  selected_provider_adapter_type, segments, cost, cost_currency, duplicate_of,
                                  test, terminal_at)
             VALUES (:id, :acceptedAt, :externalId, :streamId, :batchId, :trafficClass, :priority,
                     :dedupKey, :correlationId, CAST(:recipient AS jsonb), CAST(:channelPlan AS jsonb),
-                    CAST(:contents AS jsonb), :templateCode, :templateLocale, CAST(:templateVariables AS jsonb),
+                    CAST(:contents AS jsonb), :templateCode, :templateLocale, :templateVersionId,
+                    CAST(:templateVariables AS jsonb),
                     CAST(:timing AS jsonb), :status, :statusReason, :selectedChannel, :selectedProviderId,
                     :selectedProviderCode, :selectedProviderAdapterType, :segments, :cost, :costCurrency,
                     :duplicateOf, :test, :terminalAt)
@@ -143,6 +145,7 @@ public class MessagePersistenceAdapter implements MessageRepository {
                 contents = EXCLUDED.contents,
                 template_code = EXCLUDED.template_code,
                 template_locale = EXCLUDED.template_locale,
+                template_version_id = EXCLUDED.template_version_id,
                 template_variables = EXCLUDED.template_variables,
                 status = EXCLUDED.status,
                 status_reason = EXCLUDED.status_reason,
@@ -427,6 +430,11 @@ public class MessagePersistenceAdapter implements MessageRepository {
                 .param("contents", contentCodec.write(MessageContentsJson.of(message.contents())))
                 .param("templateCode", template == null ? null : template.code().value())
                 .param("templateLocale", template == null ? null : SqlValues.nameOf(template.locale()))
+                .param(
+                        "templateVersionId",
+                        message.templateVersionId()
+                                .map(TemplateVersionId::value)
+                                .orElse(null))
                 .param("templateVariables", template == null ? null : contentCodec.write(template.variables()))
                 .param("timing", jsonCodec.write(TimingJson.of(message.timing())))
                 .param("status", message.status().name())

@@ -113,7 +113,7 @@ public class SubmitMessageService implements SubmitMessage {
             return refuse(
                     command, template.verdict().reason(), template.verdict().detail());
         }
-        return accept(command, stream, trafficClass, template.contents(), dedupKey, now, startedAt);
+        return accept(command, stream, trafficClass, template, dedupKey, now, startedAt);
     }
 
     /** Builds the aggregate and runs the stages that need it (FR-1.4, MP-05, FR-5.1…FR-5.4, FR-2.6). */
@@ -121,13 +121,13 @@ public class SubmitMessageService implements SubmitMessage {
             SubmitMessageCommand command,
             Stream stream,
             TrafficClass trafficClass,
-            MessageContents contents,
+            TemplateOutcome template,
             DedupKey dedupKey,
             Instant now,
             long startedAt) {
         Message message;
         try {
-            message = build(command, stream, trafficClass, contents, dedupKey, now);
+            message = build(command, stream, trafficClass, template, dedupKey, now);
         } catch (DomainValidationException e) {
             return refuse(command, RejectionReason.VALIDATION_FAILED, e.getMessage());
         }
@@ -216,10 +216,11 @@ public class SubmitMessageService implements SubmitMessage {
             SubmitMessageCommand command,
             Stream stream,
             TrafficClass trafficClass,
-            MessageContents contents,
+            TemplateOutcome template,
             DedupKey dedupKey,
             Instant now) {
         MessageEnvelope envelope = envelopeOf(command, stream, trafficClass, dedupKey);
+        MessageContents contents = template.contents();
         Message message = Message.accept(
                 envelope,
                 command.recipient(),
@@ -228,6 +229,9 @@ public class SubmitMessageService implements SubmitMessage {
                 command.template(),
                 command.delivery().timingOptional().orElseGet(Timing::immediate),
                 now);
+        // What the submission asked for is command.template() — a code and a locale; what the message
+        // was actually rendered from is this version, and only it survives the next publication (§10.1).
+        template.versionOptional().ifPresent(version -> message.applyTemplateVersion(version.id()));
         if (command.delivery().test()) {
             message.markAsTest();
         }

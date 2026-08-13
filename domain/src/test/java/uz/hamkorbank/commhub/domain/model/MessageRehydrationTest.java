@@ -26,6 +26,7 @@ import uz.hamkorbank.commhub.domain.model.vo.ProviderId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
 import uz.hamkorbank.commhub.domain.model.vo.Recipient;
+import uz.hamkorbank.commhub.domain.model.vo.TemplateVersionId;
 
 /** Reconstitution of a message read back from storage (§10.1 {@code message}, DB-01). */
 class MessageRehydrationTest {
@@ -52,7 +53,9 @@ class MessageRehydrationTest {
                         deliveredAt));
 
         // Act
+        TemplateVersionId renderedFrom = TemplateVersionId.newId();
         Message message = rehydration(envelope)
+                .templateVersion(renderedFrom)
                 .status(MessageStatus.DELIVERED, null, deliveredAt)
                 .route(Channel.SMS, PLAYMOBILE)
                 .billing(2, uzs("49.0000"))
@@ -62,6 +65,9 @@ class MessageRehydrationTest {
 
         // Assert
         assertThat(message.id()).isEqualTo(envelope.id());
+        // Версия рендера восстанавливается вместе с остальным состоянием: без этого следующее
+        // сохранение агрегата затёрло бы её в NULL (§10.1).
+        assertThat(message.templateVersionId()).contains(renderedFrom);
         assertThat(message.status()).isEqualTo(MessageStatus.DELIVERED);
         assertThat(message.terminalAt()).contains(deliveredAt);
         assertThat(message.selectedChannel()).contains(Channel.SMS);
