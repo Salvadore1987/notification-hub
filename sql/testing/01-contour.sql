@@ -122,9 +122,13 @@ VALUES
     ('push-stream', 'Push-поток', 'ACTIVE', 'PUSH', 'TRANSACTIONAL', 'NORMAL',
      NULL, NULL, NULL),
 
+    -- perMinute намеренно 0: при заданном perMinute он становится РАЗМЕРОМ ВСПЛЕСКА
+    -- (StreamLimits.toStreamLimit), и «2 rps» с perMinute=120 пропускает 120 запросов
+    -- подряд — IT-ING-015 с его десятью запросами не смог бы упереться в лимит вовсе.
+    -- Без perMinute всплеск равен двум секундам ставки, то есть 4 запросам.
     ('rate-limited', 'Поток с лимитом 2 rps (только REST)', 'ACTIVE', 'SMS', 'NOTIFICATION', 'LOW',
      NULL, NULL,
-     '{"tps": 2, "perMinute": 120, "perRecipientPerHour": 0}'::jsonb)
+     '{"tps": 2, "perMinute": 0, "perRecipientPerHour": 0}'::jsonb)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     status = EXCLUDED.status,
