@@ -22,9 +22,11 @@ import uz.hamkorbank.commhub.adapter.in.admin.support.SendLimits;
 import uz.hamkorbank.commhub.adapter.in.contract.InboundContractException;
 import uz.hamkorbank.commhub.adapter.in.rest.dto.MessageAcceptedResponse;
 import uz.hamkorbank.commhub.adapter.in.rest.mapper.RestResponseMapper;
+import uz.hamkorbank.commhub.adapter.in.rest.problem.SubmissionRejectedException;
 import uz.hamkorbank.commhub.adapter.in.rest.security.AuthenticatedCaller;
 import uz.hamkorbank.commhub.application.dto.OperatorBatchResult;
 import uz.hamkorbank.commhub.application.dto.SendEstimateView;
+import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
 import uz.hamkorbank.commhub.application.port.in.EstimateSend;
 import uz.hamkorbank.commhub.application.port.in.SendOperatorMessage;
 import uz.hamkorbank.commhub.application.port.in.command.OperatorBatchCommand;
@@ -105,7 +107,14 @@ public class SendAdminController {
         return viewMapper.toSendEstimate(estimates.estimate(query), parsed.failures());
     }
 
-    /** {@code POST /api/admin/v1/send/message} — one message, by the published template (ADR-0038). */
+    /**
+     * {@code POST /api/admin/v1/send/message} — one message, by the published template (ADR-0038).
+     *
+     * <p>A refusal is a problem document, exactly as in §8.2 — never a 200 carrying a rejected status
+     * inside (D-12). The operator is standing in front of the screen waiting to be told why the send
+     * did not happen, and "quota exhausted" is a sentence they can act on; a 200 whose body they have
+     * to read is one they will read as "sent".
+     */
     @PostMapping(
             path = "/message",
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -115,7 +124,11 @@ public class SendAdminController {
             @RequestBody SendRequest request,
             @RequestHeader(name = AdminApi.REASON_HEADER, required = false) String reason) {
         OperatorSendCommand command = commandMapper.toOperatorSend(request, caller.actor(), justification(reason));
-        return acceptedMapper.toAccepted(sendMessage.send(command));
+        SubmitMessageResult result = sendMessage.send(command);
+        if (!result.isAccepted()) {
+            throw new SubmissionRejectedException(result);
+        }
+        return acceptedMapper.toAccepted(result);
     }
 
     /** {@code POST /api/admin/v1/send/batch} — a batch from the uploaded list (FR-1.6). */

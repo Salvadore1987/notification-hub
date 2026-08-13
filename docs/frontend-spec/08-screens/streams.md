@@ -73,6 +73,17 @@ exist, constrained nothing, and was silently dropped by `PUT` — do not reintro
 **Quota** (`quota`) — `dailyCount`, `monthlyCount`, `dailyCost`, `monthlyCost`, and `behavior`
 (`BLOCK_AND_ALERT` = refuse, `ALERT_ONLY` = pass but signal).
 
+> **`behavior` is required as soon as any ceiling is filled in, and it has no default.** The backend
+> answers `400` with `field: "quota.behavior"` for a quota that carries a ceiling and no behaviour, so
+> mark the control required whenever any of the four ceilings has a value — and never preselect one of
+> the two for the operator. The choice decides whether a customer's message goes out at all; it used to
+> be answered with `ALERT_ONLY` when omitted, which produced quotas that counted and stopped nothing
+> while the card displayed the substituted value as though it had been chosen. A quota with no ceiling
+> at all may omit `behavior` — there is nothing to behave about.
+
+The same rule applies wherever a quota is edited: the channel form and the provider form
+(`providers.md`) carry the same block, with fewer ceilings.
+
 **Rate limit** (`rateLimit`) — `tps`, `perMinute`, `perRecipientPerHour` (IR-02).
 
 **Quiet hours** (`quietHours`) — `start`, `end` (`HH:mm`), `zone` (IANA, default `Asia/Tashkent`),

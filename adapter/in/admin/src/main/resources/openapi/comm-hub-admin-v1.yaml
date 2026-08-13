@@ -595,12 +595,17 @@ paths:
             schema: { $ref: '#/components/schemas/TestSendRequest' }
       responses:
         '200':
-          description: Результат приёма сообщения
+          description: |
+            Сообщение принято конвейером. Отказ приходит как problem+json со своим кодом, а не
+            как `200` со статусом REJECTED в теле: тестовая отправка существует ради того, чтобы
+            узнать, что делает конфигурация, и «REJECTED» без причины не отвечает ни на что.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MessageAccepted' }
         '400': { $ref: '#/components/responses/Problem' }
         '422': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
 
   # ------------------------------------------------------------------ маршрутизация
 
@@ -1228,13 +1233,19 @@ paths:
             schema: { $ref: '#/components/schemas/SendRequest' }
       responses:
         '200':
-          description: Сообщение принято конвейером
+          description: |
+            Сообщение принято конвейером. Отказ сюда не приходит: он оформляется как problem+json
+            со своим кодом (`422` для SUPPRESSED/QUIET_HOURS/TEMPLATE_*, `429` для QUOTA_EXCEEDED
+            и FREQUENCY_CAPPED, `503` для KILL_SWITCH), а не как `200` со статусом REJECTED в теле.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MessageAccepted' }
         '400': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
 
   /send/batch:
     post:
@@ -1605,6 +1616,12 @@ components:
 
     Quota:
       type: object
+      description: |
+        Квота измерения (FR-2.6). Пустой потолок значит «безлимитно».
+
+        `behavior` ОБЯЗАТЕЛЕН, как только задан хотя бы один потолок: он решает, уходит ли
+        сообщение клиенту, и умолчания у него нет — запрос без него получает `400` с указателем
+        на поле. Опустить его можно только у квоты без единого потолка.
       properties:
         dailyCount: { type: integer, format: int64, nullable: true }
         monthlyCount: { type: integer, format: int64, nullable: true }

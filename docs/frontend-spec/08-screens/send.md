@@ -80,6 +80,13 @@ The response (`SendEstimate`) shows: `recipients`, `segments`, `provider`, `esti
 Both require `X-Commhub-Reason` — the confirm button must require a non-empty justification rather
 than sending a blank header.
 
+> **A pipeline refusal of a single send arrives as a problem document, not as a 200.** `POST
+> /send/message` answers `422` (`SUPPRESSED`, `QUIET_HOURS`, `TEMPLATE_*`), `429` (`QUOTA_EXCEEDED`,
+> `FREQUENCY_CAPPED`), `409` (`DUPLICATE_SUBMISSION`) or `503` (`KILL_SWITCH`), each carrying `code`,
+> `detail` and the `messageId` — render it through the ordinary error path (`05-error-model.md`) and do
+> not try to read a status out of a 200 body. `POST /send/batch` is different on purpose: it stays
+> `202` and reports per-row refusals in `failures[]`, because one bad row must not fail the upload.
+
 ### The estimate gate
 
 **The send action is disabled until an estimate exists for the current form state, and any edit to the
