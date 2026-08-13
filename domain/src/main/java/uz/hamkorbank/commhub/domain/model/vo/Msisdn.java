@@ -24,7 +24,11 @@ public record Msisdn(String value) {
     /**
      * Normalises common input variants ({@code +998...}, spaces, dashes) before validation.
      *
-     * <p>Used by inbound adapters; the canonical form stored in the domain stays {@code 9989xxxxxxxx}.
+     * <p>Used where a <em>person</em> supplies the address — the panel's recipient CSV — and where an
+     * address is hashed for the suppression list, so that a ban entered by hand matches the canonical
+     * form a message carries. The machine ingress of §8.1/§8.2 deliberately does <em>not</em> normalise:
+     * it holds source systems to the format its own published contract declares (FR-1.4, §9.1).
+     * The canonical form stored in the domain is {@code 9989xxxxxxxx} either way.
      */
     public static Msisdn normalize(String raw) {
         Guard.notBlank(raw, "Msisdn.value");

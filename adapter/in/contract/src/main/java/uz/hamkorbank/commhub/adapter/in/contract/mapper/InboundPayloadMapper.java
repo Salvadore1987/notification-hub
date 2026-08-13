@@ -61,7 +61,16 @@ import uz.hamkorbank.commhub.domain.model.vo.TemplateCode;
 @Mapper(componentModel = "spring")
 public interface InboundPayloadMapper {
 
-    /** {@code recipient} → the addresses of the message (IK-03). */
+    /**
+     * {@code recipient} → the addresses of the message (IK-03).
+     *
+     * <p>The MSISDN is taken <em>strictly</em> ({@code Msisdn.of}, not {@code Msisdn.normalize}): this is
+     * the machine ingress, and FR-1.4, §9.1 and the published contract of §8.2 all say the same thing —
+     * {@code ^9989\d{8}$}, no {@code +} and no spaces. Normalising here would accept, in silence, exactly
+     * the documents the contract tells a source system are invalid, so its format bug would surface not
+     * in integration testing but on the day its separator stops being an ASCII hyphen. Normalisation
+     * stays where a human types the address (the panel's recipient CSV) and where an address is hashed.
+     */
     default Recipient toRecipient(RecipientPayload payload, String path) {
         if (payload == null) {
             throw InboundContractException.missing(path);
@@ -76,7 +85,7 @@ public interface InboundPayloadMapper {
                 path,
                 () -> new Recipient(
                         blank(payload.clientId()) ? null : ClientId.of(payload.clientId()),
-                        blank(payload.msisdn()) ? null : Msisdn.normalize(payload.msisdn()),
+                        blank(payload.msisdn()) ? null : Msisdn.of(payload.msisdn()),
                         blank(payload.email()) ? null : EmailAddress.of(payload.email()),
                         pushTokens));
     }
