@@ -82,8 +82,28 @@ class InboundBatchCodecTest {
         // Assert
         assertThat(command.batchId()).isEqualTo(BATCH_ID);
         assertThat(command.items()).hasSize(2);
-        assertThat(command.items().getFirst().template().variables()).containsEntry("name", "Aziz");
+        assertThat(command.items().getFirst().variables()).containsEntry("name", "Aziz");
         assertThat(command.items().getLast().contents().channels()).containsExactly(Channel.SMS);
+    }
+
+    @Test
+    @DisplayName("FR-1.6: an item that only carries variables keeps them, the template being the header's")
+    void keepsTheVariablesOfAnItemWithoutATemplateId() {
+        // Arrange — документированная форма заливки: шаблон назван в заголовке рассылки, элемент
+        // несёт значения своей строки и ничего больше
+        String chunk = """
+                { "items": [
+                    { "externalMessageId": "b-1", "recipient": { "msisdn": "998901234567" },
+                      "template": { "variables": { "CODE": "1234" } } }
+                ] }
+                """;
+
+        // Act
+        AddBatchItemsCommand command = codec.readItems(chunk, BATCH_ID, STREAM_ID);
+
+        // Assert — своего шаблона у элемента нет, а переменные не потеряны
+        assertThat(command.items().getFirst().template()).isNull();
+        assertThat(command.items().getFirst().variables()).containsEntry("CODE", "1234");
     }
 
     @Test

@@ -1,6 +1,7 @@
 package uz.hamkorbank.commhub.application.port.in.command;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import uz.hamkorbank.commhub.domain.model.ChannelPlan;
 import uz.hamkorbank.commhub.domain.model.TemplateRef;
@@ -31,22 +32,27 @@ public record AddBatchItemsCommand(BatchId batchId, StreamId streamId, List<Item
      * One item of a chunk; everything not set here is inherited from the batch header (FR-1.6).
      *
      * @param contents per-item content; {@code null} uses the template of the item or of the batch
-     * @param template per-item template override with its merge variables (FR-4.3)
+     * @param template per-item template override; {@code null} keeps the template of the header
+     * @param variables merge values of this row, laid over those of the resolved template (FR-4.3).
+     *     They travel apart from {@code template} because the usual item names no template at all —
+     *     the header does — and a block carrying nothing but variables must not be dropped with it.
      */
     public record Item(
             ExternalMessageId externalMessageId,
             Recipient recipient,
             MessageContents contents,
             TemplateRef template,
+            Map<String, String> variables,
             ChannelPlan channelPlan) {
 
         public Item {
             Guard.notNull(externalMessageId, "Item.externalMessageId");
             Guard.notNull(recipient, "Item.recipient");
+            variables = Guard.copyOf(variables);
         }
 
         public static Item of(ExternalMessageId externalMessageId, Recipient recipient, TemplateRef template) {
-            return new Item(externalMessageId, recipient, null, template, null);
+            return new Item(externalMessageId, recipient, null, template, Map.of(), null);
         }
 
         public Optional<MessageContents> contentsOptional() {

@@ -188,7 +188,20 @@ public interface InboundPayloadMapper {
                 toRecipient(payload.recipient(), path + ".recipient"),
                 toContents(payload.content(), path + ".content"),
                 toTemplate(payload.template(), path + ".template"),
+                itemVariables(payload.template()),
                 toChannelPlan(payload.channels(), path + ".channels"));
+    }
+
+    /**
+     * Merge values of one item, read separately from its {@code template} block (FR-1.6).
+     *
+     * <p>{@link #toTemplate} answers {@code null} for a block without an {@code id}, which is exactly
+     * what a batch item usually sends: the template is named once in the header and the item carries
+     * nothing but the values of its own row. Read through that method alone, those values were dropped
+     * and every row of the chunk came back {@code TEMPLATE_VARIABLE_MISSING}.
+     */
+    private static Map<String, String> itemVariables(TemplatePayload payload) {
+        return payload == null || payload.variables() == null ? Map.of() : payload.variables();
     }
 
     private PushToken toPushToken(PushTokenPayload payload, String path) {
