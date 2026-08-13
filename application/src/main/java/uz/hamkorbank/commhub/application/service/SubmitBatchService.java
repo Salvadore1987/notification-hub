@@ -2,7 +2,9 @@ package uz.hamkorbank.commhub.application.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.hamkorbank.commhub.application.dto.BatchAcceptedResult;
@@ -23,6 +25,7 @@ import uz.hamkorbank.commhub.domain.exception.DomainValidationException;
 import uz.hamkorbank.commhub.domain.model.Batch;
 import uz.hamkorbank.commhub.domain.model.ChannelPlan;
 import uz.hamkorbank.commhub.domain.model.Stream;
+import uz.hamkorbank.commhub.domain.model.TemplateRef;
 import uz.hamkorbank.commhub.domain.model.Timing;
 import uz.hamkorbank.commhub.domain.model.type.BatchStatus;
 import uz.hamkorbank.commhub.domain.model.type.MessageStatus;
@@ -168,8 +171,27 @@ public class SubmitBatchService implements SubmitBatch {
                 item.recipient(),
                 item.contents(),
                 item.channelPlanOptional().orElseGet(() -> ChannelPlan.explicitChannel(batch.channel())),
-                item.templateOptional().orElseGet(() -> defaults.template()),
+                templateFor(defaults, item),
                 new SubmitMessageCommand.Delivery(
                         defaults.trafficClass(), null, batch.timing(), null, null, defaults.test(), null));
+    }
+
+    /**
+     * The template the item is rendered from: the header's, unless the item names another one, and in
+     * either case with the item's own merge values laid over it (FR-1.6, FR-4.3).
+     *
+     * <p>Which is the whole point of a batch template: the header says what is being sent and the item
+     * says to whom and with which values. Taking one or the other made the documented shape — a header
+     * with {@code template} and items with nothing but {@code variables} — reject every row of the
+     * chunk with {@code TEMPLATE_VARIABLE_MISSING}, because the values never reached the renderer.
+     */
+    private static TemplateRef templateFor(Batch.ItemDefaults defaults, AddBatchItemsCommand.Item item) {
+        TemplateRef template = item.templateOptional().orElseGet(defaults::template);
+        if (template == null || item.variables().isEmpty()) {
+            return template;
+        }
+        Map<String, String> merged = new LinkedHashMap<>(template.variables());
+        merged.putAll(item.variables());
+        return template.withVariables(merged);
     }
 }

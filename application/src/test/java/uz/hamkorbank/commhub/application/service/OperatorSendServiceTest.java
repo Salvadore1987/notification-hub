@@ -172,13 +172,17 @@ class OperatorSendServiceTest {
         verify(submitBatch, org.mockito.Mockito.times(2)).addItems(chunks.capture());
         assertThat(chunks.getAllValues().getFirst().items()).hasSize(500);
         assertThat(chunks.getAllValues().getLast().items()).hasSize(1);
+        // Переменные строки едут своим полем, а не внутри её шаблона: элемент рассылки обычно
+        // никакого шаблона не называет — его называет заголовок (FR-1.6)
+        assertThat(chunks.getAllValues().getFirst().items().getFirst().variables())
+                .containsEntry("NAME", "Клиент 0");
         assertThat(chunks.getAllValues()
                         .getFirst()
                         .items()
                         .getFirst()
                         .template()
-                        .variables())
-                .containsEntry("NAME", "Клиент 0");
+                        .code())
+                .isEqualTo(TEMPLATE.code());
         assertThat(result.accepted()).isEqualTo(501);
     }
 

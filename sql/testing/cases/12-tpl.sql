@@ -9,6 +9,14 @@
 -- outbound-контента на стенде (commhub.provider.content-log.enabled=true в корневом
 -- config/application.yml) либо по запросу, который увидел фальшивый провайдер.
 -- В SQL проверяется то, что в базе действительно есть: код шаблона, локаль и версия.
+--
+-- ОТКАЗ НА ШАБЛОНЕ СТРОКИ В message НЕ ОСТАВЛЯЕТ, и проверки ниже написаны исходя из этого.
+-- Стадия шаблона идёт ДО создания агрегата — рендер и есть то, из чего берётся содержимое
+-- сообщения, — поэтому SubmitMessageService отвечает отказом (refuse), а не отклоняет
+-- созданное сообщение (reject). Причина отказа приходит в ответе REST (422 или 400 с кодом
+-- в problem+json), в базе её нет и быть не может. То же верно для неизвестного потока и
+-- дубликата; а вот отказы валидации, маршрутизации, фильтров и квот происходят уже над
+-- созданным сообщением и строку в message оставляют — см. 13-val.sql.
 -- =====================================================================================
 
 \set ON_ERROR_STOP on
@@ -52,10 +60,9 @@ SELECT status_reason IS NULL AS ok, 'отказа по локали не был�
 SELECT count(*) = 1 AS ok, 'у DRAFT_ONLY нет ни одной опубликованной версии' AS check
   FROM template_version v JOIN template t ON t.id = v.template_id
  WHERE t.code = 'DRAFT_ONLY' AND v.status = 'DRAFT';
-SELECT count(*) = 0 AS ok, 'сообщение не создано либо отклонено' AS check
-  FROM message WHERE status <> 'REJECTED';
-SELECT status_reason = 'TEMPLATE_NOT_PUBLISHED' AS ok, 'причина отказа названа верно' AS check
-  FROM message;
+SELECT count(*) = 0 AS ok, 'сообщение не создано' AS check FROM message;
+-- Причина (TEMPLATE_NOT_PUBLISHED) и код ответа (422) проверяются в ответе REST: отказ на
+-- шаблоне случается до создания агрегата и в базе следа не оставляет (см. шапку файла).
 
 
 -- >>> IT-TPL-005  Карточка архивирована
@@ -65,9 +72,10 @@ SELECT t.status = 'ARCHIVED' AND v.status = 'PUBLISHED' AS ok,
        'карточка архивна, а версия опубликована — именно этот случай и проверяем' AS check
   FROM template t JOIN template_version v ON v.template_id = t.id
  WHERE t.code = 'ARCHIVED_CARD';
-SELECT status_reason = 'TEMPLATE_NOT_PUBLISHED' AS ok,
-       'архивная карточка не отправляема, хотя версия опубликована' AS check
+SELECT count(*) = 0 AS ok,
+       'архивная карточка не отправляема, хотя версия опубликована: сообщения нет' AS check
   FROM message;
+-- TEMPLATE_NOT_PUBLISHED с detail «template ARCHIVED_CARD is archived» — в ответе REST.
 
 
 -- >>> IT-TPL-006  Незаполненная переменная
@@ -77,11 +85,11 @@ SELECT v.variables = '["NAME", "AMOUNT", "ACCOUNT"]'::jsonb AS ok,
        'у MANY_VARS объявлены три переменные' AS check
   FROM template t JOIN template_version v ON v.template_id = t.id
  WHERE t.code = 'MANY_VARS';
-SELECT status_reason = 'TEMPLATE_VARIABLE_MISSING' AS ok,
-       'строгий режим отправки не подставляет пустое' AS check
+SELECT count(*) = 0 AS ok,
+       'строгий режим отправки не подставляет пустое: сообщения нет' AS check
   FROM message;
-SELECT status = 'REJECTED' AND terminal_at IS NOT NULL AS ok, 'отказ терминален' AS check
-  FROM message;
+-- TEMPLATE_VARIABLE_MISSING и имя недостающего поля («missing value for merge field {ACCOUNT}»)
+-- — в ответе REST: рендерить нечем, значит и сообщения ещё нет (см. шапку файла).
 
 
 -- >>> IT-TPL-007  Лишняя переменная игнорируется
@@ -96,9 +104,9 @@ SELECT template_code = 'OTP_RU_UZ' AS ok, 'сообщение отрендере
 -- @assert
 SELECT count(*) = 0 AS ok, 'шаблона NO_SUCH в каталоге нет' AS check
   FROM template WHERE code = 'NO_SUCH';
-SELECT status_reason = 'VALIDATION_FAILED' AS ok,
-       'несуществующий шаблон — это VALIDATION_FAILED, а не TEMPLATE_NOT_PUBLISHED' AS check
-  FROM message;
+SELECT count(*) = 0 AS ok, 'сообщение не создано' AS check FROM message;
+-- Предмет кейса — различимость причин, и она видна только в ответе REST:
+-- VALIDATION_FAILED (400, «unknown template NO_SUCH»), а не TEMPLATE_NOT_PUBLISHED (422).
 
 
 -- >>> IT-TPL-009  Публикация новой версии на лету

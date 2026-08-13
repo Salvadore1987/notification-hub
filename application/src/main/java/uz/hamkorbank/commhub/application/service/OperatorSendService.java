@@ -131,11 +131,12 @@ public class OperatorSendService implements SendOperatorMessage {
         return new OperatorBatchResult(batchId, accepted, duplicates, rejections);
     }
 
-    /** One row becomes an ordinary batch item whose template carries that row's own variables. */
+    /** One row becomes an ordinary batch item carrying that row's own variables. */
     private static AddBatchItemsCommand.Item itemOf(OperatorBatchCommand command, OperatorBatchCommand.Item item) {
         TemplateRef template =
-                new TemplateRef(command.template().code(), command.template().locale(), item.variables());
-        return new AddBatchItemsCommand.Item(item.externalMessageId(), item.recipient(), null, template, null);
+                TemplateRef.of(command.template().code(), command.template().locale());
+        return new AddBatchItemsCommand.Item(
+                item.externalMessageId(), item.recipient(), null, template, item.variables(), null);
     }
 
     private void journal(uz.hamkorbank.commhub.domain.model.Actor actor, String entityId, String reason) {
