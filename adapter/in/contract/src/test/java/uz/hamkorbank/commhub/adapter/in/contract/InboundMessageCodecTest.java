@@ -7,6 +7,8 @@ import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import uz.hamkorbank.commhub.adapter.in.contract.mapper.InboundPayloadMapperImpl;
 import uz.hamkorbank.commhub.application.port.in.command.SubmitMessageCommand;
 import uz.hamkorbank.commhub.domain.model.content.SmsContent;
@@ -136,6 +138,28 @@ class InboundMessageCodecTest {
 
         // Act + Assert
         assertThatThrownBy(() -> codec.read(badMsisdn))
+                .isInstanceOf(InboundContractException.class)
+                .satisfies(thrown ->
+                        assertThat(((InboundContractException) thrown).field()).isEqualTo("recipient"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"+998 90 123-45-00", "+998901234500", "998 90 123 45 00", "99890123450"})
+    @DisplayName("§9.1: the machine ingress does not normalise separators away — the format is the contract")
+    void refusesSeparatorsInAnOtherwiseUzbekMsisdn(String candidate) {
+        // Arrange — the country code is right and only the separators are not; the ingress must still
+        // refuse, because ^9989\\d{8}$ is what the published contract of §8.2 promises a source system.
+        String document = """
+                {
+                  "streamId": "ibank-retail",
+                  "externalMessageId": "x-msisdn",
+                  "recipient": { "msisdn": "%s" },
+                  "content": { "sms": { "text": "hi" } }
+                }
+                """.formatted(candidate);
+
+        // Act + Assert
+        assertThatThrownBy(() -> codec.read(document))
                 .isInstanceOf(InboundContractException.class)
                 .satisfies(thrown ->
                         assertThat(((InboundContractException) thrown).field()).isEqualTo("recipient"));
