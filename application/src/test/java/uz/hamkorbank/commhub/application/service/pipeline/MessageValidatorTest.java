@@ -47,6 +47,31 @@ class MessageValidatorTest {
         metrics = mock(MetricsPort.class);
     }
 
+    /**
+     * FR-1.4, and the reason the routing case for the same input was retired (D-9).
+     *
+     * <p>{@code Router} carries a branch of its own for an unreachable recipient ("recipient has no
+     * usable address for the planned channels"), and it asks the aggregate exactly what this stage
+     * asks — {@code deliverableChannels().isEmpty()}. Validation runs first, so on the message path
+     * the routing branch is unreachable and this is the only answer a source system ever sees. It
+     * matters which one wins: this reason renders as {@code 400} ("fix the request"), the routing one
+     * as {@code 503} ("retry later") — and a retry never helps, because the document will not change.
+     */
+    @Test
+    @DisplayName("FR-1.4: a recipient with no address for the planned channel is refused before routing")
+    void rejectsRecipientWithoutAddressForThePlannedChannel() {
+        // Arrange
+        MessageValidator validator = validator(PanPolicy.rejecting());
+
+        // Act
+        PipelineVerdict verdict = validator.validate(unreachableRecipient());
+
+        // Assert
+        assertThat(verdict.isRejected()).isTrue();
+        assertThat(verdict.reason()).isEqualTo(RejectionReason.VALIDATION_FAILED);
+        assertThat(verdict.detail()).contains("no address for the planned channels");
+    }
+
     @Test
     @DisplayName("SEC-05: a card number in an SMS is rejected with PAN_DETECTED")
     void rejectsPanInSms() {
@@ -211,6 +236,15 @@ class MessageValidatorTest {
 
         // Assert
         assertThat(verdict.isRejected()).isFalse();
+    }
+
+    /** SMS content for a recipient who only has an email address: no channel is deliverable. */
+    private static Message unreachableRecipient() {
+        return Message.acceptSingleChannel(
+                MessageEnvelope.single(STREAM_ID, ExternalMessageId.of("noaddr00001"), TrafficClass.TRANSACTIONAL),
+                new Recipient(null, null, EmailAddress.of("client@example.uz"), List.of()),
+                SmsContent.of("Ваш код: 1234"),
+                NOW);
     }
 
     private static Message pushMessage(PushContent content, PushToken... tokens) {
