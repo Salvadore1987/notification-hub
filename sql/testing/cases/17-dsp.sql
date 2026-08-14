@@ -10,6 +10,24 @@
 -- открытую попытку (result='PENDING', response_at IS NULL), вызов идёт вне транзакции,
 -- DispatchSettlement применяет ответ к заново загруженному агрегату. Отсюда главная
 -- проверка области: незакрытая попытка после падения не превращается во вторую SMS.
+--
+-- ДВА ПРАВИЛА ЭТОЙ ОБЛАСТИ, без которых кейс красит стенд, а не Модуль (прогон 14.08.2026).
+--
+-- 1. ПОРЯДОК. Скрипт исполняет @arrange ДО действия, а почти всякое предусловие здесь
+--    правит уже принятое сообщение — которого после 00-reset.sql ещё нет. Значит порядок
+--    у 002, 003, 004, 007, 008, 009 обратный: сначала подать сообщение, потом @arrange,
+--    потом дать диспетчеру такт. Запускать их через `--arrange-only`/`--assert-only`
+--    нельзя: между ними должен встать не только запрос, но и блок предусловий.
+--
+-- 2. ДЕРЖАТЕЛЬ. Стенд отправляет принятое сообщение за 0,2–1 с (такт класса трафика),
+--    поэтому «сообщение ждёт в очереди» руками не поймать — его нужно ЗАДЕРЖАТЬ на приёме:
+--    timing.sendAfter в будущем, окно тишины DEFER вокруг «сейчас» или приостановленный
+--    батч. Кейс, которому нужна очередь, задерживает сообщение и снимает задержку сам.
+--
+-- И один формат: timing.sendAfter/sendBefore читаются Instant.parse (TimingJson), то есть
+-- ISO-8601 с «T» и «Z». Значение, записанное в jsonb как now()::text, Модуль не разберёт —
+-- сообщение застрянет, а не уедет. Правильная запись:
+--   to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
 -- =====================================================================================
 
 \set ON_ERROR_STOP on
@@ -25,15 +43,24 @@ SELECT count(*) = 0 AS ok, 'ни одного сообщения с двумя �
   FROM (SELECT message_id FROM delivery_attempt GROUP BY message_id HAVING count(*) > 1) d;
 SELECT count(*) = 0 AS ok, 'ни одно не осталось неотправленным' AS check
   FROM message WHERE status NOT IN ('SENT_TO_PROVIDER', 'DELIVERED');
+-- Справочно, и после разобранной очереди всегда ноль: releaseClaim обнуляет
+-- dispatch_owner на каждом успешном обороте. Что очередь разбирали ОБА пода, видно не
+-- отсюда, а из счётчиков вызовов каждого инстанса:
+--   curl -s localhost:<порт>/actuator/prometheus | grep '^commhub_provider_calls_seconds_count'
+-- снятых до и после; их дельты обязаны дать в сумме 60.
 SELECT count(DISTINCT dispatch_owner) AS owners, 'очередь разбирали оба «пода»' AS check
   FROM message WHERE dispatch_owner IS NOT NULL;
 
 
 -- >>> IT-DSP-002  Просроченный лизинг возвращает сообщение в очередь
 -- @arrange
--- Сообщение захвачено «подом», который больше не отвечает: лизинг истёк.
+-- Порядок обратный (правило 1 шапки): сначала подать сообщение с timing.sendAfter через
+-- час — оно будет принято и НЕ отправлено, — и только потом исполнить этот блок. Он
+-- снимает задержку (timing - 'sendAfter') и приводит строку к виду «захвачено подом,
+-- который больше не отвечает: лизинг истёк».
 UPDATE message
    SET status = 'QUEUED',
+       timing = timing - 'sendAfter',
        dispatch_owner = 'pod-который-умер',
        dispatch_claimed_until = now() - interval '5 minutes',
        next_attempt_at = now() - interval '5 minutes'
@@ -49,9 +76,17 @@ SELECT id, status, dispatch_owner, dispatch_claimed_until, next_attempt_at FROM 
 
 -- >>> IT-DSP-003  Разрыв саги после ответа провайдера
 -- @arrange
+-- Порядок обратный (правило 1 шапки): сначала отправить обычное сообщение на …00 и
+-- дождаться попытки, потом исполнить этот блок, потом дать диспетчеру несколько тактов.
 -- Воспроизводим состояние «провайдер ответил, расчёт не применён»: открытая попытка
 -- и снятый лизинг. Если диспетчер отправит второй раз — появится вторая строка попытки,
 -- и это ровно тот дефект, ради которого сага разорвана (H2 аудита).
+--
+-- Держит здесь сам статус: SENDING не входит в список статусов, которые забирает
+-- CLAIM_DISPATCHABLE ('ACCEPTED','VALIDATED','ROUTED','QUEUED','RETRYING'). Обратная
+-- сторона того же механизма — такое сообщение в очередь и не вернётся: подобрать его
+-- может только ExpireMessagesScheduler (и только если у сообщения есть ttlSeconds или
+-- sendBefore) либо отчёт провайдера. См. §4 отчёта runs/2026-08-14-stage-7.md.
 UPDATE delivery_attempt SET result = 'PENDING', response_at = NULL, response_code = NULL,
                             latency_ms = NULL, error_class = NULL, error_description = NULL;
 UPDATE message
@@ -69,11 +104,24 @@ SELECT attempt_no, result, response_at, provider_message_id FROM delivery_attemp
 
 -- >>> IT-DSP-004  Истечение TTL
 -- @arrange
--- Сообщение с timing.ttlSeconds уже принято; «прошло две минуты» воспроизводим сдвигом
--- момента приёма, а не ожиданием. Сообщение остаётся неотправленным.
+-- Порядок обратный (правило 1 шапки), и сообщению нужен держатель (правило 2): TTL
+-- истекает у того, кто ЖДЁТ, а неудержанное сообщение уходит провайдеру за секунду и
+-- проверять становится нечего. Держатель этого кейса — окно тишины DEFER вокруг «сейчас»
+-- у потока marketing-defer; ставится ДО подачи:
+--   UPDATE stream SET quiet_hours = jsonb_build_object(
+--            'start', to_char((now() AT TIME ZONE 'Asia/Tashkent') - interval '1 minute', 'HH24:MI'),
+--            'end',   to_char((now() AT TIME ZONE 'Asia/Tashkent') + interval '30 minutes', 'HH24:MI'),
+--            'zone', 'Asia/Tashkent', 'behavior', 'DEFER'), updated_at = now()
+--    WHERE id = 'marketing-defer';   -- и подождать до 10 с, пока снимок обновится
+-- Затем подать сообщение в marketing-defer с timing.ttlSeconds: 60 и исполнить блок ниже:
+-- «прошло две минуты» воспроизводится сдвигом момента приёма, а не ожиданием.
+--
+-- next_attempt_at здесь НЕ трогается намеренно: действие кейса — такт
+-- ExpireMessagesScheduler (findExpired не смотрит ни на очередь, ни на лизинг), а сдвиг
+-- срока отдал бы сообщение диспетчеру, и кейс проверил бы чужую ветку — ту же отмену по
+-- TTL, но в DispatchGuards.
 UPDATE message
-   SET accepted_at = accepted_at - interval '2 minutes',
-       next_attempt_at = now() - interval '1 minute'
+   SET accepted_at = accepted_at - interval '2 minutes'
  WHERE status NOT IN ('DELIVERED', 'REJECTED', 'EXPIRED', 'CANCELLED');
 -- @assert
 SELECT status = 'EXPIRED' AND status_reason = 'TTL_EXPIRED' AS ok,
@@ -89,26 +137,54 @@ SELECT count(*) = 0 AS ok, 'провайдер не вызывался' AS check
 -- Предусловий нет: timing.sendAfter приходит в самом документе (через час).
 -- @assert
 SELECT status = 'ROUTED' AS ok, 'сообщение отложено, а не отправлено' AS check FROM message;
-SELECT next_attempt_at > now() AS ok, 'следующая попытка назначена на будущее' AS check
+-- Держит именно срок из документа, а НЕ очередь: у отложенного по sendAfter сообщения
+-- next_attempt_at пуст и обязан быть пустым — это три независимых условия в
+-- CLAIM_DISPATCHABLE (next_attempt_at, dispatch_claimed_until, timing.sendAfter), и
+-- сработало третье. Проверка «next_attempt_at > now()» отдавала NULL, то есть «не
+-- проверено», на совершенно здоровом стенде.
+SELECT (timing ->> 'sendAfter')::timestamptz > now() AS ok,
+       'срок отправки ещё не наступил' AS check FROM message;
+SELECT next_attempt_at IS NULL AS ok, 'очередь сообщение не держит — держит срок' AS check
   FROM message;
 SELECT count(*) = 0 AS ok, 'попытки отправки не было' AS check FROM delivery_attempt;
--- Второй шаг кейса: сдвинуть timing в прошлое и дать диспетчеру такт —
+-- Второй шаг кейса: сдвинуть срок в прошлое и дать диспетчеру такт. Формат обязателен
+-- ISO-8601 (шапка файла): now()::text Модуль не разберёт и сообщение застрянет.
 --   UPDATE message SET timing = jsonb_set(timing, '{sendAfter}',
---          to_jsonb((now() - interval '1 hour')::text)), next_attempt_at = now();
+--            to_jsonb(to_char((now() - interval '1 hour') AT TIME ZONE 'UTC',
+--                             'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))),
+--          next_attempt_at = now();
+-- Ждём: одна попытка, SENT_TO_PROVIDER → DELIVERED.
 
 
 -- >>> IT-DSP-006  Окно allowedWindow закрыто
+--
+-- ⏭️ ВНЕ MVP, кейс не прогоняется до фазы 2 (дефект набора D-15, прогон 14.08.2026).
+-- FR-8.5 в самой SRS ограничен: «MVP — на уровне пробрасывания в Playmobile timing;
+-- собственный планировщик — фаза 2». Так оно и построено: timing.allowedWindow хранится
+-- (TimingJson.allowedStartTime/allowedEndTime) и уходит в запрос Playmobile
+-- (PlaymobileSendCodec: allowed-starttime/allowed-endtime), а Timing.isSendableAt смотрит
+-- только sendAfter/sendBefore — окна суток не знает никто выше адаптера. На фиктивном
+-- провайдере, SMS Gate, почте и push сообщение с закрытым окном уходит немедленно.
+-- Проверки ниже — ожидание фазы 2, а не сегодняшнего Модуля; заодно исправлена и
+-- диагностическая строка (в timing нет ключа allowedWindow — есть два плоских ключа).
 -- @arrange
 -- @assert
 SELECT status = 'ROUTED' AS ok, 'сообщение ждёт открытия окна' AS check FROM message;
 SELECT next_attempt_at IS NOT NULL AS ok, 'назначено время следующей попытки' AS check
   FROM message;
 SELECT count(*) = 0 AS ok, 'провайдер не вызывался' AS check FROM delivery_attempt;
-SELECT timing -> 'allowedWindow' AS window, next_attempt_at FROM message;
+SELECT timing ->> 'allowedStartTime' AS window_start,
+       timing ->> 'allowedEndTime'   AS window_end, next_attempt_at FROM message;
 
 
 -- >>> IT-DSP-007  Kill switch останавливает отправку
 -- @arrange
+-- Порядок обратный и держатель обязателен (правила 1 и 2 шапки), причём здесь по особой
+-- причине: рубильник отсекает трафик ЕЩЁ НА ПРИЁМЕ (503, IT-TC-008), поэтому сообщение,
+-- поданное при включённом рубильнике, не будет отложено — его вовсе не примут, а предмет
+-- этого кейса — ветка диспетчера, а не входа. Порядок: подать сообщение в core-banking с
+-- timing.sendAfter через 25 с (рубильник ещё снят) → включить рубильник (через
+-- 50-admin.http или блоком ниже) → дождаться, пока срок наступит, и дать несколько тактов.
 UPDATE kill_switch
    SET active = true, includes_critical_otp = false,
        changed_at = now(), changed_by = 'qa-arrange',
@@ -126,6 +202,10 @@ SELECT status IN ('ROUTED', 'QUEUED') AS ok, 'сообщение отложен�
 
 -- >>> IT-DSP-008  Kill switch щадит CRITICAL_OTP
 -- @arrange
+-- Порядок: массовое сообщение (marketing-bulk) подать ПЕРВЫМ и с timing.sendAfter через
+-- 25 с — при включённом рубильнике его на приёме уже не примут (см. IT-DSP-007), — затем
+-- включить рубильник блоком ниже, затем подать OTP в ibank-otp без задержки: его пропустят
+-- и вход, и диспетчер, потому что includes_critical_otp = false.
 UPDATE kill_switch
    SET active = true, includes_critical_otp = false,
        changed_at = now(), changed_by = 'qa-arrange',
@@ -146,6 +226,11 @@ SELECT count(*) = 0 AS ok, 'массовое не отправлено' AS check
 
 -- >>> IT-DSP-009  Остановленный батч не отправляется
 -- @arrange
+-- Держатель батча — его собственный статус, поэтому SQL здесь не нужен вовсе и порядок
+-- целиком в http/: завести рассылку → PAUSE (элементы приняты и отложены на 30 с
+-- deferBackoff) → залить элементы → STOP. Диспетчер отменит их на первом же такте после
+-- срока. Блок ниже — запасной вариант, если рассылку останавливали не действием, а руками;
+-- сдвиг next_attempt_at только избавляет от ожидания в 30 с.
 UPDATE batch SET status = 'STOPPED', updated_at = now();
 UPDATE message SET next_attempt_at = now() - interval '1 minute'
  WHERE batch_id IS NOT NULL;
@@ -160,8 +245,22 @@ SELECT count(*) > 0 AS ok, 'элементы отменены с названн�
 
 -- >>> IT-DSP-010  Бюджет попыток и переход в DLQ
 -- @arrange
--- Предусловий нет: адрес получателя оканчивается на …02 (нет ответа) у обоих провайдеров.
--- Бюджет — commhub.sending.max-total-attempts, по умолчанию 5.
+-- Бюджет — commhub.sending.max-total-attempts, по умолчанию 5, и упереться в него можно
+-- только на канале с ТРЕМЯ провайдерами: max-attempts-per-provider равен 2, поэтому
+-- порядок отката из двух провайдеров исчерпывается на четвёртой попытке и сообщение
+-- уходит в DLQ, не дойдя до общего предела. Кейс проверял бы тогда длину fallbackOrder
+-- эталонного контура, а не бюджет (дефект набора D-14, прогон 14.08.2026; он же —
+-- расхождение, замеченное на этапе 5 в IT-RTE-011).
+--
+-- Строку канала возвращать не нужно: 01-contour.sql перепишет её перед следующим кейсом.
+-- После правки подождать до 10 с — снимок маршрутизации живёт refresh-interval (NF-07).
+UPDATE channel
+   SET fallback_order = '["MOCK_PRIMARY", "MOCK_RESERVE", "MOCK_CHEAP"]'::jsonb,
+       updated_at = now()
+ WHERE code = 'SMS';
+-- Действие: одно сообщение на адрес …02 (ответа нет) — он один и тот же для всех трёх
+-- провайдеров, поэтому настраивать их по отдельности не нужно. Полный цикл занимает
+-- около 30 с: паузы между попытками растут 2 → 4 → 8 → 16 с.
 -- @assert
 SELECT count(*) = 5 AS ok, 'исчерпан бюджет в пять попыток' AS check FROM delivery_attempt;
 SELECT status = 'FAILED' AS ok, 'сообщение помечено как неудавшееся' AS check FROM message;
@@ -193,6 +292,11 @@ SELECT bool_and(gap <= interval '45 seconds') AS ok, 'потолок задер�
 
 -- >>> IT-DSP-012  Изоляция классов трафика по пулам
 -- @arrange
+-- Предусловий в SQL нет, но очередь массовых должна быть ЖИВОЙ в момент подачи OTP:
+-- пятьсот сообщений на …00 разбираются за доли секунды (латентность фиктивного провайдера
+-- 50 мс, concurrency 64) и доказывать становится нечего. Заливать пятьсот элементов
+-- рассылки на адреса …02 — они ретраятся, и класс NOTIFICATION занят около 30 с, чего
+-- с запасом хватает, чтобы подать OTP в середину.
 -- @assert
 -- OTP не должен ждать, пока разберут очередь массовых: пулы и такты у классов разные.
 SELECT count(*) = 1 AS ok, 'OTP отправлен' AS check
