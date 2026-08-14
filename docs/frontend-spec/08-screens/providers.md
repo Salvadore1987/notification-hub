@@ -162,7 +162,7 @@ So:
 | `balancingStrategy` | **Required.** No default. |
 | `fallbackOrder` | An **ordered multi-select of provider codes** filtered to this channel. The order of selection is the order of failover — the whole list is sent every time, because the order *is* the configuration. |
 | `quietHours` | start, end, zone, behaviour |
-| `quota` | daily/monthly count and cost, behaviour |
+| `quota` | daily/monthly count and cost, behaviour — **`behavior` required as soon as any ceiling is filled, no default** (`streams.md`) |
 
 **Fill `fallbackOrder` immediately.** Routing takes its providers only from that list, so a channel
 with an empty order looks configured and routes nothing. Warn on save when it is empty.
@@ -200,6 +200,11 @@ it verifies the configuration (FR-7.4).
 
 It is tagged `TEST`, so it stays out of business statistics until "include test" is switched on — a
 dimension, not a deletion.
+
+Because it is the real pipeline, it is also refused by the real pipeline, and a refusal comes back as a
+problem document with its own code (`429` for an exhausted quota, `422` for a suppressed address, and
+so on) rather than a `200` carrying `"status":"REJECTED"`. Render it through the ordinary error path:
+finding out *why* the configuration refused the message is the entire point of the button.
 
 ---
 

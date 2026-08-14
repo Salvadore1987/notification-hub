@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { components } from '../../api/generated/admin-schema';
+import { QuotaBehaviorItem } from '../../shared/components/QuotaBehaviorItem';
 import { identifierRule } from '../../shared/identifiers';
 import { CHANNELS, enumOptions } from '../../shared/labels';
 import { AdapterTypeSelect } from './AdapterTypeSelect';
@@ -176,13 +177,7 @@ export function ProviderFormModal({
         >
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item
-          name={['quota', 'behavior']}
-          label={t('streams.quotaBehavior')}
-          tooltip={t('streams.quotaBehaviorHint')}
-        >
-          <Select allowClear options={enumOptions(['BLOCK_AND_ALERT', 'ALERT_ONLY'])} />
-        </Form.Item>
+        <QuotaBehaviorItem ceilings={['dailyCount', 'monthlyCount']} />
 
         <Divider plain>{t('providers.endpointConfig')}</Divider>
         <Form.List name="endpointEntries">

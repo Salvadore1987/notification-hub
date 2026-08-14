@@ -294,7 +294,16 @@ UPDATE frequency_counter
    SET bucket_start = bucket_start - interval '25 hours'
  WHERE address_hash = encode(sha256(lower('998901234500')::bytea), 'hex');
 -- @assert
-SELECT count(*) = 0 AS ok, 'внутри окна капа корзин не осталось' AS check
+-- Проверки читаются ПОСЛЕ действия, то есть после четвёртой отправки, а она заводит
+-- свою корзину в текущем часе — то есть внутри окна. Поэтому «в окне пусто» проверять
+-- нельзя (D-10): проверяется, что за окном лежат сдвинутые три, а внутри окна — ровно
+-- одна корзина четвёртого сообщения.
+SELECT count(*) = 1 AND sum(counter) = 3 AS ok, 'сдвинутые корзины ушли за окно капа' AS check
+  FROM frequency_counter
+ WHERE address_hash = encode(sha256(lower('998901234500')::bytea), 'hex')
+   AND bucket_start < date_trunc('hour', now() - interval '24 hours');
+SELECT count(*) = 1 AND sum(counter) = 1 AS ok,
+       'внутри окна — только корзина четвёртого сообщения' AS check
   FROM frequency_counter
  WHERE address_hash = encode(sha256(lower('998901234500')::bytea), 'hex')
    AND bucket_start >= date_trunc('hour', now() - interval '24 hours');

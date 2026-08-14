@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { components } from '../../api/generated/admin-schema';
+import { QuotaBehaviorItem } from '../../shared/components/QuotaBehaviorItem';
 import { identifierRule } from '../../shared/identifiers';
 import { ProviderSelect } from '../providers/ProviderSelect';
 import {
@@ -170,13 +171,9 @@ export function StreamFormModal({
         >
           <Input placeholder="30000000.00 UZS" />
         </Form.Item>
-        <Form.Item
-          name={['quota', 'behavior']}
-          label={t('streams.quotaBehavior')}
-          tooltip={t('streams.quotaBehaviorHint')}
-        >
-          <Select allowClear options={enumOptions(['BLOCK_AND_ALERT', 'ALERT_ONLY'])} />
-        </Form.Item>
+        <QuotaBehaviorItem
+          ceilings={['dailyCount', 'monthlyCount', 'dailyCost', 'monthlyCost']}
+        />
 
         <Divider plain>{t('streams.rateLimit')}</Divider>
         <Form.Item name={['rateLimit', 'tps']} label="TPS" tooltip={t('streams.tpsHint')}>

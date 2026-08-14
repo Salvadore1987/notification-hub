@@ -343,10 +343,41 @@ public interface AdminCommandMapper {
                 AdminValues.money(request.tariff().perSegment(), "tariff.perSegment"));
     }
 
+    /**
+     * Behaviour of an exhausted quota — required as soon as the quota has a ceiling (D-11).
+     *
+     * <p>The two values decide whether a customer's message goes out at all, so an absent one used to
+     * be answered with {@code ALERT_ONLY}: the weaker of the two, silently. An operator who filled in
+     * "messages per day" and left the dropdown alone got a quota that counts, alerts and stops
+     * nothing — on every ingress, since both reach the same pipeline — and the panel then showed the
+     * value it had picked for them as though they had. The neighbouring field is the model:
+     * {@link uz.hamkorbank.commhub.domain.model.QuietHours} requires its behaviour outright, so a
+     * window without one is a visible form error rather than a weakened window.
+     *
+     * <p>A quota with no ceiling at all keeps {@code ALERT_ONLY}: there is nothing to behave about,
+     * and an empty quota block is how the panel says "no quota".
+     */
     private static QuotaExhaustionBehavior behaviorOf(QuotaDto quota) {
         QuotaExhaustionBehavior behavior =
                 AdminValues.optionalEnum(QuotaExhaustionBehavior.class, quota.behavior(), "quota.behavior");
-        return behavior == null ? QuotaExhaustionBehavior.ALERT_ONLY : behavior;
+        if (behavior != null) {
+            return behavior;
+        }
+        if (hasCeiling(quota)) {
+            throw InboundContractException.missing("quota.behavior");
+        }
+        return QuotaExhaustionBehavior.ALERT_ONLY;
+    }
+
+    private static boolean hasCeiling(QuotaDto quota) {
+        return quota.dailyCount() != null
+                || quota.monthlyCount() != null
+                || isPresent(quota.dailyCost())
+                || isPresent(quota.monthlyCost());
+    }
+
+    private static boolean isPresent(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static List<ProviderCode> providerCodes(List<String> codes) {

@@ -23,7 +23,9 @@ import uz.hamkorbank.commhub.adapter.in.admin.support.AdminAuthority;
 import uz.hamkorbank.commhub.adapter.in.admin.support.AdminValues;
 import uz.hamkorbank.commhub.adapter.in.rest.dto.MessageAcceptedResponse;
 import uz.hamkorbank.commhub.adapter.in.rest.mapper.RestResponseMapper;
+import uz.hamkorbank.commhub.adapter.in.rest.problem.SubmissionRejectedException;
 import uz.hamkorbank.commhub.adapter.in.rest.security.AuthenticatedCaller;
+import uz.hamkorbank.commhub.application.dto.SubmitMessageResult;
 import uz.hamkorbank.commhub.application.port.in.GetDeployedAdapters;
 import uz.hamkorbank.commhub.application.port.in.GetRoutingConfiguration;
 import uz.hamkorbank.commhub.application.port.in.ManageProviders;
@@ -156,14 +158,24 @@ public class ProviderAdminController {
         return ResponseEntity.noContent().build();
     }
 
-    /** {@code POST /api/admin/v1/providers/test-send} — a marked test through the real pipeline (FR-7.4). */
+    /**
+     * {@code POST /api/admin/v1/providers/test-send} — a marked test through the real pipeline (FR-7.4).
+     *
+     * <p>The refusal is rendered as a problem document rather than hidden in a 200 (D-12): the whole
+     * point of a test send is to learn what the configuration does, and "REJECTED" without a reason
+     * answers nothing.
+     */
     @PostMapping(
             path = "/test-send",
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize(AdminAuthority.ADMIN)
     public MessageAcceptedResponse testSend(@RequestBody TestSendRequest request) {
-        return acceptedMapper.toAccepted(sendTestMessage.send(commandMapper.toTestSend(request, caller.actor())));
+        SubmitMessageResult result = sendTestMessage.send(commandMapper.toTestSend(request, caller.actor()));
+        if (!result.isAccepted()) {
+            throw new SubmissionRejectedException(result);
+        }
+        return acceptedMapper.toAccepted(result);
     }
 
     private static ProviderId providerId(String raw) {
