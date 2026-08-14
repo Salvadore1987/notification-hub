@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
+import uz.hamkorbank.commhub.domain.model.type.Channel;
 import uz.hamkorbank.commhub.domain.model.vo.MessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderMessageId;
 import uz.hamkorbank.commhub.domain.model.vo.ProviderRef;
@@ -48,7 +49,7 @@ public class MockProvider {
         pretendToWork();
         Instant now = clock.now();
         ProviderAck ack = behaviour.ackFor(assignedId(providerMessageId), now);
-        if (ack.isAccepted()) {
+        if (ack.isAccepted() && reportsFor(provider)) {
             reports.schedule(provider.code(), messageId, behaviour);
         }
         LOG.info(
@@ -57,6 +58,18 @@ public class MockProvider {
                 behaviour,
                 messageId);
         return ack;
+    }
+
+    /**
+     * Whether this channel gets a delivery report at all (PU-12).
+     *
+     * <p>Push does not, and that is not a simplification of the stand: neither APNs nor FCM reports
+     * delivery, so {@code SENT_TO_PROVIDER} is where a push message ends. A fake report moved it on to
+     * {@code DELIVERED} — a status the same message can never reach on a real contour, which is the one
+     * thing a stand must not teach.
+     */
+    private static boolean reportsFor(ProviderRef provider) {
+        return provider.channel() != Channel.PUSH;
     }
 
     /** A call that returns instantly makes every latency panel on the stand read zero. */

@@ -220,8 +220,12 @@ class PushFanOutTest {
     void reportsMissingAdapter() {
         // Arrange
         Message message = pushMessage(pushRecipient(androidToken("device")));
-        PushFanOut fanOut =
-                new PushFanOut(ports(List.of()), new ProviderSubmissionMapperImpl(), tokens, deliveries, clock);
+        PushFanOut fanOut = new PushFanOut(
+                ports(List.of()),
+                new ProviderSubmissionMapperImpl(),
+                tokens,
+                new PushDeliveryJournal(tokens, deliveries),
+                clock);
 
         // Act
         ProviderAck ack = fanOut.submit(message, FCM.ref(), attempt(message));
@@ -233,7 +237,12 @@ class PushFanOutTest {
     }
 
     private PushFanOut fanOut(PushProviderPort adapter) {
-        return new PushFanOut(ports(List.of(adapter)), new ProviderSubmissionMapperImpl(), tokens, deliveries, clock);
+        return new PushFanOut(
+                ports(List.of(adapter)),
+                new ProviderSubmissionMapperImpl(),
+                tokens,
+                new PushDeliveryJournal(tokens, deliveries),
+                clock);
     }
 
     private static DeliveryAttempt attempt(Message message) {

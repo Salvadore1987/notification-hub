@@ -145,7 +145,7 @@ class ProviderGatewayTest {
                         ports(push),
                         new ProviderSubmissionMapperImpl(),
                         mock(PushTokenRegistrar.class),
-                        mock(PushDeliveryLogPort.class),
+                        new PushDeliveryJournal(mock(PushTokenRegistrar.class), mock(PushDeliveryLogPort.class)),
                         clock),
                 new ProviderSubmissionMapperImpl(),
                 new ProviderMessageIdFactory(),
@@ -167,7 +167,7 @@ class ProviderGatewayTest {
                 ports(),
                 new ProviderSubmissionMapperImpl(),
                 mock(PushTokenRegistrar.class),
-                mock(PushDeliveryLogPort.class),
+                new PushDeliveryJournal(mock(PushTokenRegistrar.class), mock(PushDeliveryLogPort.class)),
                 clock);
     }
 

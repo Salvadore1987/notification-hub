@@ -14,8 +14,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import uz.hamkorbank.commhub.application.mapper.ProviderSubmissionMapper;
 import uz.hamkorbank.commhub.application.port.out.ClockPort;
-import uz.hamkorbank.commhub.application.port.out.PushDelivery;
-import uz.hamkorbank.commhub.application.port.out.PushDeliveryLogPort;
 import uz.hamkorbank.commhub.application.port.out.provider.ProviderAck;
 import uz.hamkorbank.commhub.application.port.out.provider.PushProviderPort;
 import uz.hamkorbank.commhub.domain.model.DeliveryAttempt;
@@ -51,9 +49,10 @@ import uz.hamkorbank.commhub.domain.support.Guard;
  * majority — stays on the calling thread and pays nothing for the machinery.
  *
  * <p>Only the provider calls run off-thread. The suppression writes, the outbox events and the device
- * rows all happen on the caller's thread, inside the caller's transaction, after the joins: a
- * transaction is bound to a thread, and a token retired on a worker thread would be committed by
- * nobody.
+ * rows all happen on the caller's thread after the joins, in the transaction {@link PushDeliveryJournal}
+ * opens for them: a transaction is bound to a thread, and a token retired on a worker thread would be
+ * committed by nobody. The saga holds no transaction here at all — the provider call runs between the
+ * two halves of the split saga (ADR-0039) — so the journal has to open one rather than join one.
  *
  * <p>Nothing here logs — this layer has no logging dependency by design — and nothing here needs to:
  * what each device answered is written as a row rather than a line, which is also the only form an
@@ -70,19 +69,19 @@ public class PushFanOut {
     private final ObjectProvider<PushProviderPort> adapters;
     private final ProviderSubmissionMapper mapper;
     private final PushTokenRegistrar tokens;
-    private final PushDeliveryLogPort deliveries;
+    private final PushDeliveryJournal journal;
     private final ClockPort clock;
 
     public PushFanOut(
             ObjectProvider<PushProviderPort> adapters,
             ProviderSubmissionMapper mapper,
             PushTokenRegistrar tokens,
-            PushDeliveryLogPort deliveries,
+            PushDeliveryJournal journal,
             ClockPort clock) {
         this.adapters = Guard.notNull(adapters, "adapters");
         this.mapper = Guard.notNull(mapper, "mapper");
         this.tokens = Guard.notNull(tokens, "tokens");
-        this.deliveries = Guard.notNull(deliveries, "deliveries");
+        this.journal = Guard.notNull(journal, "journal");
         this.clock = Guard.notNull(clock, "clock");
     }
 
@@ -125,7 +124,7 @@ public class PushFanOut {
             return noDevice(message, provider, adapter.get());
         }
         List<TokenAck> answers = call(adapter.get(), message, provider, devices);
-        applyInvalidations(message, provider, attempt, answers);
+        journal.record(message, provider, attempt, answers);
         return aggregate(provider, answers);
     }
 
@@ -198,37 +197,6 @@ public class PushFanOut {
         }
     }
 
-    /** Retires the devices the platform refused and records what every device answered (PU-04, PU-09). */
-    private void applyInvalidations(
-            Message message, ProviderRef provider, DeliveryAttempt attempt, List<TokenAck> answers) {
-        List<PushDelivery> rows = new ArrayList<>(answers.size());
-        for (TokenAck answer : answers) {
-            boolean retired = answer.ack().invalidRecipient()
-                    && tokens.invalidate(
-                            message,
-                            provider,
-                            answer.token(),
-                            reasonOf(answer.ack()),
-                            answer.ack().respondedAt());
-            rows.add(rowOf(message, provider, attempt, answer, retired));
-        }
-        deliveries.record(rows);
-    }
-
-    private static PushDelivery rowOf(
-            Message message, ProviderRef provider, DeliveryAttempt attempt, TokenAck answer, boolean retired) {
-        ProviderAck ack = answer.ack();
-        return new PushDelivery(
-                message.id(),
-                attempt.id(),
-                provider,
-                RecipientAddresses.of(answer.token()),
-                answer.token().platform(),
-                ack.providerMessageId(),
-                new PushDelivery.Outcome(
-                        ack.result(), ack.responseCode(), ack.errorDescription(), retired, ack.respondedAt()));
-    }
-
     /**
      * The recipient has no device this provider can write to.
      *
@@ -284,16 +252,9 @@ public class PushFanOut {
     /** Per-device detail for the attempt's error description; tokens appear masked only (OBS-03). */
     private static String describe(List<TokenAck> answers) {
         return answers.stream()
-                .map(answer -> "%s=%s".formatted(answer.token().masked(), reasonOf(answer.ack())))
+                .map(answer -> "%s=%s".formatted(answer.token().masked(), answer.reason()))
                 .reduce((left, right) -> left + "; " + right)
                 .orElse("");
-    }
-
-    private static String reasonOf(ProviderAck ack) {
-        if (ack.errorDescription() != null && !ack.errorDescription().isBlank()) {
-            return ack.errorDescription();
-        }
-        return ack.responseCode() == null ? ack.result().name() : ack.responseCode();
     }
 
     private static String servedPlatforms(PushProviderPort adapter) {
@@ -309,7 +270,4 @@ public class PushFanOut {
                 ? Optional.empty()
                 : adapters.stream().filter(port -> port.supports(provider)).findFirst();
     }
-
-    /** What one device answered. */
-    private record TokenAck(PushToken token, ProviderAck ack) {}
 }

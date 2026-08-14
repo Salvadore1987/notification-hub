@@ -10,6 +10,19 @@
 -- Кейсы IT-PRV-1xx идут против настоящих адаптеров (WireMock/GreenMail), а не против
 -- фальшивого: их предмет — форма запроса и таблицы кодов, а её фальшивый провайдер
 -- не воспроизводит и не должен.
+--
+-- ТРИ УСЛОВИЯ ОБЛАСТИ, выясненные прогоном 14.08.2026 (docs/testing/runs/2026-08-14-stage-8.md).
+--
+-- 1. Кейсы про callback (103…107) требуют профиля провайдера С КОДОМ PLAYMOBILE: сообщение
+--    ищется по паре (код провайдера, provider_message_id), а у MOCK* callback'а нет вовсе.
+--    Заводится руками поверх контура, на адаптере mock-sms, первым в fallback_order канала SMS;
+--    99-teardown.sql о нём не знает — убирать тоже руками.
+-- 2. Те же кейсы прогоняются с COMMHUB_PROVIDER_MOCK_REPORTDELAY=1h: внутренний отчёт mock'а
+--    приходит через 3 секунды и опережает человека с curl, после чего callback честно отвечает
+--    applied: 0 — и кейс краснеет, ничего не проверив.
+-- 3. Размыкатель на фальшивом провайдере не проверяется в принципе: MockProvider не проходит
+--    через ProviderCallExecutor. Половина IT-PRV-003 про breaker и весь IT-PRV-007 прогоняются
+--    в профиле F — playmobile-http против WireMock, отвечающего 503.
 -- =====================================================================================
 
 \set ON_ERROR_STOP on
@@ -160,8 +173,12 @@ SELECT count(*) >= 1 AS ok, 'переход записан в историю с 
 SELECT status NOT IN ('DELIVERED', 'UNDELIVERED') AS ok,
        'статус не изменился: отчёт с неразрешённого адреса отвергнут' AS check
   FROM message;
-SELECT count(*) = 0 AS ok, 'перехода от провайдера в истории нет' AS check
-  FROM message_status_history WHERE actor_type = 'PROVIDER';
+-- Не «переходов от провайдера нет вовсе»: сам приём сообщения провайдером пишет
+-- SENT_TO_PROVIDER с автором PROVIDER, а без отправленного сообщения кейсу нечего и
+-- докладывать. Отвергнутый отчёт виден по отсутствию ТЕРМИНАЛЬНОГО перехода.
+SELECT count(*) = 0 AS ok, 'отчёт не стал переходом: терминального статуса от провайдера нет' AS check
+  FROM message_status_history
+ WHERE actor_type = 'PROVIDER' AND status IN ('DELIVERED', 'UNDELIVERED', 'EXPIRED');
 -- Ожидается 403 (SEC-07).
 
 
@@ -169,8 +186,10 @@ SELECT count(*) = 0 AS ok, 'перехода от провайдера в ист
 -- @arrange
 -- Требует настроенного commhub.callback.providers.<CODE>.secret.
 -- @assert
+-- Та же оговорка, что и в 104: SENT_TO_PROVIDER пишется автором PROVIDER самой отправкой.
 SELECT count(*) = 0 AS ok, 'без секрета отчёт не применён' AS check
-  FROM message_status_history WHERE actor_type = 'PROVIDER';
+  FROM message_status_history
+ WHERE actor_type = 'PROVIDER' AND status IN ('DELIVERED', 'UNDELIVERED', 'EXPIRED');
 
 
 -- >>> IT-PRV-106  Callback про неизвестное сообщение
@@ -190,9 +209,12 @@ SELECT status = 'DELIVERED' AS ok, 'статус прежний' AS check FROM m
 -- идемпотентна по построению (AD-03, at-least-once).
 SELECT count(*) = 1 AS ok, 'перехода в DELIVERED ровно один' AS check
   FROM message_status_history WHERE status = 'DELIVERED';
+-- Статус лежит в payload -> 'outcome' ->> 'status', а не в корне: корень несёт key, eventId,
+-- outcome, segments и occurredAt (StatusEventCodec пишет плоский вид §6.4 уже в Kafka).
+-- Спрошенный из корня, он всегда NULL — и проверка «ровно одно событие» становится «ровно ноль».
 SELECT count(*) = 1 AS ok, 'второго статусного события в outbox не появилось' AS check
   FROM outbox_event
- WHERE event_type = 'MESSAGE_STATUS' AND payload ->> 'status' = 'DELIVERED';
+ WHERE event_type = 'MESSAGE_STATUS' AND payload -> 'outcome' ->> 'status' = 'DELIVERED';
 
 
 -- >>> IT-PRV-201  Письмо доставлено

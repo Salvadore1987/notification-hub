@@ -80,8 +80,9 @@ class SmtpEmailAdapterIT {
     @Test
     @DisplayName("EM-01: an attachment travels as multipart/mixed with its bytes intact")
     void sendsAnAttachment() throws Exception {
-        // Arrange
-        byte[] pdf = "%PDF-1.4 statement".getBytes(StandardCharsets.UTF_8);
+        // Arrange — переводы строк обязательны: файл без них переживает даже 7bit, и тест,
+        // написанный на одной строке, не заметил бы, что вложение канонизируют по дороге (EM-01)
+        byte[] pdf = "%PDF-1.4\nstatement\nline\n".getBytes(StandardCharsets.UTF_8);
         Files.write(attachments.resolve("statement.pdf"), pdf);
         adapter = adapter(RateLimit.unlimited(), SmtpProperties.Dkim.disabled());
         Attachment attachment = new Attachment("Выписка.pdf", "application/pdf", pdf.length, "statement.pdf");
