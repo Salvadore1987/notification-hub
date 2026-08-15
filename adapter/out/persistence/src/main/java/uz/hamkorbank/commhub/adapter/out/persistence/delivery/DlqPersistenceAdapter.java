@@ -35,12 +35,25 @@ public class DlqPersistenceAdapter implements DlqRepository {
                AND (CAST(:includeArchived AS boolean) OR NOT archived)
             """;
 
+    /**
+     * One row per message, so a message that comes back to the DLQ overwrites its own entry.
+     *
+     * <p>{@code moved_at} is updated with the rest of the columns, and that is the whole point of the
+     * list being complete. A message reaches this row twice only after a manual retry (ST-02), and the
+     * second arrival resets {@code retried_by}/{@code retried_at} — the entry becomes retryable again,
+     * because the operator who fixed the provider is entitled to a second attempt. Keeping the first
+     * arrival's {@code moved_at} while clearing the retry stamp described a landing that never happened:
+     * the screen sorts and filters by {@code moved_at} (its period filter is the operator's only way to
+     * narrow the list), so a message that failed again today stayed under yesterday's timestamp and
+     * dropped out of the very window somebody was looking in for it.
+     */
     private static final String UPSERT = """
             INSERT INTO dlq_entry (message_id, reason, last_error, moved_at, retried_by, retried_at, archived)
             VALUES (:messageId, :reason, :lastError, :movedAt, :retriedBy, :retriedAt, :archived)
             ON CONFLICT (message_id) DO UPDATE SET
                 reason = EXCLUDED.reason,
                 last_error = EXCLUDED.last_error,
+                moved_at = EXCLUDED.moved_at,
                 retried_by = EXCLUDED.retried_by,
                 retried_at = EXCLUDED.retried_at,
                 archived = EXCLUDED.archived
