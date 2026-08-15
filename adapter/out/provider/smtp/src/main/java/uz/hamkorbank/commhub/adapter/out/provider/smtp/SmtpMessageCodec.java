@@ -61,6 +61,9 @@ public class SmtpMessageCodec {
     private static final String TEXT_MIME = "text/plain; charset=UTF-8";
     private static final String HTML_MIME = "text/html; charset=UTF-8";
 
+    private static final String CONTENT_TRANSFER_ENCODING_HEADER = "Content-Transfer-Encoding";
+    private static final String BASE64_ENCODING = "base64";
+
     private final AttachmentStore attachments;
 
     public SmtpMessageCodec(AttachmentStore attachments) {
@@ -222,12 +225,23 @@ public class SmtpMessageCodec {
         part.setContent(alternative);
     }
 
+    /**
+     * One attached file, always base64 (RFC 2045 §6.8).
+     *
+     * <p>The encoding is stated rather than left to JavaMail, which guesses it from the bytes: a file that
+     * happens to be all 7-bit ASCII is sent as {@code 7bit}, and {@code 7bit} is a <em>text</em> encoding
+     * whose line endings the transport is free to rewrite. A CSV, a PEM key or a PDF built from ASCII then
+     * arrives with every {@code LF} turned into {@code CRLF} — the same file by eye, a different file by
+     * checksum, and the Hub promised the bytes it was given (EM-01). Base64 costs a third of the size and
+     * has no such case.
+     */
     private MimeBodyPart attachmentPart(Attachment attachment) throws MessagingException {
         MimeBodyPart part = new MimeBodyPart();
         byte[] bytes = attachments.read(attachment);
         part.setDataHandler(new DataHandler(new ByteArrayAttachment(attachment, bytes)));
         part.setFileName(attachment.fileName());
         part.setDisposition(Part.ATTACHMENT);
+        part.setHeader(CONTENT_TRANSFER_ENCODING_HEADER, BASE64_ENCODING);
         return part;
     }
 
