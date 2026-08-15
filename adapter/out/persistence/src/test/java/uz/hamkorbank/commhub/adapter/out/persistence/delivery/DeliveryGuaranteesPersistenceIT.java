@@ -217,6 +217,29 @@ class DeliveryGuaranteesPersistenceIT extends AbstractPersistenceIT {
     }
 
     @Test
+    @DisplayName("a message that fails again lands in the DLQ with the time it landed, not the first one (FR-3.3)")
+    void dlqEntryOfARepeatedArrivalCarriesItsOwnTime() {
+        // Arrange: the entry has been retried once, and the retried message failed again.
+        MessageId messageId = MessageId.newId();
+        Instant firstArrival = NOW;
+        Instant secondArrival = NOW.plus(Duration.ofHours(3));
+        DlqEntry first = DlqEntry.of(messageId, RejectionReason.ATTEMPTS_EXHAUSTED, "provider 500", firstArrival);
+        dlq.save(first);
+        first.retry("operator-1", NOW.plus(Duration.ofMinutes(5)));
+        dlq.save(first);
+
+        // Act: the settlement writes the arrival it has just seen (DispatchSettlement.fail).
+        dlq.save(DlqEntry.of(messageId, RejectionReason.ATTEMPTS_EXHAUSTED, "provider timeout", secondArrival));
+
+        // Assert: the row describes the second arrival — including when it happened.
+        DlqEntry stored = dlq.findByMessageId(messageId).orElseThrow();
+        assertThat(stored.movedAt()).isEqualTo(secondArrival);
+        assertThat(stored.lastError()).contains("provider timeout");
+        assertThat(stored.retriedAt()).isEmpty();
+        assertThat(dlq.findRetryable(10)).hasSize(1);
+    }
+
+    @Test
     @DisplayName("quota counters accumulate per day and per month in Asia/Tashkent (FR-2.6)")
     void quotaCountersAccumulate() {
         // Arrange
